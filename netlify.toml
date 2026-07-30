@@ -173,6 +173,15 @@
   [headers.values]
     Cache-Control = "no-store, must-revalidate"
 
+# workload-visualizer is a second workload view from the same design export,
+# served at /workload-visualizer alongside /workload. Same deal as the pages
+# above: the fixtures are stripped at build time and all data arrives from
+# /api/jobs and /api/walk-config, so the document must never be cached.
+[[headers]]
+  for = "/workload-visualizer.html"
+  [headers.values]
+    Cache-Control = "no-store, must-revalidate"
+
 # ---- Friendly API path for the walk reference data --------------------------
 [[redirects]]
   from = "/api/walk-config"
