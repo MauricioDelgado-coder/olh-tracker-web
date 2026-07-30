@@ -1,0 +1,46 @@
+# ---------------------------------------------------------------------------
+# Secrets. The Airtable PAT belongs in the Netlify UI only -- never in the repo.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.env
+secrets.json
+*.pem
+*.key
+airtable_pat*
+pat.txt
+
+# Netlify
+.netlify/
+.netlify-cache/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+package-lock.json.bak
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Local dev/test harnesses — never deploy or commit
+dev/
+
+# ---------------------------------------------------------------------------
+# Design-tool exports and data snapshots. The production build (index.html) is
+# generated from these; the sources themselves are large, contain real
+# homesite data, and do not belong in the repo.
+# ---------------------------------------------------------------------------
+*.zip
+*.dc.html
+olh-data.js
+completion-data.js
+support.js
+uploads/
+production/
+.thumbnail

@@ -1,0 +1,20 @@
+# OLH QA / Closing Tracker -- internal tool on an unlisted URL.
+# Not for indexing by anyone, ever.
+
+User-agent: *
+Disallow: /
+
+User-agent: GPTBot
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /

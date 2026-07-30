@@ -1,0 +1,94 @@
+[build]
+  # No build step: index.html is served straight from the repo root.
+  publish = "."
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# ---- Do not serve function source as static files ---------------------------
+# publish = "." would otherwise expose netlify/functions/*.js at a public path.
+# They hold no secrets, but there is no reason to publish server logic.
+[[redirects]]
+  from = "/netlify/*"
+  to = "/blocked"
+  status = 404
+  force = true
+
+# dev/ holds the local preview server and test harnesses. They contain no
+# secrets, but they read the local PAT config path and must never be served.
+[[redirects]]
+  from = "/dev/*"
+  to = "/blocked"
+  status = 404
+  force = true
+
+# ---- Do not serve project documentation --------------------------------------
+# publish = "." also exposes the markdown. README.md names the Airtable base id
+# and describes the security posture (including that there is no login gate),
+# which is a map for anyone who stumbles onto the unlisted URL. Nothing in the
+# repo is a credential, but none of it needs to be public either.
+# Note: /fonts/* is NOT blocked -- the woff2 files must stay servable.
+[[redirects]]
+  from = "/README.md"
+  to = "/blocked"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/fonts/README.md"
+  to = "/blocked"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/.gitignore"
+  to = "/blocked"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/.DS_Store"
+  to = "/blocked"
+  status = 404
+  force = true
+
+# ---- Friendly API paths -----------------------------------------------------
+[[redirects]]
+  from = "/api/jobs"
+  to = "/.netlify/functions/jobs"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/update-job"
+  to = "/.netlify/functions/update-job"
+  status = 200
+  force = true
+
+# ---- Keep the unlisted URL unlisted ----------------------------------------
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow, noarchive, nosnippet, noimageindex"
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "no-referrer"
+    Permissions-Policy = "geolocation=(), microphone=(), camera=()"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-store, must-revalidate"
+
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    Cache-Control = "no-store"
+    X-Robots-Tag = "noindex, nofollow"
+
+# Self-hosted brand fonts are immutable once deployed.
+[[headers]]
+  for = "/fonts/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
