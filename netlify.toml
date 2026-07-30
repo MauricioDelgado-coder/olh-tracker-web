@@ -1,6 +1,17 @@
 [build]
-  # No build step: index.html is served straight from the repo root.
-  publish = "."
+  # No build step. publish is an ALLOW-LIST directory, not the repo root.
+  #
+  # This used to be publish = ".", which uploads every file sitting in the repo
+  # — and the repo root also holds the Cowork design folder ("OLH Tracker design
+  # exploration") plus dev harnesses, the README and stray design-tool exports.
+  # A 07/29 deploy published a 3.6 MB zip of the whole design folder that way,
+  # and a later one published the folder itself, xlsx export and all. Blocking
+  # each leak with a forced 404 was whack-a-mole; only files copied into public/
+  # can be served now, so a new file in the repo is private by default.
+  #
+  # Anything the site needs must live in public/. Functions are unaffected —
+  # Netlify picks them up from the functions path below, outside publish.
+  publish = "public"
   functions = "netlify/functions"
 
 [functions]
@@ -49,6 +60,40 @@
 
 [[redirects]]
   from = "/.DS_Store"
+  to = "/blocked"
+  status = 404
+  force = true
+
+# ---- Never serve archives ---------------------------------------------------
+# A design-tool export ("olh tracker design exploration.zip", 3.6 MB) sat in the
+# repo root during the 07/29 deploys and publish = "." uploaded it, so the whole
+# design folder — every homesite address, the manager roster, the data snapshots
+# — was downloadable from the unlisted URL. The file is out of the working tree
+# and .gitignore already covers *.zip, but `netlify deploy` uploads whatever is
+# in the publish dir regardless of .gitignore, so ignoring it is not enough on
+# its own. These forced rules make a stray archive unreachable even if one gets
+# uploaded again. Netlify matches the decoded path, so cover both spellings of
+# the known filename plus a generic suffix rule.
+[[redirects]]
+  from = "/olh tracker design exploration.zip"
+  to = "/blocked"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/olh%20tracker%20design%20exploration.zip"
+  to = "/blocked"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/*.zip"
+  to = "/blocked"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/*.tar.gz"
   to = "/blocked"
   status = 404
   force = true
