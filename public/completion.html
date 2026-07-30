@@ -5,8 +5,12 @@
 <title>OLH Completion Report</title>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- dc-runtime (support.js) renders the <x-dc> template with React off window.
-     The exported production bundles pin React 18.3.1 from unpkg; match that. -->
+<!-- React must be on window before support.js runs. Pinned to 18.3.1 to match the
+     version the exported production bundles use.
+     Do not name the runtime's custom element in a comment: support.js finds its
+     template by scanning the raw document for that tag, so a mention inside a
+     comment is treated as the template opening and the comment text renders on
+     the page. That is exactly what happened here on the first deploy. -->
 <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
 <script src="./support.js"></script>
