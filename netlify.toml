@@ -81,6 +81,16 @@
   [headers.values]
     Cache-Control = "no-store, must-revalidate"
 
+# tracker-new.html is the "New Views" design (My Queue, Pipeline Board,
+# Homesite Detail, Division Dashboard, Keys Board) reading the same live
+# /api/jobs data. It is READ-ONLY -- it never calls /api/update-job -- so it
+# sits alongside index.html rather than replacing it; editing still only
+# happens in the tracker at /.
+[[headers]]
+  for = "/tracker-new.html"
+  [headers.values]
+    Cache-Control = "no-store, must-revalidate"
+
 [[headers]]
   for = "/api/*"
   [headers.values]
