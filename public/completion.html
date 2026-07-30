@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>OLH Completion Report</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- dc-runtime (support.js) renders the <x-dc> template with React off window.
+     The exported production bundles pin React 18.3.1 from unpkg; match that. -->
+<script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+@font-face{font-family:"Reckless";src:url("fonts/Reckless-Light.woff2") format("woff2");font-weight:300;font-style:normal;font-display:swap}
+@font-face{font-family:"TT Commons Pro";src:url("fonts/ttcommons-regular.ttf") format("truetype");font-weight:400;font-display:swap}
+@font-face{font-family:"TT Commons Pro";src:url("fonts/ttcommons-medium.ttf") format("truetype");font-weight:500;font-display:swap}
+@font-face{font-family:"TT Commons Pro";src:url("fonts/ttcommons-demibold.ttf") format("truetype");font-weight:600;font-display:swap}
+@font-face{font-family:"TT Commons Pro";src:url("fonts/ttcommons-bold.ttf") format("truetype");font-weight:700;font-display:swap}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:#FBF6F3;color:#303030;font:400 14px/1.45 "TT Commons Pro",Arial,Helvetica,sans-serif;font-variant-ligatures:none;font-feature-settings:"liga" 0,"clig" 0;-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid rgba(0,93,170,.35);outline-offset:1px}
+a{color:#005DAA;text-decoration:none}
+a:hover{color:#203F7C;text-decoration:underline}
+</style>
+<script src="completion-data.js"></script>
+</helmet>
+
+<div style="height:100vh;min-height:820px;min-width:1180px;display:flex;flex-direction:column;overflow:auto;background:#FBF6F3;color:#303030;font:400 14px/1.45 'TT Commons Pro',Arial,Helvetica,sans-serif">
+
+  <header style="display:flex;align-items:center;gap:18px;flex:0 0 auto;padding:12px 22px;background:#1B2A58">
+    <img src="assets/lennar-logo-white.png" alt="Lennar" style="height:19px;width:auto;flex:0 0 auto">
+    <span style="width:1px;height:22px;background:rgba(255,255,255,.28)"></span>
+    <h1 style="margin:0;font-family:'Reckless','Times New Roman',serif;font-weight:300;font-size:22px;letter-spacing:-.03em;color:#fff">Completion Report</h1>
+    <span style="font-size:11.5px;font-weight:500;color:#BFB8AB;white-space:nowrap">Data updated 7/29/26 &middot; Orlando Homes division</span>
+    <span style="margin-left:auto;display:flex;align-items:center;gap:8px">
+      <input type="search" placeholder="Search job, community, street&hellip;" aria-label="Search" onInput="{{ onSearch }}" style="height:30px;width:230px;padding:0 10px;border:1px solid rgba(255,255,255,.3);border-radius:4px;background:rgba(255,255,255,.08);color:#fff;font-size:12.5px">
+      <button onClick="{{ onReset }}" style="height:30px;padding:0 12px;border:1px solid rgba(255,255,255,.35);border-radius:4px;background:transparent;color:#fff;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;transition:background 160ms cubic-bezier(.2,.6,.2,1)" style-hover="background:rgba(255,255,255,.14)">Reset All</button>
+    </span>
+  </header>
+
+  <div style="display:grid;grid-template-columns:minmax(420px,1fr) minmax(300px,.72fr) minmax(280px,.66fr);gap:14px;flex:0 0 auto;padding:14px 22px 0;align-items:start">
+
+    <section style="border:1px solid #E4DED2;border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(27,42,88,.05);overflow:hidden">
+      <div style="display:flex;align-items:center;gap:10px;padding:11px 14px 9px;border-bottom:1px solid #F1EBE1">
+        <span style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:#908A82">EDD by Month</span>
+        <span style="margin-left:auto;display:flex;align-items:center;gap:6px">
+          <button onClick="{{ onPrevMonth }}" aria-label="Previous month" style="width:24px;height:24px;border:1px solid #E4DED2;border-radius:4px;background:#fff;color:#6F6963;font-size:13px;line-height:1;cursor:pointer" style-hover="background:#F1EBE1;color:#303030">&#8249;</button>
+          <span style="min-width:118px;text-align:center;font-size:13px;font-weight:600;letter-spacing:.012em">{{ calLabel }}</span>
+          <button onClick="{{ onNextMonth }}" aria-label="Next month" style="width:24px;height:24px;border:1px solid #E4DED2;border-radius:4px;background:#fff;color:#6F6963;font-size:13px;line-height:1;cursor:pointer" style-hover="background:#F1EBE1;color:#303030">&#8250;</button>
+        </span>
+        <span style="font-size:11.5px;font-weight:500;color:#6F6963;white-space:nowrap">{{ calTotalLabel }}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);padding:8px 10px 0">
+        <sc-for list="{{ dowNames }}" as="d" hint-placeholder-count="7"><span style="padding-bottom:4px;text-align:center;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:#908A82">{{ d }}</span></sc-for>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;padding:2px 10px 12px">
+        <sc-for list="{{ calCells }}" as="c" hint-placeholder-count="35">
+          <button onClick="{{ c.onClick }}" disabled="{{ c.disabled }}" title="{{ c.title }}" style="position:relative;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-end;height:52px;padding:4px 5px;border:1px solid {{ c.border }};border-radius:4px;background:{{ c.bg }};cursor:{{ c.cursor }};text-align:right;transition:background 140ms cubic-bezier(.2,.6,.2,1)">
+            <span style="font-size:10.5px;font-weight:500;color:{{ c.dayColor }};font-variant-numeric:tabular-nums">{{ c.day }}</span>
+            <span style="font-family:'Reckless','Times New Roman',serif;font-weight:300;font-size:19px;line-height:1;letter-spacing:-.02em;color:{{ c.countColor }};font-variant-numeric:tabular-nums">{{ c.count }}</span>
+          </button>
+        </sc-for>
+      </div>
+    </section>
+
+    <section style="display:flex;flex-direction:column;gap:10px;padding:12px 14px 14px;border:1px solid #E4DED2;border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(27,42,88,.05)">
+      <span style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:#908A82">Filters</span>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+        <label style="display:flex;flex-direction:column;gap:3px">
+          <span style="font-size:11px;font-weight:600;color:#6F6963">Lot Type</span>
+          <select value="{{ fLot }}" onChange="{{ onLot }}" style="height:30px;padding:0 8px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;font-size:12.5px;cursor:pointer">
+            <sc-for list="{{ optLot }}" as="o" hint-placeholder-count="3"><option value="{{ o.v }}">{{ o.l }}</option></sc-for>
+          </select>
+        </label>
+        <label style="display:flex;flex-direction:column;gap:3px">
+          <span style="font-size:11px;font-weight:600;color:#6F6963">Stage</span>
+          <select value="{{ fStage }}" onChange="{{ onStage }}" style="height:30px;padding:0 8px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;font-size:12.5px;cursor:pointer">
+            <sc-for list="{{ optStage }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.l }}</option></sc-for>
+          </select>
+        </label>
+      </div>
+      <label style="display:flex;flex-direction:column;gap:3px">
+        <span style="font-size:11px;font-weight:600;color:#6F6963">Community</span>
+        <select value="{{ fComm }}" onChange="{{ onComm }}" style="height:30px;padding:0 8px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;font-size:12.5px;cursor:pointer">
+          <sc-for list="{{ optComm }}" as="o" hint-placeholder-count="6"><option value="{{ o.v }}">{{ o.l }}</option></sc-for>
+        </select>
+      </label>
+      <label style="display:flex;flex-direction:column;gap:3px">
+        <span style="font-size:11px;font-weight:600;color:#6F6963">Construction Manager</span>
+        <select value="{{ fCM }}" onChange="{{ onCM }}" style="height:30px;padding:0 8px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;font-size:12.5px;cursor:pointer">
+          <sc-for list="{{ optCM }}" as="o" hint-placeholder-count="6"><option value="{{ o.v }}">{{ o.l }}</option></sc-for>
+        </select>
+      </label>
+      <label style="display:flex;flex-direction:column;gap:3px">
+        <span style="font-size:11px;font-weight:600;color:#6F6963">Assigned Concierge</span>
+        <select value="{{ fConc }}" onChange="{{ onConc }}" style="height:30px;padding:0 8px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;font-size:12.5px;cursor:pointer">
+          <sc-for list="{{ optConc }}" as="o" hint-placeholder-count="6"><option value="{{ o.v }}">{{ o.l }}</option></sc-for>
+        </select>
+      </label>
+      <div style="display:flex;flex-direction:column;gap:5px;margin-top:2px">
+        <span style="font-size:11px;font-weight:600;color:#6F6963">EDD Range &middot; click months to filter</span>
+        <div style="display:flex;align-items:flex-end;gap:3px;height:58px">
+          <sc-for list="{{ eddMonths }}" as="m" hint-placeholder-count="12">
+            <button onClick="{{ m.onClick }}" title="{{ m.title }}" style="flex:1 1 0;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px;height:100%;padding:0;border:0;background:transparent;cursor:pointer">
+              <span style="width:100%;height:{{ m.h }}px;border-radius:2px 2px 0 0;background:{{ m.color }};transition:background 140ms cubic-bezier(.2,.6,.2,1)"></span>
+              <span style="font-size:9px;font-weight:600;letter-spacing:.04em;color:{{ m.labelColor }};white-space:nowrap">{{ m.label }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+    </section>
+
+    <section style="display:flex;flex-direction:column;gap:12px">
+      <div style="padding:16px 18px 18px;border-radius:12px;background:#005DAA;box-shadow:0 4px 14px rgba(27,42,88,.16)">
+        <span style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:rgba(255,255,255,.75)">Homesite Count</span>
+        <div style="font-family:'Reckless','Times New Roman',serif;font-weight:300;font-size:64px;line-height:1;letter-spacing:-.04em;color:#fff;font-variant-numeric:tabular-nums">{{ kpiCount }}</div>
+        <span style="font-size:12px;font-weight:500;color:rgba(255,255,255,.8)">{{ kpiSub }}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:7px;padding:12px 14px 14px;border:1px solid #E4DED2;border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(27,42,88,.05)">
+        <span style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:#908A82">Homesites by Stage</span>
+        <sc-for list="{{ stageBars }}" as="s" hint-placeholder-count="6">
+          <button onClick="{{ s.onClick }}" style="display:grid;grid-template-columns:34px 1fr 34px;align-items:center;gap:8px;padding:2px 0;border:0;background:transparent;cursor:pointer;text-align:left">
+            <span style="font-size:11.5px;font-weight:600;color:{{ s.labelColor }};font-variant-numeric:tabular-nums">{{ s.label }}</span>
+            <span style="height:8px;border-radius:2px;background:#F1EBE1"><span style="display:block;width:{{ s.pct }}%;height:8px;border-radius:2px;background:{{ s.color }};transition:width 200ms cubic-bezier(.2,.6,.2,1)"></span></span>
+            <span style="text-align:right;font-size:11.5px;font-weight:500;color:#6F6963;font-variant-numeric:tabular-nums">{{ s.count }}</span>
+          </button>
+        </sc-for>
+      </div>
+    </section>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:0 0 auto;padding:12px 22px 8px">
+    <span style="font-size:11.5px;font-weight:600;color:#6F6963">{{ tableCaption }}</span>
+    <sc-for list="{{ chips }}" as="c" hint-placeholder-count="0">
+      <button onClick="{{ c.onClick }}" style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border:1px solid #005DAA;border-radius:999px;background:#EAF2F9;color:#005DAA;font-size:11.5px;font-weight:500;cursor:pointer" style-hover="background:#DCE9F4">{{ c.label }} <span style="font-size:13px;line-height:1">&times;</span></button>
+    </sc-for>
+  </div>
+
+  <div style="flex:1 1 auto;min-height:0;margin:0 22px 18px;border:1px solid #E4DED2;border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(27,42,88,.05);overflow:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+      <thead>
+        <tr>
+          <sc-for list="{{ cols }}" as="col" hint-placeholder-count="12">
+            <th onClick="{{ col.onClick }}" style="position:sticky;top:0;z-index:1;padding:9px 10px;border-bottom:1px solid #D8CFBE;background:#F6F2EA;color:{{ col.color }};font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;text-align:{{ col.align }};white-space:nowrap;cursor:pointer">{{ col.label }}{{ col.arrow }}</th>
+          </sc-for>
+        </tr>
+      </thead>
+      <tbody>
+        <sc-for list="{{ rows }}" as="r" hint-placeholder-count="14">
+          <tr onClick="{{ r.onClick }}" style="cursor:pointer;background:{{ r.bg }}" style-hover="background:#F1F6FB">
+            <td style="padding:7px 10px;border-bottom:1px solid #F1EBE1;font-weight:500;white-space:nowrap">{{ r.community }}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid #F1EBE1;font-variant-numeric:tabular-nums;white-space:nowrap">{{ r.job }}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid #F1EBE1;color:#6F6963;white-space:nowrap">{{ r.start }}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid #F1EBE1;white-space:nowrap">{{ r.edd }}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid #F1EBE1;white-space:nowrap">{{ r.ecoe }}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid #F1EBE1;font-weight:500;color:{{ r.closeColor }};white-space:nowrap">{{ r.close }}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid #F1EBE1;color:#6F6963;white-space:nowrap">{{ r.ccc }}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid #F1EBE1;color:#6F6963;white-space:nowrap">{{ r.co }}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid #F1EBE1;text-align:center">{{ r.lot }}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid #F1EBE1;white-space:nowrap">{{ r.cm }}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid #F1EBE1;text-align:center;font-variant-numeric:tabular-nums">{{ r.stage }}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid #F1EBE1;text-align:right;color:{{ r.ageColor }};font-variant-numeric:tabular-nums">{{ r.age }}</td>
+          </tr>
+        </sc-for>
+      </tbody>
+    </table>
+    <sc-if value="{{ hasMore }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;justify-content:center;padding:12px">
+        <button onClick="{{ onMore }}" style="height:32px;padding:0 16px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;color:#005DAA;font-size:12.5px;font-weight:600;cursor:pointer" style-hover="background:#F1EBE1">{{ moreLabel }}</button>
+      </div>
+    </sc-if>
+    <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:40px;text-align:center;color:#908A82;font-size:13px">No homesites match the current filters.</div>
+    </sc-if>
+  </div>
+
+  <sc-if value="{{ detail }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ onCloseDetail }}" style="position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:32px;background:rgba(27,42,88,.42)">
+      <div onClick="{{ stop }}" style="width:560px;max-width:100%;max-height:100%;overflow:auto;padding:22px 24px 24px;border-radius:20px;background:#FBF6F3;box-shadow:0 20px 60px rgba(27,42,88,.32)">
+        <div style="display:flex;align-items:flex-start;gap:14px">
+          <div>
+            <span style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:#908A82">Homesite {{ detail.job }}</span>
+            <h2 style="margin:2px 0 0;font-family:'Reckless','Times New Roman',serif;font-weight:300;font-size:28px;line-height:1.15;letter-spacing:-.03em">{{ detail.street }}</h2>
+            <span style="font-size:13px;font-weight:500;color:#6F6963">{{ detail.community }}</span>
+          </div>
+          <button onClick="{{ onCloseDetail }}" aria-label="Close" style="margin-left:auto;width:30px;height:30px;border:1px solid #E4DED2;border-radius:4px;background:#fff;color:#6F6963;font-size:15px;line-height:1;cursor:pointer" style-hover="background:#F1EBE1;color:#303030">&times;</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;margin-top:18px;background:#E4DED2;border:1px solid #E4DED2;border-radius:8px;overflow:hidden">
+          <sc-for list="{{ detail.fields }}" as="f" hint-placeholder-count="12">
+            <div style="display:flex;flex-direction:column;gap:1px;padding:9px 12px;background:#fff">
+              <span style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:#908A82">{{ f.k }}</span>
+              <span style="font-size:13.5px;font-weight:500;color:{{ f.color }}">{{ f.v }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:16px">
+          <button onClick="{{ detail.onFilterCM }}" style="height:32px;padding:0 14px;border:0;border-radius:4px;background:#005DAA;color:#fff;font-size:12.5px;font-weight:600;cursor:pointer" style-hover="background:#203F7C">Filter to This CM</button>
+          <button onClick="{{ detail.onFilterComm }}" style="height:32px;padding:0 14px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;color:#303030;font-size:12.5px;font-weight:600;cursor:pointer" style-hover="background:#F1EBE1">Filter to This Community</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1600,&quot;height&quot;:1000}}">
+const TODAY = new Date(2026, 6, 29);
+const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const fmt = s => { if (!s) return "\u2014"; const p = s.split("-"); return (+p[1]) + "/" + (+p[2]) + "/" + p[0]; };
+const days = (a, b) => Math.round((b - a) / 86400000);
+
+class Component extends DCLogic {
+  state = {
+    lot: "", comm: "", cm: "", conc: "", stage: "",
+    months: [], day: "", q: "",
+    sort: "close", dir: 1, limit: 200, detail: null,
+    calY: 2026, calM: 6
+  };
+
+  data() { return (typeof window !== "undefined" && window.COMPLETION_DATA) || []; }
+
+  set(patch) { this.setState(Object.assign({ limit: 200 }, patch)); }
+
+  // rows passing every filter except the one named in `except`
+  filtered(except) {
+    const s = this.state, q = s.q.trim().toLowerCase();
+    return this.data().filter(r => {
+      if (except !== "lot" && s.lot && r.lot !== s.lot) return false;
+      if (except !== "comm" && s.comm && r.community !== s.comm) return false;
+      if (except !== "cm" && s.cm && r.cm !== s.cm) return false;
+      if (except !== "conc" && s.conc && r.concierge !== s.conc) return false;
+      if (except !== "stage" && s.stage && r.stage !== s.stage) return false;
+      if (except !== "months" && s.months.length && !s.months.includes(r.edd.slice(0, 7))) return false;
+      if (except !== "day" && s.day && r.edd !== s.day) return false;
+      if (q && !(r.job + " " + r.community + " " + r.street + " " + r.cm + " " + r.concierge).toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }
+
+  opts(key, label) {
+    const counts = {};
+    this.filtered(key).forEach(r => { if (r[key === "comm" ? "community" : key === "conc" ? "concierge" : key]) counts[r[key === "comm" ? "community" : key === "conc" ? "concierge" : key]] = (counts[r[key === "comm" ? "community" : key === "conc" ? "concierge" : key]] || 0) + 1; });
+    const list = Object.keys(counts).sort().map(v => ({ v, l: v + "  (" + counts[v] + ")" }));
+    return [{ v: "", l: label }].concat(list);
+  }
+
+  renderVals() {
+    const s = this.state, rowsAll = this.filtered();
+
+    // ---- calendar (EDD counts, ignores the day pick so you can switch days)
+    const calBase = this.filtered("day");
+    const byDay = {};
+    calBase.forEach(r => { if (r.edd) byDay[r.edd] = (byDay[r.edd] || 0) + 1; });
+    const first = new Date(s.calY, s.calM, 1);
+    const lead = (first.getDay() + 6) % 7;
+    const dim = new Date(s.calY, s.calM + 1, 0).getDate();
+    const cells = [];
+    let calTotal = 0;
+    for (let i = 0; i < lead; i++) cells.push({ day: "", count: "", disabled: true, cursor: "default", bg: "#FCFAF6", border: "#F6F2EA", dayColor: "#D8CFBE", countColor: "transparent", title: "", onClick: () => {} });
+    for (let d = 1; d <= dim; d++) {
+      const iso = s.calY + "-" + String(s.calM + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+      const n = byDay[iso] || 0;
+      calTotal += n;
+      const sel = s.day === iso;
+      const isToday = iso === "2026-07-29";
+      cells.push({
+        day: String(d), count: n ? String(n) : "", disabled: false, cursor: n ? "pointer" : "default",
+        bg: sel ? "#005DAA" : n ? "#EAF2F9" : "#fff",
+        border: sel ? "#005DAA" : isToday ? "#83553C" : n ? "#CFE2F1" : "#F1EBE1",
+        dayColor: sel ? "rgba(255,255,255,.8)" : "#908A82",
+        countColor: sel ? "#fff" : "#005DAA",
+        title: n ? n + " homesites with EDD " + fmt(iso) : "No EDD on " + fmt(iso),
+        onClick: () => { if (n) this.set({ day: sel ? "" : iso }); }
+      });
+    }
+    while (cells.length % 7) cells.push({ day: "", count: "", disabled: true, cursor: "default", bg: "#FCFAF6", border: "#F6F2EA", dayColor: "#D8CFBE", countColor: "transparent", title: "", onClick: () => {} });
+
+    // ---- EDD month strip
+    const mBase = this.filtered("months");
+    const mc = {};
+    mBase.forEach(r => { if (r.edd) mc[r.edd.slice(0, 7)] = (mc[r.edd.slice(0, 7)] || 0) + 1; });
+    const keys = Object.keys(mc).sort().slice(-14);
+    const max = Math.max(1, ...keys.map(k => mc[k]));
+    const eddMonths = keys.map(k => {
+      const on = s.months.includes(k);
+      return {
+        label: MON[+k.slice(5) - 1] + (k.slice(5) === "01" ? " '" + k.slice(2, 4) : ""),
+        h: Math.max(4, Math.round(mc[k] / max * 40)),
+        color: on ? "#005DAA" : s.months.length ? "#CFE2F1" : "#7FAFD6",
+        labelColor: on ? "#005DAA" : "#908A82",
+        title: mc[k] + " homesites with EDD in " + MON[+k.slice(5) - 1] + " " + k.slice(0, 4),
+        onClick: () => this.set({ months: on ? s.months.filter(x => x !== k) : s.months.concat([k]) })
+      };
+    });
+
+    // ---- stage bars
+    const sBase = this.filtered("stage");
+    const sc = {};
+    sBase.forEach(r => { if (r.stage) sc[r.stage] = (sc[r.stage] || 0) + 1; });
+    const sKeys = Object.keys(sc).sort((a, b) => sc[b] - sc[a]).slice(0, 8);
+    const sMax = Math.max(1, ...sKeys.map(k => sc[k]));
+    const stageBars = sKeys.map(k => ({
+      label: k, count: sc[k], pct: Math.round(sc[k] / sMax * 100),
+      color: s.stage === k ? "#005DAA" : "#A8C8E2",
+      labelColor: s.stage === k ? "#005DAA" : "#303030",
+      onClick: () => this.set({ stage: s.stage === k ? "" : k })
+    }));
+
+    // ---- table
+    const key = s.sort;
+    const sorted = rowsAll.slice().sort((a, b) => {
+      let A = a[key] || "", B = b[key] || "";
+      if (key === "age") { A = a.start ? days(new Date(a.start), TODAY) : null; B = b.start ? days(new Date(b.start), TODAY) : null; }
+      const eA = A === "" || A === null, eB = B === "" || B === null;
+      if (eA || eB) return eA && eB ? 0 : eA ? 1 : -1; // blanks always last
+      if (key === "age") return (A - B) * s.dir;
+      return A < B ? -s.dir : A > B ? s.dir : 0;
+    });
+    const shown = sorted.slice(0, s.limit);
+    const rows = shown.map((r, i) => {
+      const late = r.close && r.close < "2026-07-29";
+      const age = r.start ? days(new Date(r.start), TODAY) : null;
+      return {
+        community: r.community || "\u2014", job: r.job, start: fmt(r.start), edd: fmt(r.edd),
+        ecoe: fmt(r.ecoe), close: fmt(r.close), ccc: fmt(r.ccc), co: fmt(r.co),
+        lot: r.lot || "\u2014", cm: r.cm || "\u2014", stage: r.stage || "\u2014",
+        age: age === null ? "\u2014" : age, ageColor: age !== null && age > 240 ? "#AA1F23" : "#6F6963",
+        closeColor: late ? "#AA1F23" : "#303030",
+        bg: i % 2 ? "#FCFAF6" : "#fff",
+        onClick: () => this.setState({ detail: r })
+      };
+    });
+
+    const colDefs = [["community", "Community", "left"], ["job", "Job #", "left"], ["start", "Start Date", "left"], ["edd", "EDD", "left"], ["ecoe", "ECOE", "left"], ["close", "Schedule Closing", "left"], ["ccc", "CCC Date", "left"], ["co", "Cert. of Occupancy", "left"], ["lot", "Lot", "center"], ["cm", "CM", "left"], ["stage", "Stage", "center"], ["age", "Age (days)", "right"]];
+    const cols = colDefs.map(c => ({
+      label: c[1], align: c[2],
+      color: s.sort === c[0] ? "#005DAA" : "#6F6963",
+      arrow: s.sort === c[0] ? (s.dir === 1 ? " \u2191" : " \u2193") : "",
+      onClick: () => this.setState({ sort: c[0], dir: s.sort === c[0] ? -s.dir : 1, limit: 200 })
+    }));
+
+    // ---- chips
+    const chips = [];
+    const chip = (label, patch) => chips.push({ label, onClick: () => this.set(patch) });
+    if (s.lot) chip("Lot Type: " + s.lot, { lot: "" });
+    if (s.stage) chip("Stage: " + s.stage, { stage: "" });
+    if (s.comm) chip(s.comm, { comm: "" });
+    if (s.cm) chip("CM: " + s.cm, { cm: "" });
+    if (s.conc) chip("Concierge: " + s.conc, { conc: "" });
+    if (s.months.length) chip("EDD: " + s.months.length + " month" + (s.months.length > 1 ? "s" : ""), { months: [] });
+    if (s.day) chip("EDD " + fmt(s.day), { day: "" });
+    if (s.q.trim()) chip("\u201c" + s.q.trim() + "\u201d", { q: "" });
+
+    const d = s.detail;
+    const detail = d ? {
+      job: d.job, street: d.street || "Homesite", community: d.community,
+      fields: [
+        { k: "Projected Completion (EDD)", v: fmt(d.edd), color: "#303030" },
+        { k: "Estimated COE", v: fmt(d.ecoe), color: "#303030" },
+        { k: "Scheduled Closing", v: fmt(d.close), color: d.close && d.close < "2026-07-29" ? "#AA1F23" : "#303030" },
+        { k: "CCC Date", v: fmt(d.ccc), color: "#303030" },
+        { k: "Certificate of Occupancy", v: fmt(d.co), color: "#303030" },
+        { k: "Construction Start (Stage 7)", v: fmt(d.start), color: "#303030" },
+        { k: "Construction Stage (JDE)", v: d.stage || "\u2014", color: "#303030" },
+        { k: "Lot Status", v: d.lot || "\u2014", color: "#303030" },
+        { k: "Construction Manager", v: d.cm || "\u2014", color: "#303030" },
+        { k: "Assigned Concierge", v: d.concierge || "\u2014", color: "#303030" },
+        { k: "Sale Date", v: fmt(d.sale), color: "#303030" },
+        { k: "Age Since Start", v: d.start ? days(new Date(d.start), TODAY) + " days" : "\u2014", color: "#303030" }
+      ],
+      onFilterCM: () => this.setState({ cm: d.cm, detail: null, limit: 200 }),
+      onFilterComm: () => this.setState({ comm: d.community, detail: null, limit: 200 })
+    } : null;
+
+    return {
+      dowNames: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+      calCells: cells,
+      calLabel: MON[s.calM] + " " + s.calY,
+      calTotalLabel: calTotal + " EDD in month",
+      onPrevMonth: () => this.setState({ calM: s.calM === 0 ? 11 : s.calM - 1, calY: s.calM === 0 ? s.calY - 1 : s.calY }),
+      onNextMonth: () => this.setState({ calM: s.calM === 11 ? 0 : s.calM + 1, calY: s.calM === 11 ? s.calY + 1 : s.calY }),
+      eddMonths, stageBars,
+      fLot: s.lot, fComm: s.comm, fCM: s.cm, fConc: s.conc, fStage: s.stage,
+      optLot: this.opts("lot", "All lot types"),
+      optComm: this.opts("comm", "All communities"),
+      optCM: this.opts("cm", "All construction managers"),
+      optConc: this.opts("conc", "All concierges"),
+      optStage: this.opts("stage", "All stages"),
+      onLot: e => this.set({ lot: e.target.value }),
+      onComm: e => this.set({ comm: e.target.value }),
+      onCM: e => this.set({ cm: e.target.value }),
+      onConc: e => this.set({ conc: e.target.value }),
+      onStage: e => this.set({ stage: e.target.value }),
+      onSearch: e => this.set({ q: e.target.value }),
+      onReset: () => this.setState({ lot: "", comm: "", cm: "", conc: "", stage: "", months: [], day: "", q: "", limit: 200, detail: null }),
+      kpiCount: rowsAll.length,
+      kpiSub: rowsAll.length === this.data().length ? "All homesites in the division" : "of " + this.data().length + " total homesites",
+      cols, rows,
+      tableCaption: "Showing " + shown.length + " of " + rowsAll.length + " homesites",
+      hasMore: shown.length < rowsAll.length,
+      moreLabel: "Load " + Math.min(200, rowsAll.length - shown.length) + " more",
+      onMore: () => this.setState({ limit: s.limit + 200 }),
+      isEmpty: rowsAll.length === 0,
+      detail,
+      stop: e => e.stopPropagation(),
+      onCloseDetail: () => this.setState({ detail: null }),
+      chips
+    };
+  }
+}
+</script>
+</body>
+</html>

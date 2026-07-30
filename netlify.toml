@@ -121,8 +121,21 @@
     Referrer-Policy = "no-referrer"
     Permissions-Policy = "geolocation=(), microphone=(), camera=()"
 
+# index.html is now the landing page (hand-converted from OLH Home.dc.html);
+# the editable tracker moved to /tracker and the completion report to
+# /completion. Netlify serves the extensionless paths for these .html files.
 [[headers]]
   for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-store, must-revalidate"
+
+[[headers]]
+  for = "/tracker.html"
+  [headers.values]
+    Cache-Control = "no-store, must-revalidate"
+
+[[headers]]
+  for = "/completion.html"
   [headers.values]
     Cache-Control = "no-store, must-revalidate"
 
