@@ -1,20 +1,61 @@
 # OLH QA & Closing Tracker — Web Front End
 
-A single-page internal tool for viewing and editing QA / closing milestones on
-~904 live job records held in Airtable. No build step, no npm dependencies for
-the front end.
+An internal tool for viewing and editing QA / closing milestones on ~930 live
+job records held in Airtable. No npm dependencies for the front end, and no
+build step on Netlify — the HTML is served straight from the repo root.
 
 ```
 olh-tracker-web/
-├── index.html                     # the entire UI (inline CSS + JS)
+├── index.html                     # the tracker — read/write, the tool people use
+├── tracker-new.html               # "New Views" dashboards — READ-ONLY, same live data
 ├── netlify.toml                   # publish dir, function dir, /api/* redirects, headers
 ├── robots.txt                     # disallow all
-├── .gitignore                     # excludes any local env files
+├── .gitignore                     # excludes local env files + design-export sources
 ├── fonts/                         # self-hosted brand faces — see fonts/README.md
 └── netlify/functions/
     ├── jobs.js                    # GET  /api/jobs        (read all jobs + managers)
     └── update-job.js              # POST /api/update-job   (whitelisted single-record PATCH)
 ```
+
+Both HTML files are **self-contained bundles** produced by the design tool: a
+manifest of gzip+base64 assets (the dc-runtime, React, ReactDOM, five brand
+fonts, and a static data snapshot) plus the page template, unpacked into blob
+URLs in the browser on load. That is why `fonts/` holds only a README — the
+font files are inlined. Neither bundle contains a credential, and neither talks
+to Airtable directly; both go through `/api/*` exactly as described below.
+
+## The two pages
+
+| Path | Reads | Writes | What it is |
+|---|---|---|---|
+| `/` | `GET /api/jobs` | `POST /api/update-job` | The editable tracker: one row per homesite, 26 editable columns. |
+| `/tracker-new.html` | `GET /api/jobs` | **none** | My Queue, Pipeline Board, Homesite Detail, Division Dashboard, Keys Board. |
+
+`tracker-new.html` is deliberately **not** a replacement for `/`. It makes no
+write call at all, so swapping it in at the root would silently remove editing.
+
+It is generated from the design export rather than hand-edited:
+
+```bash
+unzip "OLH Tracker design exploration.zip" -d /tmp/olh-export
+node dev/build-new-views.js /tmp/olh-export
+```
+
+The design tool exports that page as a prototype rendering from the bundled
+`olh-data.js` snapshot, with no API call. The build script grafts on the live
+fetch layer — both pages read `window.OLH_DATA`, which holds the same
+`{id, fields}` Airtable shape, so nothing had to be rewritten. The snapshot
+stays bundled as a fallback: if `/api/jobs` is unreachable the page renders
+stale sample records and logs a warning instead of going blank.
+
+The script resolves asset ids by content hash and asserts each source patch
+matched exactly once, so a re-export that moves things fails the build loudly
+rather than quietly shipping a page still stuck on snapshot data. Re-run it
+after any design change and redeploy.
+
+> Note: Airtable has no `Community` or `Street Address` field (0 of 932
+> records). The New Views page never references them, but the tracker at `/`
+> does, so those two columns read blank there.
 
 ## How it is wired
 
