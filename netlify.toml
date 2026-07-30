@@ -149,6 +149,37 @@
   [headers.values]
     Cache-Control = "no-store, must-revalidate"
 
+# scheduler / walk-calendar / workload are the QAM walk-planning pages. All
+# three are bundled documents whose data comes entirely from the API at runtime:
+# the build step (dev/build-live-pages.js) DELETES the olh-data demo fixture and
+# the WALK_* snapshot from each one, so there is no local copy to fall back to.
+# scheduler and workload read /api/walk-config for the roster, drive matrix and
+# product map; walk-calendar needs only /api/jobs. If a fetch fails the page
+# renders an explicit error instead of a stale sample -- the old fixture held 900
+# synthetic homesites and must never reach a screen someone schedules from.
+# no-store because the documents are rebuilt whenever the design is re-exported.
+[[headers]]
+  for = "/scheduler.html"
+  [headers.values]
+    Cache-Control = "no-store, must-revalidate"
+
+[[headers]]
+  for = "/walk-calendar.html"
+  [headers.values]
+    Cache-Control = "no-store, must-revalidate"
+
+[[headers]]
+  for = "/workload.html"
+  [headers.values]
+    Cache-Control = "no-store, must-revalidate"
+
+# ---- Friendly API path for the walk reference data --------------------------
+[[redirects]]
+  from = "/api/walk-config"
+  to = "/.netlify/functions/walk-config"
+  status = 200
+  force = true
+
 [[headers]]
   for = "/api/*"
   [headers.values]

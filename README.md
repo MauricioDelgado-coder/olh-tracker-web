@@ -282,3 +282,87 @@ Pick one, in rough order of effort:
 | "Airtable rejected the credentials" | Token lacks `data.records:write`, or the base isn't in its access list. |
 | "Rejected: field(s) not permitted for editing" | Working as designed — that column is sync-owned. |
 | Blank page / 404 on `/api/jobs` | `netlify.toml` redirects didn't deploy; check the functions directory. |
+
+---
+
+# Walk-planning pages (added 2026-07-30)
+
+`/scheduler`, `/workload` and `/walk-calendar` join `/`, `/tracker` and
+`/completion`. All six are bundled single-file documents exported from the design
+tool and post-processed by `dev/build-live-pages.js`.
+
+## No page ships a data fixture
+
+The design exports embed `olh-data.demo-fixture.js` — **900 synthetic homesites**
+with fabricated ids (`recJOB…`, `recCM…`) labelled `Dynamics Export · 900
+homesites`. The build step deletes that asset from the manifest and removes its
+script tag, so the fixture is not merely unused, it is absent.
+
+This matters because the previous failure mode was silent. `tracker.html` called
+`loadLive(false, false)` on mount — `announce=false` — and its catch block left
+`window.OLH_DATA` pointing at the fixture. A failed first load therefore rendered
+900 invented homesites with **no message at all**. The build now also patches
+that call to `loadLive(false, true)` and rewrites the toast, which used to
+promise "Showing sample records instead."
+
+Rule: a page that cannot reach the API shows nothing and says so. Nobody should
+schedule a real walk from invented records.
+
+## Where the reference data lives
+
+`GET /api/walk-config` (`netlify/functions/walk-config.js`) serves the roster,
+drive matrix and product map from three tables in `appYX9df4lGO6G2uz` — the same
+base `/api/jobs` reads, so there is one base and one PAT:
+
+| Table | Id | Records |
+|---|---|---|
+| Walk Roster | `tblhDm8OD4jSR0tey` | 35 (19 QAM, 16 CCR) |
+| Walk Drive Times | `tblVnYFUc4xuovVEC` | 729 — one per ordered community pair |
+| Walk Product Map | `tblvkWF5QULxhqFiX` | 74 |
+
+Long-form drive times because Airtable has no matrix field type; the endpoint
+pivots them back into `WALK_DRIVE[from][to]`. Cache is 5 minutes, longer than the
+30s on `/api/jobs`, because reference data changes far less often.
+
+Editing a drive time or adding a community is now an Airtable edit. It used to
+require rebuilding and redeploying three 1 MB documents.
+
+## Known gaps, surfaced on screen
+
+`/api/walk-config` returns an `unscheduled` array, and the pages render it as a
+banner naming the affected communities. Two gaps are live today:
+
+- **9 communities, 29 homesites have no drive times** (Championsgate is 14 of
+  them). They are in `Walk Product Map` flagged `NEW — needs drive times`.
+  Filling the matrix to 36×36 means 284 new symmetric measurements.
+- **16 of 35 roster members have a `Home Community` that is not one of the 27**
+  in the drive matrix, so their day starts unanchored. Each carries a `Notes`
+  explaining why.
+
+Both are deliberately visible rather than silently dropped — 63 of 935 homesites
+would otherwise vanish from these pages with no indication (29 unmapped, 19 with
+no `Community` value, plus the excluded `The Cove`).
+
+## Rebuilding after a design re-export
+
+    node dev/build-live-pages.js <export-folder> public
+    node dev/verify-server.js "$PWD/public" 8902 &
+    bash dev/verify-pages.sh http://localhost:8902
+
+Every patch asserts an exact single match and the emitted payload is re-parsed
+the way the browser loader does, so a re-export that moves the anchors fails the
+build loudly instead of shipping a page stuck on no data. `verify-pages.sh`
+drives real headless Chrome and asserts on script-stripped visible text — the
+loader's own source contains strings like "Live data unavailable", so grepping
+the raw DOM makes those assertions tautological.
+
+The loader stamps `data-olh-source` and `data-olh-jobs` on `<body>`, which is how
+pages with an empty initial state (walk-calendar) can be verified at all, and a
+quick way to check a live page.
+
+## Still outstanding
+
+`tracker-new.html` is the superseded "New Views" prototype. It is **still
+published and still contains the 994 KB fixture**, so it retains the silent
+fallback behaviour fixed everywhere else. It was outside the scope of this
+change; it should be removed or rebuilt.
