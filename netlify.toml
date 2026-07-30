@@ -153,8 +153,9 @@
 # three are bundled documents whose data comes entirely from the API at runtime:
 # the build step (dev/build-live-pages.js) DELETES the olh-data demo fixture and
 # the WALK_* snapshot from each one, so there is no local copy to fall back to.
-# scheduler and workload read /api/walk-config for the roster, drive matrix and
-# product map; walk-calendar needs only /api/jobs. If a fetch fails the page
+# All of them read /api/walk-config for the roster, drive matrix and product map
+# as well as /api/jobs. walk-calendar was originally wired for /api/jobs only,
+# which is why its walk-manager list came up empty. If a fetch fails the page
 # renders an explicit error instead of a stale sample -- the old fixture held 900
 # synthetic homesites and must never reach a screen someone schedules from.
 # no-store because the documents are rebuilt whenever the design is re-exported.
