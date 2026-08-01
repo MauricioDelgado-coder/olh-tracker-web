@@ -105,25 +105,48 @@
    * rather than the status field because they are what the status is derived
    * from; a stale status cannot put a finished home back on the list.
    *
-   * Then the stale records are dropped. 18 rows carry a projected completion
-   * between 2001 and 2023 while still reading as under construction -- one has
-   * a start date of 1999 on a model home. They are abandoned Salesforce records
-   * rather than very late work, and because the report sorts by date they land
-   * at the top of the page where they crowd out real work.
+   * Then three narrowing rules, all requested 2026-08-01:
    *
-   * The cutoff rolls twelve months rather than being pinned to a fixed date, so
-   * a genuinely late home stays visible for a year after its projected date and
-   * the rule does not quietly widen as time passes. There is nothing in the
-   * data between January 2024 and June 2026, so today this removes exactly
-   * those 18 and nothing else.
+   * 1. Lot Status must be B, S, W or M. This is the saleable-inventory set.
+   *    It removes 4 rows today -- two U, one H, one blank -- which are the
+   *    condo/model/placeholder records the no-COE report already flags. Note
+   *    this tests Lot Status, NOT the Z/H job-number exclusion in the upstream
+   *    Salesforce pull; those are different rules that happen to share letters,
+   *    and conflating them has caused confusion before.
    *
-   * A row with NO projected completion is kept: 4 rows are in that state, and
-   * a missing date is not evidence the record is stale. */
+   * 2. Projected Completion must be present. A row with no projected date has
+   *    nothing to sort or schedule by on a report that is entirely about dates,
+   *    and it sorts to the bottom as a row of dashes. 3 rows today.
+   *
+   *    This reverses the earlier "a missing date is not evidence of staleness"
+   *    call. That reasoning still holds -- these are not stale -- but absent is
+   *    not the same as not-stale, and this report is the wrong place to chase
+   *    them. They remain visible in the tracker and in the no-COE workbook.
+   *
+   * 3. Projected Completion must not be older than STALEDAYS.
+   *
+   * On the staleness window: this was twelve months and is now 60 days. Twelve
+   * months was chosen so a genuinely late home stayed visible for a year rather
+   * than vanishing; 60 days is the narrower reading of "still current work".
+   * The two pick out the same rows today -- there is nothing in the data with a
+   * projected completion between Jan 2024 and Jun 2026, so both drop exactly
+   * the same 18 abandoned records (starts as old as 1999, projected dates
+   * 2001-2023). They diverge only as real homes slip past 60 days late, and at
+   * that point this rule drops them from the report. That is the intended
+   * behaviour, but it is the one thing here that will change what you see
+   * without anyone editing the code, so it is worth revisiting if late work
+   * starts going missing.
+   *
+   * Combined: 1038 under construction -> 1013 on the report. */
+  var STALEDAYS = 60;
+
   function stalecutoff() {
     var d = new Date();
-    d.setFullYear(d.getFullYear() - 1);
+    d.setDate(d.getDate() - STALEDAYS);
     return d.toISOString().slice(0, 10);
   }
+
+  var LOTSTATUS = { B: 1, S: 1, W: 1, M: 1 };
 
   function inscope(rec) {
     var f = (rec && rec.fields) || {};
@@ -134,8 +157,9 @@
     if (f['Record Status'] === 'Closed') return false;
     if (!filled('Actual Start Date')) return false;
     if (filled('Actual Completion Date')) return false;
-    var proj = filled('Projected Completion Date') ? day(f['Projected Completion Date']) : '';
-    if (proj && proj < stalecutoff()) return false;
+    if (!LOTSTATUS[String(f['Lot Status'] || '').trim().toUpperCase()]) return false;
+    if (!filled('Projected Completion Date')) return false;
+    if (day(f['Projected Completion Date']) < stalecutoff()) return false;
     return true;
   }
 
