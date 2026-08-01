@@ -96,6 +96,49 @@
 
   var DATEKEYS = { edd: 1, ecoe: 1, close: 1, ccc: 1, start: 1, co: 1, sale: 1 };
 
+  /* Scope: homes actually under construction right now.
+   *
+   * A homesite belongs on this report if work has started and has not finished.
+   * That is Actual Start Date populated and Actual Completion Date empty, which
+   * lines up 1:1 with Construction State = "Under construction" -- 1038 of the
+   * 1400 active rows at the time this was written. The two dates are used
+   * rather than the status field because they are what the status is derived
+   * from; a stale status cannot put a finished home back on the list.
+   *
+   * Then the stale records are dropped. 18 rows carry a projected completion
+   * between 2001 and 2023 while still reading as under construction -- one has
+   * a start date of 1999 on a model home. They are abandoned Salesforce records
+   * rather than very late work, and because the report sorts by date they land
+   * at the top of the page where they crowd out real work.
+   *
+   * The cutoff rolls twelve months rather than being pinned to a fixed date, so
+   * a genuinely late home stays visible for a year after its projected date and
+   * the rule does not quietly widen as time passes. There is nothing in the
+   * data between January 2024 and June 2026, so today this removes exactly
+   * those 18 and nothing else.
+   *
+   * A row with NO projected completion is kept: 4 rows are in that state, and
+   * a missing date is not evidence the record is stale. */
+  function stalecutoff() {
+    var d = new Date();
+    d.setFullYear(d.getFullYear() - 1);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function inscope(rec) {
+    var f = (rec && rec.fields) || {};
+    var filled = function (k) {
+      var v = f[k];
+      return v !== undefined && v !== null && String(v).trim() !== '';
+    };
+    if (f['Record Status'] === 'Closed') return false;
+    if (!filled('Actual Start Date')) return false;
+    if (filled('Actual Completion Date')) return false;
+    var proj = filled('Projected Completion Date') ? day(f['Projected Completion Date']) : '';
+    if (proj && proj < stalecutoff()) return false;
+    return true;
+  }
+
   function maprecord(rec) {
     var f = (rec && rec.fields) || {};
     var out = {};
@@ -135,12 +178,7 @@
       })
       .then(function (data) {
         var all = (data && data.jobs) || [];
-        /* Archived rows dropped out of the Salesforce export and are not open
-         * work; the tracker hides them the same way. */
-        var rows = all.filter(function (r) {
-          var st = r && r.fields && r.fields['Record Status'];
-          return st !== 'Closed';
-        }).map(maprecord).filter(function (r) { return r.job; });
+        var rows = all.filter(inscope).map(maprecord).filter(function (r) { return r.job; });
 
         window.COMPLETION_DATA = rows;
         stamp('airtable', rows.length);
