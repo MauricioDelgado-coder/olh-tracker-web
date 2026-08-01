@@ -835,6 +835,49 @@ copy only ever tests itself, and the copy is exactly what drifts:
 
     AIRTABLE_PAT=… node dev/check-completion-scope.js 1013
 
+## Two things the move to an asset broke, and the checks that now cover them
+
+### The tracker raced the auth module
+
+`Could Not Load Homesite Data — undefined is not an object (evaluating
+'window.OLHAuth.authHeaders')`.
+
+The tracker carries its own `loadLive()` rather than the injected loader, and
+the build patches it to send `OLHAuth.authHeaders()`. That was safe while the
+auth module was inlined in the template: it was defined before any component
+mounted. As a manifest asset the bundler injects it asynchronously, so
+`componentDidMount` could reach the fetch first. The design already knew this —
+its own `_wireAuth` polls for `window.OLHAuth` with the comment "may not have
+run yet in the bundled build" — but the initial `loadLive` call never waited.
+
+A null-safe header would have been the wrong fix. `/api/jobs` answers 401
+without an Authorization header, so degrading quietly turns an ordering problem
+into an empty grid and a misleading refusal. `_loadWhenAuthed` waits on the same
+6s budget `_wireAuth` uses, and `_authHeaders` throws a sentence naming the real
+cause if the module genuinely never arrives.
+
+It is a race, so it does not reproduce reliably in headless — the fix removes
+the dependency on ordering rather than improving the odds.
+
+### The logo 404'd on all eight pages
+
+The export switched the header to `assets/lennar-logo-blue.png`; `public/assets/`
+had only the white one. `publish` is an allow-list by design, so anything not
+copied into `public/` is a 404 — on every page, silently. A missing `<img>`
+changes no text and throws no exception, so every existing check passed. Only a
+network probe saw it.
+
+`checkStaticRefs()` now runs at the end of every build and fails it, reading
+references out of the decompressed text assets as well as the template, because
+that is where this one lived.
+
+### verify-pages.sh asserts no uncaught exception
+
+Every check in that script was about what the DOM says, and the tracker rendered
+a perfectly correct sign-in gate while its data path was dead. A thrown
+TypeError is never an expected state. 401s are not failures there — an anonymous
+visitor being refused is the boundary working, and section 2 already asserts it.
+
 ## tracker-new stayed deleted
 
 The export ships `tracker-new.html` again and links job numbers to it. It is

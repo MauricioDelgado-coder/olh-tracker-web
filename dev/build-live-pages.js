@@ -388,9 +388,65 @@ const PAGES = {
   'tracker.html': {
     data: true, inject: false, caches: [],
     patches: [
-      ['announce initial load failure',
+      /* The first load must WAIT for the auth module, and must announce when
+       * it fails.
+       *
+       * Two bugs, one patch. The original call was loadLive(false, false) --
+       * announce=false -- so a failed first load rendered nothing and said
+       * nothing.
+       *
+       * The wait is new in 08/2026 and is the more serious of the two. The auth
+       * module used to be inlined in the template and was therefore defined
+       * before any component mounted; the 08/01 export ships it as a manifest
+       * asset that the bundler injects asynchronously. loadLive reads
+       * OLHAuth.authHeaders() directly, so mounting first threw "undefined is
+       * not an object (evaluating \'window.OLHAuth.authHeaders\')" straight into
+       * the error toast. Even a null-safe header would not have been right:
+       * /api/jobs answers 401 without an Authorization header, so the page
+       * would still show an empty grid over a problem that was only ordering.
+       *
+       * Same 6s budget and the same polling shape as the design\'s own
+       * _wireAuth, which exists for exactly this reason. Past it, the toast
+       * names the real cause instead of a type error. */
+      ['wait for the auth module, then load, and announce a failure',
        'this.loadLive(false, false);',
-       'this.loadLive(false, true);'],
+       'this._loadWhenAuthed(0);'],
+
+      ['add the auth-aware load and header helpers',
+       '  /* olh-auth.js is a helmet script and may not have run yet in the bundled\n' +
+       '     build, so keep looking for it rather than giving up on first miss. */\n' +
+       '  _wireAuth(tries) {',
+       '  /* Authorization header or a legible failure -- never an anonymous\n' +
+       '     request. Every data endpoint reads Bearer and has no cookie\n' +
+       '     fallback, so a request without this header is a guaranteed 401. */\n' +
+       '  _authHeaders(extra) {\n' +
+       '    if (!window.OLHAuth || typeof window.OLHAuth.authHeaders !== "function") {\n' +
+       '      throw new Error("The sign-in module has not loaded, so this page cannot authenticate. Reload the page.");\n' +
+       '    }\n' +
+       '    return window.OLHAuth.authHeaders(extra);\n' +
+       '  }\n' +
+       '\n' +
+       '  /* The auth module is a bundler asset and may not have executed when this\n' +
+       '     component mounts. Wait for it rather than firing an unauthenticated\n' +
+       '     read that can only 401. */\n' +
+       '  _loadWhenAuthed(tries) {\n' +
+       '    if (window.OLHAuth && typeof window.OLHAuth.authHeaders === "function") {\n' +
+       '      this.loadLive(false, true);\n' +
+       '      return;\n' +
+       '    }\n' +
+       '    if (tries < 120) {\n' +
+       '      this._loadT = setTimeout(() => this._loadWhenAuthed(tries + 1), 50);\n' +
+       '      return;\n' +
+       '    }\n' +
+       '    this.setState({ loading: false });\n' +
+       '    this.toast("err", "Could Not Load Homesite Data",\n' +
+       '      "The sign-in module did not load, so this page cannot authenticate. Reload the page." +\n' +
+       '      " No homesite records are shown \\u2014 this page does not fall back to sample data.");\n' +
+       '  }\n' +
+       '\n' +
+       '  /* olh-auth.js is a helmet script and may not have run yet in the bundled\n' +
+       '     build, so keep looking for it rather than giving up on first miss. */\n' +
+       '  _wireAuth(tries) {'],
       ['drop the sample-records promise',
        "' Showing sample records instead.'",
        "' No homesite records are shown — this page does not fall back to sample data.'"],
@@ -418,11 +474,11 @@ const PAGES = {
       // the same way on the first edit anyone tried to save.
       ['authenticate the tracker read',
        "        {headers:{Accept:'application/json'}});",
-       '        {headers: window.OLHAuth.authHeaders()});'],
+       '        {headers: this._authHeaders()});'],
 
       ['authenticate the tracker write',
        "        headers:{'Content-Type':'application/json', Accept:'application/json'},",
-       "        headers: window.OLHAuth.authHeaders({'Content-Type':'application/json'}),"],
+       "        headers: this._authHeaders({'Content-Type':'application/json'}),"],
 
       // The only inner page with no way back to index.html besides completion.
       ['give the header a path back to the homepage',
@@ -894,6 +950,52 @@ for (const [name, spec] of Object.entries(PAGES)) {
   if (!fs.existsSync(path.join(SRC, name))) die('missing input: ' + name);
   results.push(build(name, spec));
 }
+
+/* Every /assets/… and /fonts/… the built pages ask for must exist in publish.
+ *
+ * netlify.toml deliberately makes publish an allow-list -- only what is copied
+ * into public/ is served -- which means a design re-export that introduces a
+ * new image produces a 404 rather than a file, on every page, silently. The
+ * 08/01 export switched the header to lennar-logo-blue.png and shipped a broken
+ * logo on all eight pages; nothing caught it because a missing <img> changes no
+ * text and throws no exception. Only a network probe saw it.
+ *
+ * References are read out of the decompressed text assets too, not just the
+ * template, because that is where this one lived. */
+function checkStaticRefs(pub) {
+  const refs = new Map();
+  for (const name of fs.readdirSync(pub).filter((f) => f.endsWith('.html'))) {
+    const state = loadBundle(path.join(pub, name));
+    const texts = [state.template];
+    for (const entry of Object.values(state.manifest)) {
+      const txt = assetText(entry);
+      if (txt !== null) texts.push(txt);
+    }
+    for (const txt of texts) {
+      for (const m of txt.matchAll(/(?:\/|\.\/)?((?:assets|fonts)\/[A-Za-z0-9._-]+)/g)) {
+        if (!refs.has(m[1])) refs.set(m[1], new Set());
+        refs.get(m[1]).add(name);
+      }
+    }
+  }
+
+  const missing = [...refs].filter(([rel]) => !fs.existsSync(path.join(pub, rel)));
+  for (const [rel, pages] of [...refs].sort()) {
+    if (fs.existsSync(path.join(pub, rel))) {
+      console.log('  ok       ' + rel + '  (' + pages.size + ' page' + (pages.size === 1 ? '' : 's') + ')');
+    }
+  }
+  if (missing.length) {
+    die('the built pages reference file(s) that are not in ' + pub + ':\n' +
+        missing.map(([rel, pages]) =>
+          '         ' + rel + '  <- ' + [...pages].sort().join(', ')).join('\n') +
+        '\n       publish is an allow-list, so these 404 on the live site. Copy them ' +
+        'from the export\'s assets/ or fonts/ folder into ' + pub + '.');
+  }
+}
+
+console.log('\nstatic references');
+checkStaticRefs(PUB);
 
 const saved = results.reduce((a, r) => a + (r.before - r.after), 0);
 console.log('\nbuilt ' + results.length + ' pages, removed ' + kb(saved) + ' of bundled snapshot data');

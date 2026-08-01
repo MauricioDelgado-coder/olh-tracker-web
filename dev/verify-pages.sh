@@ -129,6 +129,27 @@ for page in index tracker completion scheduler workload workload-visualizer walk
       check "sign-in gate shown" "$f" 'Sign In to Continue|Lennar Email' 1
       ;;
   esac
+
+  # 4. No uncaught exception.
+  #
+  # Added 08/2026 after a page shipped every check above green while throwing
+  # "undefined is not an object (evaluating 'window.OLHAuth.authHeaders')" into
+  # its own error toast on load. Everything asserted so far is about what the
+  # DOM says, and a page can render a perfectly correct sign-in gate while its
+  # data path is dead -- the tracker did. A thrown TypeError is never an
+  # expected state, signed in or out.
+  #
+  # 401s are NOT failures here: an anonymous visitor getting refused by
+  # /api/jobs is the boundary working, and section 2 asserts it.
+  probe="$TMP/$page.console"
+  node "$(dirname "$0")/console-probe.js" "$BASE$route" 6000 > "$probe" 2>&1 || true
+  if grep -q '^  EXCEPTION' "$probe"; then
+    printf '   FAIL  uncaught exception on load\n'
+    sed -n 's/^  \(EXCEPTION.*\)/           \1/p' "$probe" | head -3
+    FAILED=$((FAILED+1))
+  else
+    printf '   ok    no uncaught exception\n'
+  fi
 done
 
 echo ""
