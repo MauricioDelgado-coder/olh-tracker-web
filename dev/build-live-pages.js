@@ -86,6 +86,16 @@ const MANGLED_DECL = /\b(?:var|let|const)\s+([a-z_$][a-z0-9_$]*[A-Z][A-Za-z0-9_$
  *   nameBytes  minimal xlsx writer, zip local-header filename bytes
  *   cdSize     minimal xlsx writer, central-directory size
  */
+/* The "back to the homepage" link in each page's header.
+ *
+ * Five of the seven inner pages ship one from the design tool; tracker and
+ * completion do not, and a page with no way back to index.html is a dead end
+ * for anyone who lands on it from a bookmark. Kept here so both patches below
+ * stay identical to the five the export already provides. */
+const HOME_LINK =
+  '<a href="index.html" style="flex:0 0 auto;font-size:12.5px;font-weight:500;' +
+  'color:#BFB8AB;white-space:nowrap">← All Views</a>';
+
 const MANGLE_SAFE_RENAMES = [
   ['mkField', 'mkfield'],
   ['nameBytes', 'namebytes'],
@@ -181,10 +191,42 @@ const AUTH_PATCHES = [
 const PAGES = {
   // No data of its own, but it is the sign-in landing page, so it carries the
   // auth module and needs its patches. It used to be a straight copy.
-  'index.html': { data: false, inject: false, caches: [] },
+  'index.html': {
+    data: false, inject: false, caches: [],
+    patches: [
+      // The template wraps the User Administration link in
+      // <sc-if value="{{ isAdmin }}">, but renderVals() never returned isAdmin,
+      // so it evaluated undefined and the link was invisible to EVERYONE --
+      // admins included. Gated on the roster.manage capability rather than the
+      // literal role name, which is what users.js and roles.js already enforce
+      // server-side, so granting it in the Roles grid surfaces the link too.
+      ['supply isAdmin so the User Administration link can render',
+       '  renderVals() {\n' +
+       '    const n = this.state.narrow;\n' +
+       '    return {\n' +
+       '      headPad:',
+       '  renderVals() {\n' +
+       '    const n = this.state.narrow;\n' +
+       '    const auth = window.OLHAuth;\n' +
+       '    return {\n' +
+       '      isAdmin: !!(this.state.user && auth && auth.can("roster.manage")),\n' +
+       '      headPad:']
+    ]
+  },
 
   // Reads a COMPLETION_DATA asset, which is real and stays. No fixture.
-  'completion.html': { data: false, inject: false, caches: [] },
+  'completion.html': {
+    data: false, inject: false, caches: [],
+    patches: [
+      ['give the header a path back to the homepage',
+       '<span style="margin-left:auto"><olh-user-chip style="flex:0 0 auto">' +
+       '</olh-user-chip></span>',
+       '<span style="margin-left:auto;display:flex;align-items:center;gap:14px">' +
+       '<olh-user-chip style="flex:0 0 auto"></olh-user-chip>' +
+       '<span style="width:1px;height:22px;background:rgba(255,255,255,.28)"></span>' +
+       HOME_LINK + '</span>']
+    ]
+  },
 
   'scheduler.html': { data: true, inject: true, walkRef: true, caches: ['_sites', '_byLen', '_unmapped'] },
   'workload.html': { data: true, inject: true, walkRef: true, caches: ['_walks', '_byLen', '_unattributed'] },
@@ -238,7 +280,12 @@ const PAGES = {
       // legitimately be reached and saying "Sample data" is never correct.
       ['do not call an empty tracker "Sample data"',
        "return 'Sample data · ' + when;",
-       "return 'No data loaded · ' + when;"]
+       "return 'No data loaded · ' + when;"],
+
+      // The only inner page with no way back to index.html besides completion.
+      ['give the header a path back to the homepage',
+       'color:#303030">Refresh</button>\n  </header>',
+       'color:#303030">Refresh</button>\n    ' + HOME_LINK + '\n  </header>']
     ]
   },
 
@@ -262,6 +309,29 @@ const PAGES = {
        '            }).catch(() => {\n' +
        '              this.setState(st => ({ sent: Object.assign({}, st.sent, { [u.id]: 3 }) }));\n' +
        '            });'],
+      // The console gated on u.role === "admin" while the Roles & Permissions
+      // grid it renders lets an admin grant roster.manage to any role -- so
+      // ticking "Manage users & permissions" for, say, Leadership did nothing.
+      // ROLE_LOCKS pins roster.manage to the Admin role in both the browser
+      // module and netlify/lib/olh-auth.js, so reading the live matrix here
+      // cannot lock every admin out of the console.
+      ['gate the console on roster.manage rather than the role name',
+       '  isAdmin(u) { return !!(u && u.role === "admin"); }',
+       '  isAdmin(u) {\n' +
+       '    if (!u) return false;\n' +
+       '    const roles = window.OLHAuth && window.OLHAuth.roles;\n' +
+       '    const r = roles && roles[u.role];\n' +
+       '    return r ? r.can.indexOf("roster.manage") >= 0 : u.role === "admin";\n' +
+       '  }'],
+
+      ['name the missing capability on the blocked screen',
+       'blockedTitle: "This Console Is for Admins"',
+       'blockedTitle: "You Cannot Manage the Roster"'],
+
+      ['explain the blocked screen in terms of the capability',
+       '"). Managing who can use the OLH Suite is limited to admins \\u2014 ask one to change your role if you need access."',
+       '"). Managing who can use the OLH Suite needs the \\u201cManage users & permissions\\u201d capability \\u2014 ask an admin to grant it to your role, or to change your role."'],
+
       ['label the copied link',
        'resendLabel: s.sent[u.id] ? "Invite Sent" : "Resend Invite",',
        'resendLabel: s.sent[u.id] === 2 ? "Link Copied \\u2014 Paste Into an Email"\n' +
