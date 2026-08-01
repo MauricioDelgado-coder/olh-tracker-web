@@ -504,6 +504,131 @@ serving a bootstrap page that mints a session from a URL parameter — an auth
 bypass living in `public/` — which is not worth test convenience. The data path
 is covered at the API level; rendering with data is a manual pass.
 
+---
+
+# Where the data comes from (changed 2026-08-01)
+
+The Jobs table is now populated from the **no-Actual-COE Salesforce pull**, not the
+Dynamics Export. The question the table answers changed from "what came out of the
+Dynamics report" to "which homesites in OLH have not closed yet, and where are they
+in construction".
+
+    bash dev/run-daily-sync.sh          # the whole thing, and what launchd runs
+    python3 dev/sync_coe_to_airtable.py --out "<folder>" --dry-run
+    python3 dev/sync_coe_to_airtable.py --out "<folder>" --skip-report
+
+## What changed in the table
+
+| | rows |
+|---|---|
+| before (Dynamics Export scope) | 1021 |
+| after | 1492 total — **1400 Active**, 92 archived |
+| added | 471 — 390 unsold/construction started, 63 unsold/complete, 15 sold, 3 data issues |
+| archived, not deleted | 92 |
+
+The additions are mostly **unsold** homesites where construction has started or
+finished. They are open work even though nobody has bought them, which is the
+point of the new scope — but it does mean QA managers now see lots with no buyer
+attached.
+
+## The scope lives in the skill, not here
+
+`dev/sync_coe_to_airtable.py` does not contain the SOQL. It runs the
+`homesites-no-actual-coe` skill's `run_report.py`, which owns the query, the
+exclusions (Z and H job numbers), the bucket and construction-state derivation,
+the duplicate reconciliation and the verification pass — then reads the workbook it
+produced. Two definitions of "open work" would drift apart, and the subtleties are
+real: a Certificate of Occupancy or CCC date does **not** mean complete, only
+`Actual_Completion_Date__c` does.
+
+`run_report.py` exits non-zero when its own verification fails, and the sync
+refuses to run on an unverified workbook. That chain is deliberate: a day when
+Salesforce changes shape should stop at the report, not become 1400 wrong rows.
+
+## Nothing hand-entered is ever touched
+
+585 rows carry QA data that exists nowhere else — walk dates, walk managers, key
+handover, risk notes. The sync writes only the fields in `SF_OWNED`,
+`assert_disjoint()` fails the run if a field is ever listed as both
+Salesforce-owned and manual, and the check runs again on the actual write payloads
+rather than just on the map.
+
+A homesite that leaves the pull is set `Record Status = Closed` with a
+`Closed Date`. **The row is kept.** 66 of the 92 archived rows hold hand-entered
+data; deleting them would be unrecoverable. A row that reappears goes back to
+Active. Verified with `dev/verify-qa-preserved.js`: 4966 hand-entered values across
+585 rows, zero changed, zero rows lost.
+
+## Field mapping, and the two traps in it
+
+Mapping was decided by measuring agreement against the 929 job numbers already in
+Airtable, not by matching names. Two pairs are actively misleading:
+
+- **`Scheduled_Close_Date__c` is labelled "Estimated COE Date" in Salesforce.** It
+  is the estimate. The actual is `Actual_COE_Date_New__c`. The skill warns that
+  swapping these inverts the whole report.
+- **Airtable's "Scheduled Closing Date" is not an ECOE at all.** It comes from
+  `Opportunity.Scheduled_Closing_Date__c` via `Primary_Opportunity_ID__r` — 91.7%
+  agreement, against 74.9% for the Homesite ECOE — and it disagrees with the ECOE
+  on 129 of 784 rows, often by weeks. The tracker resolves urgency as
+  `Scheduled Closing Date || Estimated COE Date`, so feeding it an ECOE would have
+  silently moved the date it sorts and flags on. Note `Opportunity.Closing_Date__c`
+  is the field whose label literally reads "Closing Date" and it is **empty
+  org-wide** in this scope; it is not a substitute.
+
+New columns: `Lot`, `City`, `Zip`, `Homesite Status`, `Bucket`,
+`Construction State`, `Actual Completion Date`, `Salesforce Id`,
+`Address Dup Check`.
+
+Deliberately not synced: `State` (constant "FL"), `Actual COE Date` (null by
+definition — the pull is rows *without* one), `JDE Sched Close (ECOE)` (identical
+to Estimated COE in all 1378 rows where both are set), `Construction Stage`
+(populated on 3 of 1400 rows).
+
+Two fields come from a supplementary SOQL because the workbook lacks them:
+`Construction Stage 7 (JDE) Date` and `Scheduled Closing Date`. The first is a
+**dateTime** and Salesforce returns a full timestamp, so it is not truncated to a
+date — doing that would drop the time on every row and a date-only comparison
+would not even report the change.
+
+## Two bugs this shook out, both now guarded
+
+**Whitespace.** Salesforce returns `Construction Manager` internally padded
+(`"Layton, Brian                      (OLH)"`) while the existing data is
+collapsed. Without normalising, 885 of 929 manager names "changed" on every run —
+and worse than cosmetic, because the walk pages match roster members by exact name,
+so a padded copy silently stops matching. `norm_text` collapses whitespace runs.
+
+**Duplicates.** Job # is the primary field but Airtable does not enforce
+uniqueness on it. Two concurrent runs each read the table, each computed the same
+471 creates, and each wrote them — 1963 rows, every new homesite twice, nothing
+erroring. Fixed three ways: a lock file in `~/.homesite_coe_report`, `fetch_jobs`
+now reports duplicates and the sync refuses to run when any exist, and
+`dev/dedupe-jobs.js` cleans up (keeping the row with hand-entered data, or the
+oldest; it refuses to touch a group where more than one copy has real data).
+
+## The daily schedule
+
+`~/Library/LaunchAgents/com.olh.coe-sync.plist`, weekdays at 06:15, running
+`dev/run-daily-sync.sh`. Log at `~/.homesite_coe_report/sync.log`.
+
+```bash
+launchctl list | grep olh                                   # is it registered
+tail -40 ~/.homesite_coe_report/sync.log                    # what happened
+launchctl unload ~/Library/LaunchAgents/com.olh.coe-sync.plist   # stop it
+```
+
+The wrapper reads `AIRTABLE_PAT` from `netlify env:get` at run time, so the token
+is not stored in the script or the plist. It needs the Netlify CLI to stay logged
+in and `sf` auth to stay valid; both failures are logged, and neither corrupts the
+table — the tracker simply keeps showing the previous pull.
+
+It only runs while the Mac is awake. This is not a server-side sync and cannot be:
+the Salesforce CLI is authenticated on this machine only, so a Netlify scheduled
+function has no way to run the pull.
+
+---
+
 ## The bundler corrupts `var camelCase` — fixed, and now guarded
 
 Every page of the 07/31 export threw this on load, and it showed as a red
