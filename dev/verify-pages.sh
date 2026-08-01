@@ -108,6 +108,22 @@ for page in index tracker completion scheduler workload workload-visualizer walk
   case "$page" in
     completion|scheduler|workload|workload-visualizer|walk-calendar|admin)
       src=$(grep -o 'data-olh-source="[a-z]*"' "$raw" | head -1 | sed 's/.*="\(.*\)"/\1/')
+
+      # These documents are ~1 MB and the loader has to finish a round trip
+      # inside the virtual-time budget. walk-calendar, the largest, misses it
+      # occasionally over the network -- the attribute is simply absent rather
+      # than wrong. Re-dump once with a longer budget before believing it: a
+      # check that goes red at random is one people learn to skim past, which
+      # costs more than the seconds this takes. A real failure fails twice.
+      if [ -z "$src" ]; then
+        "$CHROME" --headless=new --disable-gpu --no-sandbox --dump-dom \
+          --virtual-time-budget=20000 --run-all-compositor-stages-before-draw \
+          "$BASE$route" 2>/dev/null > "$raw"
+        visible_from "$raw" > "$f"
+        src=$(grep -o 'data-olh-source="[a-z]*"' "$raw" | head -1 | sed 's/.*="\(.*\)"/\1/')
+        [ -n "$src" ] && printf '   note  re-dumped at 20s (first pass had not marked <body>)\n'
+      fi
+
       njobs=$(grep -o 'data-olh-jobs="[0-9]*"' "$raw" | head -1 | sed 's/.*="\(.*\)"/\1/')
       if [ "$src" = "error" ] && [ "${njobs:-0}" = "0" ]; then
         printf '   ok    anonymous load refused (source=%s jobs=%s)\n' "$src" "${njobs:-0}"
