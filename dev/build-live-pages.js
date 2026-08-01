@@ -180,6 +180,34 @@ const AUTH_PATCHES = [
    '          return { entry: entry, conflict: null };\n' +
    '        });'],
 
+  /* Every data endpoint authenticates with Authorization: Bearer <token> and
+     nothing else -- bearer() in netlify/lib/olh-auth.js reads that header and
+     there is no cookie fallback. OLHAuth.api() sends it, which is why sign-in,
+     /session, /users and /roles all work. But the four loaders that fetch
+     homesite data were written before the auth gate existed and send no header
+     at all, so every one of them got a 401 and every page showed zero rows
+     while the user chip in the corner said they were signed in.
+
+     Exposing the token here rather than having each loader reach into
+     localStorage keeps one owner of the session. The localStorage fallback
+     matters because a loader can boot before the app calls OLHAuth.restore(),
+     which is what sets state.token. */
+  ['expose the session token so the data loaders can authenticate',
+   '    isDemo: function () { return state.demo; },',
+   '    isDemo: function () { return state.demo; },\n' +
+   '    token: function () {\n' +
+   '      if (state.token) return state.token;\n' +
+   '      var st = readStore(SESSION_KEY, null);\n' +
+   '      return (st && st.token) || "";\n' +
+   '    },\n' +
+   '    authHeaders: function (extra) {\n' +
+   '      var h = extra || {};\n' +
+   '      h.Accept = "application/json";\n' +
+   '      var tok = Auth.token();\n' +
+   '      if (tok) h.Authorization = "Bearer " + tok;\n' +
+   '      return h;\n' +
+   '    },'],
+
   ['users: do not show a fabricated directory when the server refuses',
    '      }).catch(seedUsers);',
    '      }).catch(function (err) { if (err && err.status) throw err; return seedUsers(); });']
@@ -335,6 +363,18 @@ const PAGES = {
       ['do not call an empty tracker "Sample data"',
        "return 'Sample data · ' + when;",
        "return 'No data loaded · ' + when;"],
+
+      // The tracker has its own loadLive()/persist() and never went through
+      // OLHAuth.api(), so both its read and its write were anonymous. The read
+      // returned 401 and rendered an empty grid; the write would have failed
+      // the same way on the first edit anyone tried to save.
+      ['authenticate the tracker read',
+       "        {headers:{Accept:'application/json'}});",
+       '        {headers: window.OLHAuth.authHeaders()});'],
+
+      ['authenticate the tracker write',
+       "        headers:{'Content-Type':'application/json', Accept:'application/json'},",
+       "        headers: window.OLHAuth.authHeaders({'Content-Type':'application/json'}),"],
 
       // The only inner page with no way back to index.html besides completion.
       ['give the header a path back to the homepage',

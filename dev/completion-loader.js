@@ -115,8 +115,16 @@
     window.dispatchEvent(new Event('olh-data'));
   }
 
+  /* Bearer token or nothing -- see the note in live-loader.js. */
+  function authheaders() {
+    if (window.OLHAuth && typeof window.OLHAuth.authHeaders === 'function') {
+      return window.OLHAuth.authHeaders();
+    }
+    return { Accept: 'application/json' };
+  }
+
   function boot() {
-    fetch('/api/jobs', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+    fetch('/api/jobs', { credentials: 'same-origin', headers: authheaders() })
       .then(function (res) {
         if (!res.ok) {
           var err = new Error('/api/jobs returned ' + res.status);

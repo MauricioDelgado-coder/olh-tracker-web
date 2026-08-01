@@ -87,8 +87,18 @@
     window.WALK_UNSCHEDULED = [];
   }
 
+  /* Bearer token or nothing: every data endpoint authenticates with the
+     Authorization header and has no cookie fallback. OLHAuth owns the session;
+     the guard covers the design-preview case where the module is absent. */
+  function authheaders() {
+    if (window.OLHAuth && typeof window.OLHAuth.authHeaders === 'function') {
+      return window.OLHAuth.authHeaders();
+    }
+    return { Accept: 'application/json' };
+  }
+
   async function getJson(path) {
-    var res = await fetch(API + path, { headers: { Accept: 'application/json' } });
+    var res = await fetch(API + path, { headers: authheaders() });
     var body = await res.json().catch(function () { return null; });
     if (!res.ok || !body) {
       throw new Error((body && body.error) || (path + ' failed (' + res.status + ')'));
