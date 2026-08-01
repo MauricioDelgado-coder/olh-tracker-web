@@ -2,7 +2,13 @@
  * POST /api/update-job
  * Body: { recordId: "recXXXXXXXXXXXXXX", fields: { "<whitelisted field>": value, ... } }
  *
- * Defense-in-depth, because the site is served from an unlisted URL with no login gate:
+ * Defense-in-depth. Layer 0 was added in 2026-08 when the suite got real
+ * accounts; the four layers under it predate that and still stand on their own,
+ * because an authenticated user is not the same thing as a trusted one:
+ *   0. A valid session is required, and the caller must hold tracker.edit.
+ *      Reassigning a walk between managers additionally requires walk.schedule
+ *      (see WRITE_PERM), so a Construction Manager can correct a date but cannot
+ *      move someone else's walk.
  *   1. POST only. One record per call. PATCH only -- no create, delete, batch or schema access.
  *   2. Strict allow-list: any field name not in EDITABLE below causes a 400 that names
  *      the offending keys. Salesforce-sourced fields, `Record Status`, `Closed Date`
@@ -13,6 +19,8 @@
  */
 
 'use strict';
+
+const A = require('../lib/olh-auth');
 
 const BASE_ID = 'appYX9df4lGO6G2uz';
 const JOBS_TABLE = 'tblqpmwtZ6i4gtogl';
@@ -86,6 +94,18 @@ const EDITABLE = Object.freeze({
 });
 
 const EDITABLE_KEYS = Object.keys(EDITABLE);
+
+/**
+ * Fields that need more than tracker.edit. Reassigning a walk is the one write
+ * that moves work onto another person's day, which is what walk.schedule means;
+ * everything else on the whitelist is a fact about the homesite.
+ */
+const WRITE_PERM = Object.freeze({
+  'QAI Manager': 'walk.schedule',
+  'QAA Manager': 'walk.schedule',
+  'CEL Manager': 'walk.schedule',
+  'ACC Manager': 'walk.schedule'
+});
 
 const JSON_HEADERS = {
   'Content-Type': 'application/json; charset=utf-8',
@@ -223,6 +243,16 @@ exports.handler = async (event) => {
     return reply(405, { error: 'Method not allowed. This endpoint accepts POST only.' });
   }
 
+  // Layer 0. Resolved before the body is even read, so an unauthenticated caller
+  // cannot use this endpoint's validation messages to probe the field whitelist.
+  let session;
+  try {
+    session = await A.requireSession(event);
+    A.requirePerm(session, 'tracker.edit');
+  } catch (err) {
+    return A.fail(err);
+  }
+
   const pat = process.env.AIRTABLE_PAT;
   if (!pat || !String(pat).trim()) {
     return reply(500, {
@@ -292,6 +322,20 @@ exports.handler = async (event) => {
       rejectedFields: rejected,
       allowedFields: EDITABLE_KEYS
     });
+  }
+
+  // Per-field capability check, after the allow-list so an unknown field is
+  // still reported as unknown rather than as a permission problem.
+  const needs = submitted
+    .map((key) => WRITE_PERM[key])
+    .filter((perm, i, all) => perm && all.indexOf(perm) === i);
+  for (const perm of needs) {
+    if (session.can.indexOf(perm) < 0) {
+      return reply(403, {
+        error: A.DENY[perm] || 'You do not have access to that.',
+        deniedFields: submitted.filter((key) => WRITE_PERM[key] === perm)
+      });
+    }
   }
   // ---------------------------------------------------------------------------
 

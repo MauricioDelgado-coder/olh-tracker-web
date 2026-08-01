@@ -5,11 +5,18 @@
  *   { jobs: [{ id, fields }], managers: [{ id, name, email, role, active }],
  *     meta: { count, cached, fetchedAt } }
  *
+ * Requires a valid session with suite.view. This endpoint is the reason the
+ * login screen is a real boundary rather than a decoration: 935 real homesites
+ * with buyer-facing dates sit behind it, and until 2026-08 it answered anyone
+ * who knew the path. Guarding the UI alone would have left that unchanged.
+ *
  * The Airtable Personal Access Token is read ONLY from process.env.AIRTABLE_PAT.
  * It is never returned to the client and never logged.
  */
 
 'use strict';
+
+const A = require('../lib/olh-auth');
 
 const BASE_ID = 'appYX9df4lGO6G2uz';
 const JOBS_TABLE = 'tblqpmwtZ6i4gtogl';
@@ -98,6 +105,14 @@ exports.handler = async (event) => {
   }
   if (event.httpMethod !== 'GET') {
     return reply(405, { error: 'Method not allowed. This endpoint is GET only.' });
+  }
+
+  // Fails closed: any missing, expired, revoked or under-privileged session is
+  // rejected before a single Airtable read happens.
+  try {
+    await A.requireSession(event);
+  } catch (err) {
+    return A.fail(err);
   }
 
   const pat = process.env.AIRTABLE_PAT;

@@ -20,11 +20,17 @@
  * communities (29 homesites) have no drive times yet, and the pages render that
  * list on screen so the gap is visible instead of homesites silently vanishing.
  *
+ * Requires a valid session with suite.view. The roster is 35 named employees
+ * with their home communities, so this is staff data even though it carries no
+ * homesite records.
+ *
  * The Airtable PAT is read ONLY from process.env.AIRTABLE_PAT. It is never
  * returned to the client and never logged. GET only -- there is no write path.
  */
 
 'use strict';
+
+const A = require('../lib/olh-auth');
 
 const BASE_ID = 'appYX9df4lGO6G2uz';
 const ROSTER_TABLE = 'tblhDm8OD4jSR0tey';
@@ -107,6 +113,13 @@ exports.handler = async (event) => {
   }
   if (event.httpMethod !== 'GET') {
     return reply(405, { error: 'Method not allowed. This endpoint is GET only.' });
+  }
+
+  // Fails closed before any Airtable read.
+  try {
+    await A.requireSession(event);
+  } catch (err) {
+    return A.fail(err);
   }
 
   const pat = process.env.AIRTABLE_PAT;

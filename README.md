@@ -159,7 +159,12 @@ netlify dev        # serves index.html + functions at http://localhost:8888
 
 ## Security posture
 
-The site is deliberately deployed at an **unlisted URL with no login gate**.
+> **Superseded 2026-08.** The site now has real accounts and every data endpoint
+> requires a session. See *Accounts and permissions* at the end of this file.
+> The layers below still apply on top of that — an authenticated user is not the
+> same thing as a trusted one — but the framing in the next paragraph is history.
+
+The site was originally deployed at an **unlisted URL with no login gate**.
 That was the user's explicit choice, so the write endpoint is hardened instead:
 
 1. **Field whitelist.** `update-job.js` holds a frozen 26-key `EDITABLE` map.
@@ -362,7 +367,156 @@ quick way to check a live page.
 
 ## Still outstanding
 
-`tracker-new.html` is the superseded "New Views" prototype. It is **still
-published and still contains the 994 KB fixture**, so it retains the silent
-fallback behaviour fixed everywhere else. It was outside the scope of this
-change; it should be removed or rebuilt.
+`tracker-new.html` was **deleted on 2026-08-01**. It was the superseded "New
+Views" prototype, it still carried the 994 KB / 900-record fixture, and it
+predated the shared auth module — so once sign-in became real it was a page with
+no gate whose own `loadLive()` fell back to the fixture. An anonymous visitor
+hitting a 401 would have been shown 900 invented homesites. `/tracker-new` now
+301s to `/tracker`.
+
+---
+
+# Accounts and permissions (added 2026-08-01)
+
+The 07/31 design export inlines a 134 KB shared module, "OLH shared
+authentication + change tracking", into all eight pages. It puts a sign-in gate
+and an audit trail on every screen and expects eleven backend endpoints. None of
+them existed. This section is what was built to meet it.
+
+## Why it could not just be deployed
+
+The module degrades to a local DEMO mode when no backend answers: the sign-in
+screen accepts any name off the bundled roster, the session lives in
+localStorage, and the audit log is browser-local. That is right for a prototype
+and wrong for the deployed site, and it left two options that were both broken:
+
+- **Fixture stripped** (what the no-fake-data rule requires) — `demoDirectory()`
+  reads `window.WALK_ROSTER`, which the build deletes, so the directory is empty
+  and *everyone* is told "that name is not on the OLH roster". The site becomes
+  unusable behind a login nobody can pass.
+- **Fixture kept** — sign-in matches any roster name and sets `token = null`
+  with no password check at all. That ships a login screen that admits anyone,
+  over 935 real homesites. A gate that looks real and is not is worse than the
+  honest no-gate posture it replaced.
+
+So the backend was not optional, and neither was patching the module.
+
+## The endpoints
+
+| Route | Function | Who |
+|---|---|---|
+| `POST /api/sign-in` | `auth.js` | anyone |
+| `GET /api/session` | `auth.js` | valid token |
+| `POST /api/sign-out` | `auth.js` | anyone (revokes by bumping `Session Epoch`) |
+| `POST /api/invite` | `password.js` | `roster.manage` |
+| `GET /api/invite/:token` | `password.js` | anyone with the link |
+| `POST /api/set-password` | `password.js` | anyone with the link |
+| `POST /api/forgot-password` | `password.js` | anyone |
+| `GET/POST /api/users`, `PATCH/DELETE /api/users/:id` | `users.js` | `roster.manage` |
+| `GET /api/roles` / `PUT /api/roles` | `roles.js` | session / `roster.manage` |
+| `GET/POST /api/audit` | `audit.js` | session |
+
+Shared helpers live in `netlify/lib/olh-auth.js`, outside `netlify/functions/`
+so it is never itself deployed as an endpoint.
+
+New Airtable tables in `appYX9df4lGO6G2uz`: **Users** (`tblTesJj3P7BSiErH`),
+**Audit Log** (`tblgiEqKXRbBHLg1i`), **Roles** (`tblIhpTZyCupEaASH`).
+
+## The data endpoints are the boundary
+
+`/api/jobs`, `/api/walk-config` and `/api/update-job` now require a session
+*before any Airtable read*. This is the point of the change. Guarding only the UI
+would have left every homesite readable by anyone who knew the path, which was
+the actual pre-existing exposure — the login screen would have been decoration.
+
+`update-job.js` additionally checks per-field capability: reassigning a walk
+(`QAI/QAA/CEL/ACC Manager`) needs `walk.schedule`, so a Construction Manager can
+correct a date but cannot move someone else's walk.
+
+## Choices worth knowing
+
+- **`crypto.scrypt`, not bcrypt/argon2.** The repo has no `package.json` and the
+  functions use only Node builtins; scrypt is memory-hard, built in, and avoids a
+  native binary that has to compile on every deploy. Stored as
+  `scrypt$<salt>$<key>`, both hex.
+- **Sessions are stateless HMACs**, 12h, carrying the user id and a
+  `Session Epoch`. Bumping the epoch — on sign-out, suspension, role change or
+  password change — invalidates every outstanding token for that person at once,
+  with no session table.
+- **No email provider.** `POST /api/invite` *returns* a one-time link for an
+  admin to send from Outlook. The admin page's Resend button was patched to copy
+  it to the clipboard, because the stock button discarded the response.
+  Consequence: `forgot-password` cannot deliver anything. It still always answers
+  200 (so it is not an account-existence oracle) and files an Audit Log row an
+  admin can act on, and it deliberately **skips pending accounts** — otherwise
+  any anonymous caller could void someone's outstanding invite by naming their
+  address.
+- **Sign-in leaks one thing on purpose.** A pending account answers 409
+  `mustSetPassword` where an unknown address answers 401, because the frontend
+  keys its set-password screen off that and a generic 401 strands every new user.
+  Wrong-password and unknown-address are byte-identical, and an unknown address
+  still pays the scrypt cost so timing does not separate them. The trade-off is
+  written up in `auth.js`.
+- **Audit rows are attributed from the session, never the body**, and `Entry Id`
+  is an idempotency key so a retry does not append the same change twice.
+- **You cannot demote, suspend or delete yourself**, and the last active admin is
+  protected. Locking yourself out of the only console that can unlock you is not
+  a recoverable mistake.
+
+## Seeding the first admin
+
+```bash
+AIRTABLE_PAT=$(netlify env:get AIRTABLE_PAT) \
+  node dev/seed-admin.js "Full Name" someone@lennar.com
+```
+
+Prints a single 24h set-password link. Deliberately a local script and not an
+endpoint: an `ADMIN_EMAIL` bootstrap would be a permanent production code path
+that mints a privileged account without one already existing. Re-running it
+issues a fresh invite rather than duplicating or resetting anything, so a lost
+link is recoverable.
+
+Required Netlify env vars: `AIRTABLE_PAT`, `SESSION_SECRET` (32+ chars,
+`openssl rand -hex 32`), `SITE_URL` (optional; falls back to the request host).
+
+## Verifying
+
+```bash
+netlify dev --port 8899
+bash dev/verify-auth.sh  http://localhost:8899 '<token>' <email>   # API contract
+bash dev/verify-pages.sh http://localhost:8899                     # signed-out contract
+```
+
+`verify-auth.sh` asserts the boundary: every data endpoint refuses an anonymous
+or forged caller, the password policy holds server-side, tokens are single-use,
+and audit attribution cannot be forged. Run sections 4–5 against a **disposable**
+account — it sets a known password.
+
+`verify-pages.sh` used to load every page anonymously and assert that live data
+rendered. That is now the opposite of correct, and the old checks sat failing
+while each failure was the auth boundary working — which is how people learn to
+ignore red output. It now asserts the signed-out contract instead: no fixture in
+any state, a sign-in gate, and an honest "no data" rather than a stale sample.
+
+**Known gap, stated rather than papered over:** signed-in *rendering* is not
+automated. Preseeding a session into `localStorage` from the CLI would mean
+serving a bootstrap page that mints a session from a URL parameter — an auth
+bypass living in `public/` — which is not worth test convenience. The data path
+is covered at the API level; rendering with data is a manual pass.
+
+## Known defect in the 07/31 export (not introduced here)
+
+Every page of the 07/31 export throws on load:
+
+```
+Uncaught SyntaxError: Failed to execute 'appendChild' on 'Node': Unexpected token '-'
+```
+
+It comes from the design tool's own template runtime (`Object.render` inside an
+`Array.map`), reproduces on the **raw export before any build step**, and the
+07/30 export is clean — so it arrived with the new design, not with the auth work
+or the build script. It is non-fatal: the tracker still renders ~18k characters of
+content and every flow tested works. Some component subtree is presumably failing
+silently, so it should be fixed at the source. `dev/check-export-errors.sh` and
+`dev/console-probe.js` were added to catch this class of thing on the next
+re-export.

@@ -139,15 +139,27 @@
   [headers.values]
     Cache-Control = "no-store, must-revalidate"
 
-# tracker-new.html is the "New Views" design (My Queue, Pipeline Board,
-# Homesite Detail, Division Dashboard, Keys Board) reading the same live
-# /api/jobs data. It is READ-ONLY -- it never calls /api/update-job -- so it
-# sits alongside index.html rather than replacing it; editing still only
-# happens in the tracker at /.
-[[headers]]
-  for = "/tracker-new.html"
-  [headers.values]
-    Cache-Control = "no-store, must-revalidate"
+# tracker-new.html was the superseded "New Views" prototype. DELETED 2026-08.
+#
+# It was the one page never rebuilt through dev/build-live-pages.js, so it still
+# carried the 994 KB / 900-record demo fixture as a manifest asset, and it
+# predates the shared auth module entirely. Once the suite got a real sign-in
+# gate that combination stopped being merely untidy: the page had no gate, and
+# its own loadLive() fell back to the fixture, so /api/jobs answering 401 to an
+# anonymous visitor would have rendered 900 invented homesites to them instead of
+# stopping. Blocking the path would have left the file uploaded; removing it is
+# the only version that is actually true.
+[[redirects]]
+  from = "/tracker-new"
+  to = "/tracker"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/tracker-new.html"
+  to = "/tracker"
+  status = 301
+  force = true
 
 # scheduler / walk-calendar / workload are the QAM walk-planning pages. All
 # three are bundled documents whose data comes entirely from the API at runtime:
@@ -183,10 +195,102 @@
   [headers.values]
     Cache-Control = "no-store, must-revalidate"
 
+# admin.html is the user + permissions console, new in the 07/31 export. Only
+# roles holding roster.manage can use it, and every endpoint behind it enforces
+# that server-side -- reaching the page is not the same as being able to act on
+# it. no-store like the rest; nothing here is safe to serve from a cache.
+[[headers]]
+  for = "/admin.html"
+  [headers.values]
+    Cache-Control = "no-store, must-revalidate"
+
 # ---- Friendly API path for the walk reference data --------------------------
 [[redirects]]
   from = "/api/walk-config"
   to = "/.netlify/functions/walk-config"
+  status = 200
+  force = true
+
+# ---- Accounts, permissions and the change log (added 2026-08) ---------------
+# Eleven endpoints across four functions. They are grouped rather than one file
+# each because they share olh-auth.js and most are a dozen lines of routing.
+#
+# A rewrite (status 200) leaves event.path as the ORIGINAL request path, so the
+# handlers resolve their action with route(event, fnName), which accepts both
+# /api/sign-in and /.netlify/functions/auth/sign-in. Do not change these to 301.
+#
+# Ordering matters: the /api/invite/* splat must come BEFORE the bare /api/invite
+# rule, or POST /api/invite would be swallowed by the splat and arrive with an
+# empty token.
+
+# Session lifecycle -> auth.js
+[[redirects]]
+  from = "/api/sign-in"
+  to = "/.netlify/functions/auth/sign-in"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/session"
+  to = "/.netlify/functions/auth/session"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/sign-out"
+  to = "/.netlify/functions/auth/sign-out"
+  status = 200
+  force = true
+
+# Password lifecycle -> password.js
+[[redirects]]
+  from = "/api/invite/*"
+  to = "/.netlify/functions/password/invite/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/invite"
+  to = "/.netlify/functions/password/invite"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/set-password"
+  to = "/.netlify/functions/password/set-password"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/forgot-password"
+  to = "/.netlify/functions/password/forgot-password"
+  status = 200
+  force = true
+
+# User administration -> users.js
+[[redirects]]
+  from = "/api/users/*"
+  to = "/.netlify/functions/users/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/users"
+  to = "/.netlify/functions/users"
+  status = 200
+  force = true
+
+# Permission matrix -> roles.js
+[[redirects]]
+  from = "/api/roles"
+  to = "/.netlify/functions/roles"
+  status = 200
+  force = true
+
+# Append-only change log -> audit.js
+[[redirects]]
+  from = "/api/audit"
+  to = "/.netlify/functions/audit"
   status = 200
   force = true
 

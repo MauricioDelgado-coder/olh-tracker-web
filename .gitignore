@@ -28,8 +28,25 @@ Thumbs.db
 .idea/
 *.swp
 
-# Local dev/test harnesses — never deploy or commit
-dev/
+# Local dev/test harnesses.
+#
+# dev/ was excluded entirely until 2026-08. "Never deploy or commit" conflated
+# two different things: it must never be SERVED, which publish = "public" in
+# netlify.toml already guarantees on its own (plus a forced 404 on /dev/*), and
+# never be COMMITTED, which cost the repo its own build tooling. The result was a
+# README documenting `node dev/build-live-pages.js` against a directory the repo
+# did not contain, and the script that produces every published page living on
+# one laptop.
+#
+# It matters more now: dev/seed-admin.js is the only way to bootstrap the first
+# admin account, and dev/verify-auth.sh is the test suite for the auth boundary.
+# Losing either is not recoverable from the repo.
+#
+# Nothing in dev/ holds a credential — the scripts read AIRTABLE_PAT from the
+# environment. Keep it that way; the .env rules at the top of this file still
+# apply, and a token must never be pasted into a script.
+dev/**/*.env
+dev/**/secrets*
 
 # ---------------------------------------------------------------------------
 # Design-tool exports and data snapshots. The production build (index.html) is
