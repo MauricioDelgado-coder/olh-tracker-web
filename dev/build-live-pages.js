@@ -50,6 +50,48 @@ if (!/\/walk-config/.test(LOADER)) die('live-loader.js does not reference /walk-
 /** The globals a bundled snapshot defines. Finding any of these means demo data. */
 const SNAPSHOT_GLOBALS = ['OLH_DATA', 'WALK_ROSTER', 'WALK_DRIVE', 'WALK_PRODUCT_MAP', 'WALK_COMMUNITIES'];
 
+/**
+ * A declaration the bundler will corrupt: var/let/const followed by a
+ * lowerCamelCase name.
+ *
+ * The bundler rewrites camelCase to sc-camel-kebab-case for its own template
+ * attributes (sc-camel-on-click). It also applies that rewrite to the copy of
+ * each inline script it appends at render time, so `var mkField` is emitted as
+ * `var sc-camel-mk-field` -- a syntax error that kills the entire script. The
+ * rewrite matches only the declaration, and only when the name starts lowercase
+ * and contains an uppercase letter; ALL_CAPS and all-lowercase names are safe.
+ *
+ * The 07/31 export shipped one of these (`mkField`) and a patch here added a
+ * second (`noSess`). Both put "[bundle] SyntaxError: Unexpected token '-'" across
+ * the top of every page. This is checked on every build so it cannot come back
+ * with the next re-export.
+ */
+const MANGLED_DECL = /\b(?:var|let|const)\s+([a-z_$][a-z0-9_$]*[A-Z][A-Za-z0-9_$]*)\s*=/g;
+
+/**
+ * Identifiers renamed to survive that rewrite, applied to every page.
+ *
+ * The rewrite corrupts only the declaration and leaves later uses alone, so
+ * `var mkField` becomes an invalid name while the six `mkField(...)` calls below
+ * it stay as they were. Renaming just the declaration would therefore trade a
+ * syntax error for an undefined function -- every occurrence has to move
+ * together, which is why this is a rename pass and not a set of exact-match
+ * patches.
+ *
+ * Names are chosen all-lowercase. Not every page contains every one of these
+ * (the xlsx writer only ships on walk-calendar), so a rename matching nothing on
+ * a given page is fine; findManglableDecls is the assertion that none was missed.
+ *
+ *   mkField    auth module, builds the sign-in form's email/password fields
+ *   nameBytes  minimal xlsx writer, zip local-header filename bytes
+ *   cdSize     minimal xlsx writer, central-directory size
+ */
+const MANGLE_SAFE_RENAMES = [
+  ['mkField', 'mkfield'],
+  ['nameBytes', 'namebytes'],
+  ['cdSize', 'cdsize']
+];
+
 /* --- the shared auth module ------------------------------------------------
  *
  * Every page in the export inlines the same 134 KB "OLH shared authentication +
@@ -66,9 +108,15 @@ const SNAPSHOT_GLOBALS = ['OLH_DATA', 'WALK_ROSTER', 'WALK_DRIVE', 'WALK_PRODUCT
  * network failure or the 3.5s timeout.
  */
 const AUTH_PATCHES = [
+  // NOTE for anyone adding a patch here: do NOT introduce a `var`/`let`/`const`
+  // whose name is lowerCamelCase. See MANGLED_DECL below -- the bundler rewrites
+  // exactly that form and the resulting identifier is a syntax error. This patch
+  // used `var noSess` for one deploy and produced a red error banner on every
+  // page. Assign onto the error object instead of declaring a variable.
   ['session: a 200 with no user is still a real answer',
    '        if (!data || !data.user) throw new Error("no session");',
-   '        if (!data || !data.user) { var noSess = new Error("no session"); noSess.status = 401; throw noSess; }'],
+   '        if (!data || !data.user) throw Object.assign(new Error("no session"), { status: 401 });'],
+
 
   ['restore: an HTTP status means the backend is alive',
    '      }).catch(function () {\n' +
@@ -311,6 +359,67 @@ function dropAssetSnapshots(state, name) {
 }
 
 /**
+ * Walk the plain inline <script> blocks of a template.
+ *
+ * "Plain" means no src= and no type=. Asset references carry src, and the app's
+ * own code carries type="text/x-dc" and goes through a different path in the
+ * bundler -- it is full of camelCase and is not rewritten, so including it here
+ * would produce hundreds of false positives.
+ */
+function eachPlainInlineScript(template, fn) {
+  const CLOSE = '</script>';
+  let i = 0;
+  for (;;) {
+    const open = template.indexOf('<script', i);
+    if (open === -1) return;
+    const gt = template.indexOf('>', open);
+    const close = gt === -1 ? -1 : template.indexOf(CLOSE, gt);
+    if (gt === -1 || close === -1) return;
+    const attrs = template.slice(open + '<script'.length, gt);
+    if (!/\bsrc\s*=/.test(attrs) && !/\btype\s*=/.test(attrs)) {
+      fn(template.slice(gt + 1, close));
+    }
+    i = close + CLOSE.length;
+  }
+}
+
+/**
+ * Rename an identifier everywhere it appears in the template.
+ *
+ * Word-boundary anchored on both sides, so `mkField` does not match inside
+ * `mkFieldset` and the replacement cannot run twice. These names are distinctive
+ * enough not to collide with markup, CSS or copy; a name that could is not a
+ * candidate for this list.
+ */
+function renameIdentifier(state, from, to) {
+  const re = new RegExp('\\b' + from + '\\b', 'g');
+  const hits = (state.template.match(re) || []).length;
+  if (!hits) return 0;
+  state.template = state.template.replace(re, to);
+  if (new RegExp('\\b' + from + '\\b').test(state.template)) {
+    die('rename ' + from + ' -> ' + to + ' left occurrences behind');
+  }
+  return hits;
+}
+
+/** Declarations the bundler's camelCase rewrite would turn into syntax errors. */
+function findManglableDecls(template) {
+  const out = [];
+  eachPlainInlineScript(template, (body) => {
+    let m;
+    MANGLED_DECL.lastIndex = 0;
+    while ((m = MANGLED_DECL.exec(body))) {
+      const name = m[1];
+      out.push({
+        name,
+        mangled: 'sc-camel-' + name.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())
+      });
+    }
+  });
+  return out;
+}
+
+/**
  * Snapshots written straight into the template as plain inline <script> blocks.
  * This is the 07/31 shape.
  *
@@ -391,6 +500,14 @@ function build(name, spec) {
   }
   console.log('  auth patches             ' + AUTH_PATCHES.length + ' applied');
 
+  // 2b. Rename the identifiers the bundler's camelCase rewrite would corrupt.
+  const renamed = [];
+  for (const [from, to] of MANGLE_SAFE_RENAMES) {
+    const n = renameIdentifier(state, from, to);
+    if (n) renamed.push(from + '->' + to + ' (' + n + ')');
+  }
+  if (renamed.length) console.log('  renamed for bundler      ' + renamed.join(', '));
+
   // 3. Invalidate memo caches when data arrives.
   if (spec.caches && spec.caches.length) {
     const find = 'const tick = () => this.setState(s => ({ ready: s.ready + 1 }));';
@@ -415,6 +532,20 @@ function build(name, spec) {
       '<script>\n/* live data loader — injected by dev/build-live-pages.js */\n' + LOADER + '\n</script>\n</body>');
     console.log('  loader injected          walkRef=' + (spec.walkRef ? 'true' : 'false'));
   }
+
+  // 6. Nothing in any plain inline script may carry a declaration the bundler
+  //    will corrupt. Runs last so it covers the injected loader as well as the
+  //    auth module and every patch above -- a patch that introduces one is the
+  //    way this last regressed.
+  const mangled = findManglableDecls(state.template);
+  if (mangled.length) {
+    die(name + ': ' + mangled.length + " declaration(s) will be corrupted by the bundler's " +
+        'camelCase rewrite, which breaks the entire script they appear in:\n' +
+        mangled.map((m) => '         ' + m.name + '  ->  ' + m.mangled).join('\n') +
+        '\n       Rename each to all-lowercase or ALL_CAPS, or avoid the declaration.' +
+        '\n       See the MANGLED_DECL comment at the top of this file.');
+  }
+  console.log('  manglable declarations   none');
 
   const round = emit(state, out);
 

@@ -504,19 +504,56 @@ serving a bootstrap page that mints a session from a URL parameter — an auth
 bypass living in `public/` — which is not worth test convenience. The data path
 is covered at the API level; rendering with data is a manual pass.
 
-## Known defect in the 07/31 export (not introduced here)
+## The bundler corrupts `var camelCase` — fixed, and now guarded
 
-Every page of the 07/31 export throws on load:
+Every page of the 07/31 export threw this on load, and it showed as a red
+`[bundle] SyntaxError` banner across the top of the live site:
 
 ```
 Uncaught SyntaxError: Failed to execute 'appendChild' on 'Node': Unexpected token '-'
 ```
 
-It comes from the design tool's own template runtime (`Object.render` inside an
-`Array.map`), reproduces on the **raw export before any build step**, and the
-07/30 export is clean — so it arrived with the new design, not with the auth work
-or the build script. It is non-fatal: the tracker still renders ~18k characters of
-content and every flow tested works. Some component subtree is presumably failing
-silently, so it should be fixed at the source. `dev/check-export-errors.sh` and
-`dev/console-probe.js` were added to catch this class of thing on the next
-re-export.
+**Cause.** The bundler rewrites camelCase to `sc-camel-kebab-case` for its own
+template attributes (`sc-camel-on-click`). It also applies that rewrite to the
+copy of each inline `<script>` it appends at render time — so
+
+```js
+var mkField = function (label, type, ph, name) {   //  as written
+var sc-camel-mk-field = function (label, type, ph, name) {   //  as appended
+```
+
+which does not parse, and the whole script dies. The rewrite only touches the
+**declaration**; later `mkField(...)` calls are left alone. It only matches names
+that start lowercase and contain an uppercase letter — `ALL_CAPS` and
+all-lowercase are safe, which is why `mkField` was the only casualty in a module
+otherwise full of `SESSION_KEY`-style names.
+
+**Why the site still worked.** Each page inlines these scripts twice: once as a
+real `<script>` the browser parses normally, and once more as the bundler's
+appended copy. The first copy ran, so sign-in and everything else worked. The only
+symptom was the banner — which on a production tool reads like the thing is broken.
+
+**Fixed** by renaming every affected identifier to all-lowercase in
+`MANGLE_SAFE_RENAMES` (a rename pass, not exact-match patches, because the
+declaration and all its uses have to move together):
+
+| identifier | where | occurrences |
+|---|---|---|
+| `mkField` | auth module — builds the sign-in email/password fields | 3 |
+| `nameBytes` | minimal xlsx writer — zip local-header filename bytes | 6 |
+| `cdSize` | minimal xlsx writer — central-directory size | 2 |
+
+The xlsx ones were found by the guard, not by the banner: they sit in
+`walk-calendar`/`tracker` ahead of the app script, so the Excel export would have
+broken the same way.
+
+**Guarded.** `findManglableDecls` runs after every patch and after loader
+injection and fails the build on any `var`/`let`/`const` with a lowerCamelCase
+name in a plain inline script. A patch that introduces one is exactly how this
+regressed — `var noSess`, added by the session patch, shipped for one deploy. If
+the build stops with a `manglable declarations` failure, rename, don't relax it.
+
+`dev/catch-bad-script.js` and `dev/dump-mangled.js` hook `appendChild` over CDP to
+recover the text of a script the bundler failed to parse, which is the only way to
+see this error's actual source. `dev/check-export-errors.sh public` asserts no page
+throws on load and is worth running after every re-export.

@@ -104,17 +104,17 @@
     // assumption that it reads only OLH_DATA.jobs/.managers, and rendered an
     // empty walk-manager list until that was corrected -- so when in doubt,
     // grep the page for WALK_ rather than trusting a comment.
-    var needsRef = !!(window.__OLH_LIVE && window.__OLH_LIVE.walkRef);
+    var needsref = !!(window.__OLH_LIVE && window.__OLH_LIVE.walkRef);
 
     try {
       var pair = await Promise.all(
-        needsRef ? [getJson('/jobs'), getJson('/walk-config')] : [getJson('/jobs')]
+        needsref ? [getJson('/jobs'), getJson('/walk-config')] : [getJson('/jobs')]
       );
       var jobs = pair[0];
-      var cfg = needsRef ? pair[1] : null;
+      var cfg = needsref ? pair[1] : null;
 
       if (!Array.isArray(jobs.jobs)) throw new Error('/jobs returned no job array');
-      if (needsRef && (!cfg || !cfg.drive || !cfg.roster)) {
+      if (needsref && (!cfg || !cfg.drive || !cfg.roster)) {
         throw new Error('/walk-config returned no reference data');
       }
 
@@ -141,7 +141,7 @@
 
       // Surface the coverage gap rather than letting homesites vanish quietly.
       var u = window.WALK_UNSCHEDULED;
-      var homeUnknown = (cfg.meta && cfg.meta.rosterHomeUnknown) || 0;
+      var homeunknown = (cfg.meta && cfg.meta.rosterHomeUnknown) || 0;
       var notes = [];
       if (u.length) {
         var sites = u.reduce(function (a, x) { return a + (x.homesites || 0); }, 0);
@@ -155,9 +155,9 @@
           ' have no drive times yet: ' + esc(comms.join(', ')) + '.'
         );
       }
-      if (homeUnknown) {
+      if (homeunknown) {
         notes.push(
-          homeUnknown + ' roster member' + (homeUnknown === 1 ? '' : 's') +
+          homeunknown + ' roster member' + (homeunknown === 1 ? '' : 's') +
           ' have a home community that is not in the drive matrix, so their day starts unanchored.'
         );
       }
