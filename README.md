@@ -682,3 +682,133 @@ the build stops with a `manglable declarations` failure, rename, don't relax it.
 recover the text of a script the bundler failed to parse, which is the only way to
 see this error's actual source. `dev/check-export-errors.sh public` asserts no page
 throws on load and is worth running after every re-export.
+
+---
+
+# The 08/01/26 design export
+
+A re-export that changed the shape of the bundle, not just the pixels. The build
+stopped on the first page rather than shipping quietly, which is the whole point
+of its assertions. Four things moved.
+
+## The auth module moved into the manifest
+
+Through 07/31 every page inlined the 134 KB "OLH shared authentication" module
+into its template, and `dev/build-live-pages.js` patched it there — seven patches
+that stop the module's demo fallbacks from triggering on a live server's refusal.
+The 08/01 export ships it as a gzipped **manifest asset** (47 KB) loaded by
+`<script src="uuid">` instead.
+
+`BUILD FAILED: index.html: the shared auth module is missing.` That check exists
+because a page without the module has no sign-in gate at all, and it fired
+correctly — the module was there, just not where the build looked.
+
+`patchAuth()` now handles both shapes and requires exactly one of them: inline,
+or a single asset. Both present is an error rather than a preference, because
+whichever copy the runtime picks is not knowable from the build. All seven
+patches matched the asset byte-for-byte; only the location changed.
+
+The `MANGLE_SAFE_RENAMES` pass stays template-only on purpose. The bundler's
+camelCase rewrite (`var mkField` → `var sc-camel-mk-field`, a syntax error that
+kills the whole script) is applied to the plain inline scripts it re-emits at
+render time, not to assets — the bundler's own 68 KB runtime is an asset and
+carries 59 camelCase declarations of its own. So while the module sits in the
+manifest those renames match nothing, which is correct, and they resume by
+themselves if a later export re-inlines it.
+
+## The Completion Report is on the same loader as everything else
+
+The export made `window.OLH_DATA` the single source of truth for the suite and
+deleted `completion-data.js` and `no-coe-data.js`. The Completion Report reads
+`OLH_DATA.jobs[].fields` in the same `{id,fields}` shape the walk pages consume,
+so it now takes the same graft: strip the bundled snapshot, inject
+`dev/live-loader.js`.
+
+`dev/completion-loader.js` and `dev/reinject-completion-loader.js` are **deleted**,
+along with `dropCompletionSnapshot()` and the `completionLive` branch. Three page
+patches went with them, because the design now does all three itself and does
+them better:
+
+| Was patched in | Now |
+|---|---|
+| an `olh-data` listener bolted onto a mount handler that only watched the viewport | `componentDidMount` polls for `OLH_DATA.jobs`, listens for `olh-data`, clears its own row memo |
+| `updatedLabel` computed from `window.COMPLETION_SOURCE` | `stamp()` reads `OLH_DATA.meta.runDate` and `.division` |
+| the report scope, added to the loader by commit `1a0e637` | `data()` applies it in the page: started, not complete, projected completion ≥ 7/1/26, lot status B/S/W/M |
+
+The scope survived the move — it is enforced one layer up now, in the component
+rather than in the loader feeding it.
+
+`/api/jobs` gained `meta.runDate` and `meta.division` for that provenance line.
+`runDate` is the newest `Last Synced` across the table, not `fetchedAt`:
+`fetchedAt` is when Airtable was read, which is always "seconds ago" and says
+nothing about how current the Salesforce data is. It is `null` when the column is
+empty everywhere rather than falling back to today, which would claim a freshness
+nobody checked.
+
+## Page permissions became real permissions
+
+The export added a **Page Access** grid to the admin console: seven `page.*`
+permissions (`page.home`, `page.tracker`, `page.completion`, `page.walks`,
+`page.scheduler`, `page.workload`, `page.admin`) sharing one grid and one
+`Auth.can()` check with the five capabilities.
+
+`netlify/lib/olh-auth.js` knew only the five. `PERMS` is an allow-list and
+`normalizeMatrix()` drops anything not in it, so the console would have shown the
+grid, accepted the ticks, `PUT` them, and discarded every `page.*` on the way in.
+A control that looks like it saves and does not is worse than no control.
+
+The server now mirrors the frontend rules exactly:
+
+- `page.admin` is in `ROLE_LOCKS.admin` and in `ADMIN_ONLY_PAGES`, so only admin
+  can hold it — filtered **after** `NEEDS_PAGE`, so `roster.manage` implying
+  `page.admin` cannot smuggle the console to another role.
+- `NEEDS_PAGE` drags the page along with the capability that edits it: an
+  editing permission without its page is a permission that can never fire.
+- Every `page.*` is in `IMPLIES_VIEW`, so granting any page grants `suite.view`.
+- `DENY` builds the same sentence the frontend does, so a refusal reads
+  identically whether it came from the page or the API behind it.
+
+The Airtable `Roles.Permissions` field is a `multipleSelects`, and writes go
+through `typecast: true`, so the seven new options are created on first save —
+no schema edit needed.
+
+## Area Construction Manager, and the three columns that were dropped
+
+The export's Completion Report added four fields sourced from `uploads/ACM.xlsx`
+rather than from Salesforce, and Airtable had none of them.
+
+**Kept — Area Construction Manager.** The ACM filter replaced Concierge as the
+page's main control, so an empty one is a dead page. It is not a Salesforce
+field: the assignment is by community. `dev/acm-map.json` holds that mapping (55
+communities, 3 ACMs, from the roster sheet), `dev/sync_coe_to_airtable.py`
+derives the column from the `Community` value it already writes, and
+`dev/backfill-acm.js` filled the rows that predated the field — 1,400 of 1,492.
+
+Deriving it in the same pass that writes `Community` keeps the two consistent by
+construction: a job that changes community gets the right ACM in the same run.
+An unmapped community yields **blank**, never a guess. 80 rows across 42
+communities are blank today, and several are near-misses that are genuinely
+different products — `Ranches at Mcleod 40s CORE` is not `Ranches at McLeod 40s
+GC`, `Crosswinds 50s` is not `Crosswinds 50s Classic`. Fuzzy-matching those would
+put a real manager's name against homesites they do not run. Add the community to
+`acm-map.json` when one appears.
+
+**Dropped — Homesite Plan Name, Homesite Plan Number, Elevation.** These come
+from the workbook's per-job `Export` sheet, which is a one-off upload with no
+sync behind it, and they were populated on 586 of 1,400 rows even there. Live
+they would have rendered a column of em-dashes on every row, which reads as
+missing data rather than absent plumbing. Header cells, body cells and the
+drawer's `Plan` row are removed together so the table stays aligned.
+
+The workbook also carries its own QAI/QAA/CEL/ACC dates. Those are **not**
+imported. Airtable's are hand-maintained by the OLH team and the sync has never
+touched them; a frozen spreadsheet does not get to overwrite what someone typed.
+
+## tracker-new stayed deleted
+
+The export ships `tracker-new.html` again and links job numbers to it. It is
+still not built and `/tracker-new` still 301s to `/tracker` — the page predates
+the shared auth module, so it has no sign-in gate, and its own `loadLive()` falls
+back to the fixture when `/api/jobs` answers 401. Shipping it would put 900
+invented homesites in front of anonymous visitors. Job-number links land on
+`/tracker` instead.

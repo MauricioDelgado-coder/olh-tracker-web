@@ -77,7 +77,7 @@
 
   function blank() {
     window.OLH_DATA = {
-      jobs: [], managers: [], today: new Date(),
+      jobs: [], managers: [], today: new Date(), meta: null,
       source: 'error', sourceLabel: 'data unavailable'
     };
     window.WALK_ROSTER = [];
@@ -128,10 +128,17 @@
         throw new Error('/walk-config returned no reference data');
       }
 
+      /* meta is what the Completion Report's stamp() reads to print its
+         provenance line -- runDate and division. Without it the page sits on
+         "Loading Salesforce data…" forever even though every row rendered, so
+         it is forwarded straight from /api/jobs rather than invented here. A
+         backend that does not send it yields null, and stamp() says loading,
+         which is at least not a false claim about when the data is from. */
       window.OLH_DATA = {
         jobs: jobs.jobs,
         managers: jobs.managers || [],
         today: new Date(),
+        meta: jobs.meta || null,
         source: 'airtable',
         sourceLabel: 'Airtable · ' + jobs.jobs.length.toLocaleString() + ' homesites'
       };

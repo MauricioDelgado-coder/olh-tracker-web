@@ -263,18 +263,53 @@ function readSession(token) {
 
 /* ---- Roles and permissions ----------------------------------------------- */
 
+/* The seven page.* permissions arrived with the 08/01 export, which put a Page
+ * Access grid beside Capabilities in the admin console. They are permissions
+ * like any other -- one grid, one save, one can() check -- so they have to be
+ * known HERE too. PERMS is an allow-list: normalizeMatrix() drops anything not
+ * in it, so until these were added the console could show the grid, let an
+ * admin tick it, PUT it, and have every page.* silently discarded on the way
+ * in. A control that appears to save and does not is worse than no control.
+ *
+ * Kept in the same order and with the same rules as the frontend module so the
+ * matrix an admin sees is the matrix that gets stored.
+ */
+const ALL_PAGES = [
+  'page.home', 'page.tracker', 'page.completion', 'page.walks',
+  'page.scheduler', 'page.workload', 'page.admin'
+];
+
 // Mirrors DEFAULT_ROLES in the frontend auth module. Used when the Roles table
 // has no row for a slug, so an empty table is a safe state.
 const DEFAULT_ROLES = {
-  admin: ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage'],
-  qam: ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply'],
-  cm: ['suite.view', 'tracker.edit'],
-  ccr: ['suite.view', 'tracker.edit'],
-  leadership: ['suite.view']
+  admin: ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage'].concat(ALL_PAGES),
+  qam: ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply',
+    'page.home', 'page.tracker', 'page.completion', 'page.walks', 'page.scheduler', 'page.workload'],
+  cm: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.completion', 'page.walks'],
+  ccr: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.walks'],
+  leadership: ['suite.view', 'page.home', 'page.tracker', 'page.completion',
+    'page.walks', 'page.scheduler', 'page.workload']
 };
-const PERMS = ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage'];
-const ROLE_LOCKS = { admin: ['suite.view', 'roster.manage'] };
-const IMPLIES_VIEW = ['tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage'];
+const PERMS = ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage']
+  .concat(ALL_PAGES);
+const ROLE_LOCKS = { admin: ['suite.view', 'roster.manage', 'page.admin'] };
+
+/* Only admins run the console, so page.admin is never handed to anyone else --
+   enforced here and not just in the grid, because the grid is a UI and this is
+   the boundary. */
+const ADMIN_ONLY_PAGES = ['page.admin'];
+const IMPLIES_VIEW = ['tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage']
+  .concat(ALL_PAGES);
+
+/* An editing capability is meaningless without the page it edits, so granting
+   one drags the other along rather than storing a permission that can never
+   fire. */
+const NEEDS_PAGE = {
+  'tracker.edit': 'page.tracker',
+  'walk.schedule': 'page.walks',
+  'optimizer.apply': 'page.scheduler',
+  'roster.manage': 'page.admin'
+};
 
 const ROLE_ALIAS = {
   'admin': 'admin',
@@ -306,6 +341,13 @@ function normalizeMatrix(src) {
     if (can.some((p) => IMPLIES_VIEW.indexOf(p) >= 0) && can.indexOf('suite.view') < 0) {
       can.push('suite.view');
     }
+    for (const cap of Object.keys(NEEDS_PAGE)) {
+      if (can.indexOf(cap) >= 0 && can.indexOf(NEEDS_PAGE[cap]) < 0) can.push(NEEDS_PAGE[cap]);
+    }
+    // Runs after NEEDS_PAGE on purpose: roster.manage implies page.admin, and
+    // a non-admin role holding roster.manage must not acquire the console page
+    // through the back door of that implication.
+    if (slug !== 'admin') can = can.filter((p) => ADMIN_ONLY_PAGES.indexOf(p) < 0);
     out[slug] = PERMS.filter((p) => can.indexOf(p) >= 0);
   }
   return out;
@@ -448,6 +490,15 @@ async function requireSession(event) {
 }
 
 /** Assert a capability, or throw a 403 carrying the frontend's own wording. */
+const PAGE_LABEL = {
+  'page.home': 'All Views (home)',
+  'page.tracker': 'QA & Closing Tracker',
+  'page.completion': 'Completion Report',
+  'page.walks': 'Walk Schedule',
+  'page.scheduler': 'Schedule Optimizer',
+  'page.workload': 'Workload Predictor',
+  'page.admin': 'User Administration'
+};
 const DENY = {
   'suite.view': 'Your account does not have access to the OLH Suite yet. Ask an admin to grant it.',
   'tracker.edit': 'Your role can view the tracker but not change it.',
@@ -455,6 +506,11 @@ const DENY = {
   'optimizer.apply': 'Only QA Managers and admins can apply optimizer suggestions.',
   'roster.manage': 'Only admins can change the roster.'
 };
+// Same sentence the frontend builds, so a refusal reads identically whether it
+// came from the page or from the API behind it.
+for (const key of ALL_PAGES) {
+  DENY[key] = 'Your role does not have access to the ' + PAGE_LABEL[key] + ' page.';
+}
 
 function requirePerm(session, perm) {
   if (session.can.indexOf(perm) < 0) {

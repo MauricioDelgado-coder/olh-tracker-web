@@ -27,14 +27,20 @@ const jobsFn = require('../netlify/functions/jobs.js');
 const walkFn = require('../netlify/functions/walk-config.js');
 const updateFn = require('../netlify/functions/update-job.js');
 
-const ROUTES = {
-  '/': 'index.html',
-  '/tracker': 'tracker.html',
-  '/completion': 'completion.html',
-  '/scheduler': 'scheduler.html',
-  '/walk-calendar': 'walk-calendar.html',
-  '/workload': 'workload.html'
-};
+/* Extensionless routes, the way Netlify serves them.
+ *
+ * This was a hardcoded list of six and it silently rotted: workload-visualizer
+ * and admin were added to the suite and never added here, so verify-pages.sh
+ * was fetching a 404 body for both and reporting four failures each. Eight red
+ * checks that said nothing about the pages -- which is worse than no check,
+ * because it trains you to skim past the red.
+ *
+ * Derived from what is actually in the directory now, so a new page is routed
+ * the moment it is built. */
+const ROUTES = { '/': 'index.html' };
+for (const f of fs.readdirSync(DIR)) {
+  if (f.endsWith('.html') && f !== 'index.html') ROUTES['/' + f.slice(0, -5)] = f;
+}
 
 let forceFail = false;
 

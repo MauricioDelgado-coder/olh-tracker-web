@@ -147,16 +147,55 @@ EXTRA_FIELDS = {
     'Scheduled Closing Date': ('Primary_Opportunity_ID__r.Scheduled_Closing_Date__c', 'date'),
 }
 
+# ---------------------------------------------------------------------------
+# Area Construction Manager: derived, not synced.
+#
+# The Completion Report filters on ACM, but Salesforce has no such field on
+# Homesite__c -- the assignment is by community, and the mapping lives in
+# dev/acm-map.json (built from the ACM.xlsx roster, 55 communities across 3
+# ACMs). So it is computed here from the Community value this same sync writes,
+# which keeps the two consistent by construction: a job that moves community
+# gets the right ACM in the same pass.
+#
+# A community that is not in the map yields '' rather than a guess. Those show
+# as blank on the report, which is the true state -- an unmapped community, not
+# a homesite with no manager. Add it to acm-map.json when one appears.
+# ---------------------------------------------------------------------------
+ACM_FIELD = 'Area Construction Manager'
+ACM_MAP_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'acm-map.json')
+
+
+def load_acm_map():
+    try:
+        with open(ACM_MAP_PATH, encoding='utf-8') as fh:
+            raw = json.load(fh)
+    except FileNotFoundError:
+        die('missing %s -- the Area Construction Manager mapping. Regenerate it '
+            'from the ACM roster workbook rather than syncing the column blank.'
+            % ACM_MAP_PATH)
+    # Compare on a squashed key so trailing spaces or case in either source do
+    # not silently drop a community.
+    return {' '.join(str(k).split()).upper(): v for k, v in raw.items()}
+
+
+ACM_BY_COMMUNITY = load_acm_map()
+
+
+def acm_for(community):
+    return ACM_BY_COMMUNITY.get(' '.join(str(community or '').split()).upper(), '')
+
+
 # field -> 'date' | 'datetime' | 'text', for normalisation and comparison.
 FIELD_KIND = {}
 for _col, _field in COLUMN_MAP.items():
     FIELD_KIND[_field] = 'date' if _col in DATE_COLUMNS else 'text'
 for _field, (_sf, _kind) in EXTRA_FIELDS.items():
     FIELD_KIND[_field] = _kind
+FIELD_KIND[ACM_FIELD] = 'text'
 
 SYNC_MANAGED = {'Record Status', 'Closed Date', 'Last Synced'}
 
-SF_OWNED = set(COLUMN_MAP.values()) | set(EXTRA_FIELDS) | SYNC_MANAGED
+SF_OWNED = set(COLUMN_MAP.values()) | set(EXTRA_FIELDS) | SYNC_MANAGED | {ACM_FIELD}
 
 # Everything a person types. None of it comes from Salesforce.
 MANUAL_FIELDS = {
@@ -386,6 +425,7 @@ def read_workbook(path, division):
         rec = {}
         for col, field in COLUMN_MAP.items():
             rec[field] = normalise(field, r[idx[col]])
+        rec[ACM_FIELD] = acm_for(rec.get('Community'))
         out[job] = rec
     return out
 

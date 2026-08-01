@@ -152,12 +152,32 @@ exports.handler = async (event) => {
 
     const jobs = jobRecords.map((r) => ({ id: r.id, fields: r.fields || {} }));
 
+    /* How current the Salesforce side of this data actually is.
+     *
+     * The Completion Report prints this as its provenance line, so it has to
+     * mean something: fetchedAt is when Airtable was read, which is always
+     * "seconds ago" and says nothing about the data's age. `Last Synced` is
+     * stamped by the daily sync only on rows it actually changed, so the newest
+     * one across the table is the last time Salesforce moved anything -- that
+     * is the honest answer to "data updated when?".
+     *
+     * Null when the column is empty everywhere rather than falling back to
+     * today, which would claim a freshness nobody verified. */
+    const synced = jobRecords
+      .map((r) => (r.fields && r.fields['Last Synced']) || '')
+      .filter(Boolean)
+      .sort();
+    const runDate = synced.length ? String(synced[synced.length - 1]).slice(0, 10) : null;
+
     const payload = {
       jobs,
       managers,
       meta: {
         count: jobs.length,
         managerCount: managers.length,
+        runDate,
+        division: 'OLH (Orlando South)',
+        source: 'Airtable (Jobs), synced from Salesforce Homesite__c',
         fetchedAt: new Date().toISOString(),
         cached: false
       }

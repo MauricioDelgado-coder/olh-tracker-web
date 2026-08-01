@@ -97,8 +97,16 @@ for page in index tracker completion scheduler workload workload-visualizer walk
 
   # 2. Anonymous means no data. The loader stamps its outcome on <body>; on the
   #    wired pages it must report the refusal rather than a successful load.
+  #
+  #    completion joined this list in 08/2026. It used to carry a real bundled
+  #    snapshot and no API dependency, so it had nothing to refuse; the export
+  #    made window.OLH_DATA the single source for the whole suite, the build now
+  #    strips that snapshot like every other page, and the Completion Report
+  #    reads /api/jobs through the same loader. So it must refuse anonymously
+  #    too -- and if it ever stops refusing, that is 1,000 real homesites and
+  #    their buyers' closing dates on an unauthenticated screen.
   case "$page" in
-    scheduler|workload|workload-visualizer|walk-calendar|admin)
+    completion|scheduler|workload|workload-visualizer|walk-calendar|admin)
       src=$(grep -o 'data-olh-source="[a-z]*"' "$raw" | head -1 | sed 's/.*="\(.*\)"/\1/')
       njobs=$(grep -o 'data-olh-jobs="[0-9]*"' "$raw" | head -1 | sed 's/.*="\(.*\)"/\1/')
       if [ "$src" = "error" ] && [ "${njobs:-0}" = "0" ]; then
@@ -114,10 +122,10 @@ for page in index tracker completion scheduler workload workload-visualizer walk
   esac
 
   # 3. The sign-in gate. index is the landing page and gates on navigation
-  #    rather than on load, so it is exempt; completion reads a real bundled
-  #    snapshot and has no API dependency to gate.
+  #    rather than on load, so it is the only exemption left -- completion used
+  #    to be the other one, back when it had a bundled snapshot to show.
   case "$page" in
-    tracker|scheduler|workload|workload-visualizer|walk-calendar|admin)
+    tracker|completion|scheduler|workload|workload-visualizer|walk-calendar|admin)
       check "sign-in gate shown" "$f" 'Sign In to Continue|Lennar Email' 1
       ;;
   esac

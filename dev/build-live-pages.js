@@ -47,10 +47,10 @@ const kb = (n) => (n / 1024).toFixed(0) + ' KB';
 const LOADER = fs.readFileSync(path.join(__dirname, 'live-loader.js'), 'utf8');
 if (!/\/walk-config/.test(LOADER)) die('live-loader.js does not reference /walk-config');
 
-/* The Completion Report needs a different loader: it reads COMPLETION_DATA in a
-   flat per-homesite shape, not the {id,fields} the walk pages consume. */
-const COMPLETION_LOADER = fs.readFileSync(path.join(__dirname, 'completion-loader.js'), 'utf8');
-if (!/COMPLETION_DATA/.test(COMPLETION_LOADER)) die('completion-loader.js does not set COMPLETION_DATA');
+/* completion-loader.js is GONE (08/01). The Completion Report used to read a
+   COMPLETION_DATA global in a flat per-homesite shape and needed its own loader
+   to build it; the export now reads window.OLH_DATA.jobs like every other page,
+   so it takes the same live-loader.js as the walk pages. */
 
 /** The globals a bundled snapshot defines. Finding any of these means demo data. */
 const SNAPSHOT_GLOBALS = ['OLH_DATA', 'WALK_ROSTER', 'WALK_DRIVE', 'WALK_PRODUCT_MAP', 'WALK_COMMUNITIES'];
@@ -227,78 +227,85 @@ const PAGES = {
   'index.html': {
     data: false, inject: false, caches: [],
     patches: [
-      // The template wraps the User Administration link in
-      // <sc-if value="{{ isAdmin }}">, but renderVals() never returned isAdmin,
-      // so it evaluated undefined and the link was invisible to EVERYONE --
-      // admins included. Gated on the roster.manage capability rather than the
-      // literal role name, which is what users.js and roles.js already enforce
-      // server-side, so granting it in the Roles grid surfaces the link too.
       // "Data updated 7/29/26" was hardcoded into the landing page, which has
       // no data of its own and therefore no way to know. It sat beside links to
       // pages that read Airtable live, so it aged into a false claim. Removed
       // rather than faked: the pages it links to each report their own state.
       ['drop the hardcoded data-updated date',
        '<span style="margin-left:auto;font-size:12.5px;color:#908A82">Data updated 7/29/26</span>',
-       ''],
+       '']
 
-      ['supply isAdmin so the User Administration link can render',
-       '  renderVals() {\n' +
-       '    const n = this.state.narrow;\n' +
-       '    return {\n' +
-       '      headPad:',
-       '  renderVals() {\n' +
-       '    const n = this.state.narrow;\n' +
-       '    const auth = window.OLHAuth;\n' +
-       '    return {\n' +
-       '      isAdmin: !!(this.state.user && auth && auth.can("roster.manage")),\n' +
-       '      headPad:']
+      // GONE (08/01 export): "supply isAdmin". The template used to gate the
+      // User Administration link on {{ isAdmin }}, which renderVals() never
+      // returned, so the link was invisible to everyone including admins. The
+      // design now computes canAdmin: this.can("page.admin") itself and gates
+      // every tile the same way, so the patch has nothing left to fix. It is
+      // deleted rather than re-anchored -- re-adding isAdmin beside canAdmin
+      // would leave two answers to one question.
     ]
   },
 
-  // Reads a COMPLETION_DATA asset, which is real and stays. No fixture.
-  // Was the last page in the suite on frozen data: the export bakes 900 records
-  // from the retired Dynamics Export into the template. completionLive deletes
-  // that block and injects completion-loader.js, which reads /api/jobs.
+  /* Rewired by the 08/01 export, which made window.OLH_DATA the single source
+   * of truth for the whole suite and deleted completion-data.js and
+   * no-coe-data.js. This page now takes the same graft as the walk pages: drop
+   * the bundled snapshot, inject live-loader.js, done.
+   *
+   * Everything the old completionLive path had to patch in, the design now owns
+   * and does better, so all three patches are DELETED rather than re-anchored:
+   *
+   *   - componentDidMount polls for window.OLH_DATA.jobs, listens for the
+   *     olh-data event and clears its own row memo. The old patch bolted a
+   *     listener onto a mount handler that only watched the viewport.
+   *   - stamp() derives the provenance line from OLH_DATA.meta.runDate and
+   *     .division, which is why live-loader.js now forwards meta from
+   *     /api/jobs. It replaces the hardcoded "Data updated 7/29/26".
+   *   - data() applies the report scope in the page itself: started, not
+   *     complete, projected completion on or after 7/1/26, lot status B/S/W/M.
+   *     That is the same scope commit 1a0e637 put into completion-loader.js, so
+   *     the narrowing survives the move -- it is enforced one layer up now.
+   *
+   * walkRef:false -- the page reads OLH_DATA and nothing WALK_*.
+   */
   'completion.html': {
-    data: false, inject: false, completionLive: true, caches: [],
+    data: true, inject: true, walkRef: false, caches: [],
     patches: [
-      // data() re-reads window.COMPLETION_DATA on every render, so the loader
-      // only has to set the global and fire the event -- but something must
-      // call setState or React never re-renders. The page's mount handler only
-      // watched the viewport.
-      ['re-render when live data arrives',
-       '  componentDidMount() {\n' +
-       '    this._offVp = window.OLHViewport.watch(n => this.setState({ narrow: n }));\n' +
-       '  }',
-       '  componentDidMount() {\n' +
-       '    this._offVp = window.OLHViewport.watch(n => this.setState({ narrow: n }));\n' +
-       '    this._onData = () => this.setState({ limit: 200 });\n' +
-       '    window.addEventListener("olh-data", this._onData);\n' +
-       '  }\n\n' +
-       '  componentWillUnmount() {\n' +
-       '    if (this._offVp) this._offVp();\n' +
-       '    if (this._onData) window.removeEventListener("olh-data", this._onData);\n' +
-       '  }'],
+      /* The export added three columns sourced from uploads/ACM.xlsx rather
+       * than from Salesforce: Homesite Plan Name, Homesite Plan Number and
+       * Elevation. The Airtable Jobs table has no such fields and the daily
+       * sync has nothing to fill them from, so live they would render a column
+       * of em-dashes on every row -- which reads as missing data rather than
+       * absent plumbing. Header and body cells are removed together so the two
+       * stay aligned.
+       *
+       * Area Construction Manager is NOT removed: it is derived from the
+       * community map and is a real field on the Jobs table. */
+      ['drop the plan/elevation body cells (no Airtable source)',
+       '            <sc-raw-td style="padding:7px 10px;border-bottom:1px solid #F1EBE1;' +
+       'white-space:nowrap">{{ r.planName }}</sc-raw-td>\n' +
+       '            <sc-raw-td style="padding:7px 10px;border-bottom:1px solid #F1EBE1;' +
+       'font-variant-numeric:tabular-nums;white-space:nowrap">{{ r.planNumber }}</sc-raw-td>\n' +
+       '            <sc-raw-td style="padding:7px 10px;border-bottom:1px solid #F1EBE1;' +
+       'white-space:nowrap">{{ r.elevation }}</sc-raw-td>\n',
+       ''],
 
-      // "Data updated 7/29/26" was a hardcoded string. It was wrong the day
-      // after it shipped and it sat next to data that is now loaded live.
-      ['report the real load state instead of a hardcoded date',
-       'Data updated 7/29/26 \u00b7 Orlando Homes division',
-       '{{ updatedLabel }}'],
+      ['drop the plan/elevation column headers',
+       ', ["planName", "Homesite Plan Name", "left"], ' +
+       '["planNumber", "Homesite Plan Number", "left"], ' +
+       '["elevation", "Elevation", "left"]',
+       ''],
 
-      ['supply updatedLabel',
-       '    const nw = s.narrow;\n' +
-       '    return {\n' +
-       '      narrow: nw,',
-       '    const nw = s.narrow;\n' +
-       '    const src = (typeof window !== "undefined" && window.COMPLETION_SOURCE) || null;\n' +
-       '    return {\n' +
-       '      updatedLabel: !src ? "Loading\u2026"\n' +
-       '        : src.source === "error" ? "Data unavailable \u00b7 Orlando Homes division"\n' +
-       '        : src.count + " homesites \u00b7 loaded " +\n' +
-       '          src.at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) +\n' +
-       '          " \u00b7 Orlando Homes division",\n' +
-       '      narrow: nw,'],
+      ['drop the Plan row from the homesite drawer',
+       '\n        { k: "Plan", v: d.planName ? d.planName + ' +
+       '(d.elevation ? " \\u00b7 Elevation " + d.elevation : "") : "\\u2014", ' +
+       'color: "#303030" },',
+       ''],
+
+      // GONE (08/01 export): "re-render when live data arrives", "report the
+      // real load state instead of a hardcoded date" and "supply updatedLabel".
+      // The page now carries its own olh-data listener and its own stamp() over
+      // OLH_DATA.meta, so all three would re-implement what is already there --
+      // and the last of them still referenced window.COMPLETION_SOURCE, a
+      // global nothing sets any more.
 
       ['give the header a path back to the homepage',
        '<span style="margin-left:auto"><olh-user-chip style="flex:0 0 auto">' +
@@ -455,23 +462,108 @@ function loadBundle(file) {
   return { lines, iManifest, iTemplate, manifest, template };
 }
 
+/** Binary assets (fonts, png) are not source and are never read as text. */
+function isBinary(buf) {
+  const head = buf.slice(0, 4).toString('latin1');
+  return /^wOF2|^\x00\x01\x00\x00|^\x89PNG|^OTTO|^true/.test(head);
+}
+
+/** Decompressed text of a manifest asset, or null if it is binary or unreadable. */
+function assetText(entry) {
+  let buf = Buffer.from(entry.data || '', 'base64');
+  if (entry.compressed) { try { buf = zlib.gunzipSync(buf); } catch (_) { return null; } }
+  return isBinary(buf) ? null : buf.toString('utf8');
+}
+
+/** Put text back into an asset using the encoding the bundler gave it. */
+function writeAssetText(entry, txt) {
+  const raw = Buffer.from(txt, 'utf8');
+  entry.data = (entry.compressed ? zlib.gzipSync(raw) : raw).toString('base64');
+}
+
 /** Which snapshot globals a manifest asset defines. */
 function assetGlobals(entry) {
   let buf = Buffer.from(entry.data, 'base64');
   if (entry.compressed) { try { buf = zlib.gunzipSync(buf); } catch (_) { return { globals: [], size: 0 }; } }
-  // Binary assets (fonts, png) are not worth evaluating.
-  const head = buf.slice(0, 4).toString('latin1');
-  if (/^wOF2|^\x00\x01\x00\x00|^\x89PNG|^OTTO|^true/.test(head)) return { globals: [], size: buf.length };
+  if (isBinary(buf)) return { globals: [], size: buf.length };
   const txt = buf.toString('utf8');
   const globals = SNAPSHOT_GLOBALS.filter((g) => new RegExp('(window\\.)?' + g + '\\s*=').test(txt));
   return { globals, size: buf.length };
 }
 
-/** Assert-exactly-once substitution. */
-function sub(state, file, label, find, replace) {
-  const n = state.template.split(find).length - 1;
+/** Assert-exactly-once substitution against a string. */
+function subText(txt, file, label, find, replace) {
+  const n = txt.split(find).length - 1;
   if (n !== 1) die(file + ': patch "' + label + '" matched ' + n + ' times, expected exactly 1');
-  state.template = state.template.replace(find, replace);
+  return txt.replace(find, replace);
+}
+
+/** Assert-exactly-once substitution against the template. */
+function sub(state, file, label, find, replace) {
+  state.template = subText(state.template, file, label, find, replace);
+}
+
+/* --- the auth module, wherever this export put it ---------------------------
+ *
+ * Through 07/31 the module was inlined into each page's template. The 08/01
+ * export moved it into the bundler manifest as a gzipped asset loaded by
+ * <script src="uuid">, which is why the build stopped on index.html rather than
+ * quietly shipping seven unpatched sign-in gates. Both shapes are handled and
+ * exactly one of them must hold the module.
+ *
+ * Only the location changed -- all seven patches below match the asset
+ * byte-for-byte. Patching it means decompress, substitute, re-compress with the
+ * same encoding, then read it back the way the bundler will.
+ */
+const AUTH_MARKER = 'OLH shared authentication';
+
+/** Manifest assets carrying the auth module. Should be exactly one, or none. */
+function findAuthAssets(state) {
+  const hits = [];
+  for (const [uuid, entry] of Object.entries(state.manifest)) {
+    const txt = assetText(entry);
+    if (txt !== null && txt.includes(AUTH_MARKER)) hits.push({ uuid, entry, txt });
+  }
+  return hits;
+}
+
+function patchAuth(state, name) {
+  const inline = state.template.includes(AUTH_MARKER);
+  const assets = findAuthAssets(state);
+
+  if (inline && assets.length) {
+    die(name + ': the auth module is BOTH inline and in the manifest (' +
+        assets.map((a) => a.uuid).join(', ') + '). Patching one leaves the other ' +
+        'unpatched, and which copy wins at runtime is not decidable from here.');
+  }
+  if (!inline && !assets.length) {
+    die(name + ': the shared auth module is missing. Every page in the export ' +
+        'carries it; a page without it has no sign-in gate at all.');
+  }
+  if (assets.length > 1) {
+    die(name + ': ' + assets.length + ' manifest assets carry the auth module (' +
+        assets.map((a) => a.uuid).join(', ') + '), expected exactly 1. Patching ' +
+        'one of several would leave a live unpatched copy on the page.');
+  }
+
+  if (inline) {
+    for (const [label, find, replace] of AUTH_PATCHES) {
+      sub(state, name, 'auth: ' + label, find, replace);
+    }
+    console.log('  auth patches             ' + AUTH_PATCHES.length + ' applied (inline)');
+    return;
+  }
+
+  const a = assets[0];
+  let txt = a.txt;
+  for (const [label, find, replace] of AUTH_PATCHES) {
+    txt = subText(txt, name, 'auth: ' + label, find, replace);
+  }
+  writeAssetText(a.entry, txt);
+  if (assetText(a.entry) !== txt) die(name + ': the patched auth asset does not round-trip');
+
+  console.log('  auth patches             ' + AUTH_PATCHES.length + ' applied (asset ' +
+    a.uuid.slice(0, 8) + ', ' + kb(txt.length) + ')');
 }
 
 function emit(state, outFile) {
@@ -630,57 +722,6 @@ function dropInlineSnapshots(state, name) {
   return drop;
 }
 
-/**
- * Delete the baked COMPLETION_DATA block from completion.html.
- *
- * This one is separate from dropInlineSnapshots because the data is not a demo
- * fixture -- the 900 records are real homesites from the retired Dynamics
- * Export. They are removed because they are FROZEN (29 July), not because they
- * are fake, and completion-loader.js replaces them with a live /api/jobs read.
- *
- * Asserted to match exactly one block: silently finding none would ship the
- * stale snapshot again with a loader layered uselessly on top of it.
- */
-function dropCompletionSnapshot(state, name) {
-  const tpl = state.template;
-  const CLOSE = '</script>';
-  let out = '';
-  let i = 0;
-  let found = 0;
-  let size = 0;
-
-  for (;;) {
-    const open = tpl.indexOf('<script', i);
-    if (open === -1) { out += tpl.slice(i); break; }
-    const gt = tpl.indexOf('>', open);
-    const close = gt === -1 ? -1 : tpl.indexOf(CLOSE, gt);
-    if (gt === -1 || close === -1) { out += tpl.slice(i); break; }
-
-    const attrs = tpl.slice(open + '<script'.length, gt);
-    const body = tpl.slice(gt + 1, close);
-    const end = close + CLOSE.length;
-    const plain = !/\bsrc\s*=/.test(attrs) && !/\btype\s*=/.test(attrs);
-
-    if (plain && /(window\.)?COMPLETION_DATA\s*=\s*\[/.test(body)) {
-      found += 1;
-      size += body.length;
-      out += tpl.slice(i, open);
-    } else {
-      out += tpl.slice(i, end);
-    }
-    i = end;
-  }
-
-  if (found !== 1) {
-    die(name + ': expected exactly 1 baked COMPLETION_DATA block, found ' + found +
-        '. The Completion Report reads this global at render time, so a missed ' +
-        'block means the page keeps showing the frozen 29 July snapshot while ' +
-        'appearing to be wired live.');
-  }
-  state.template = out;
-  console.log('  dropped baked data       ' + 'COMPLETION_DATA'.padEnd(42) + kb(size));
-  return size;
-}
 
 /* --- the graft ------------------------------------------------------------- */
 
@@ -706,17 +747,16 @@ function build(name, spec) {
         ' snapshot(s) were found. Set data:true for this page.');
   }
 
-  // 2. Patch the shared auth module. Every page inlines it.
-  if (!state.template.includes('OLH shared authentication')) {
-    die(name + ': the shared auth module is missing. Every page in the export ' +
-        'carries it; a page without it has no sign-in gate at all.');
-  }
-  for (const [label, find, replace] of AUTH_PATCHES) {
-    sub(state, name, 'auth: ' + label, find, replace);
-  }
-  console.log('  auth patches             ' + AUTH_PATCHES.length + ' applied');
+  // 2. Patch the shared auth module, inline or in the manifest.
+  patchAuth(state, name);
 
   // 2b. Rename the identifiers the bundler's camelCase rewrite would corrupt.
+  //     Template-only, deliberately: the rewrite is applied to the plain inline
+  //     scripts the bundler re-emits at render time, not to manifest assets --
+  //     the bundler's own 68 KB runtime is an asset and carries 59 camelCase
+  //     declarations of its own. So while the auth module lives in the manifest
+  //     these all match nothing, which is the correct answer, and they start
+  //     applying again by themselves if a later export re-inlines it.
   const renamed = [];
   for (const [from, to] of MANGLE_SAFE_RENAMES) {
     const n = renameIdentifier(state, from, to);
@@ -737,16 +777,6 @@ function build(name, spec) {
   for (const [label, find, replace] of (spec.patches || [])) {
     sub(state, name, label, find, replace);
     console.log('  patched                  ' + label);
-  }
-
-  // 4b. The Completion Report's own snapshot + loader.
-  if (spec.completionLive) {
-    dropCompletionSnapshot(state, name);
-    if (!state.template.includes('</body>')) die(name + ': no </body> to inject the completion loader before');
-    sub(state, name, 'completion loader injection', '</body>',
-      '<script>\n/* completion live data loader \u2014 injected by dev/build-live-pages.js */\n' +
-      COMPLETION_LOADER + '\n</script>\n</body>');
-    console.log('  loader injected          completion -> /api/jobs');
   }
 
   // 5. Inline the loader last, so it runs after the app has mounted and the
