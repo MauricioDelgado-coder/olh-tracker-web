@@ -878,6 +878,49 @@ a perfectly correct sign-in gate while its data path was dead. A thrown
 TypeError is never an expected state. 401s are not failures there — an anonymous
 visitor being refused is the boundary working, and section 2 already asserts it.
 
+## The tile groups by community, and the top row lines up
+
+The right-hand tile was "Homesites by Stage": two-digit JDE codes that need the
+stage table to read. It groups by **Community** now, which is how the division is
+organised and how the report gets used. Same behaviour — click a bar to filter,
+click again to clear — driving the `comm` filter instead of `stage`. Both are
+still available as selects in the Filters card.
+
+Still the top 8 by count. That is deliberate: the tile's height sets the bottom
+of the whole row, there are 50-odd communities, and everything outside the top 8
+is reachable from the Community select. Names are truncated with an ellipsis
+rather than wrapped — a wrapped name makes its row taller than the others — with
+the full name on the button's title.
+
+The three panels share one grid row under `align-items:start`, so each was only
+as tall as its own content and the bottom edge was ragged. Both short panels get
+`align-self:stretch` rather than a hand-tuned height: the row is as tall as its
+tallest panel, and that is the community tile, whose height is however many bars
+the current filters leave — 8 normally, 1 when a community is selected. A pixel
+nudge could only ever be right for one of those states.
+
+The Filters card gives its slack to the EDD slicer, which is the only growable
+child, so the slicer gets taller. Its bars moved from px to a percentage for the
+same reason: a 40px-scaled bar in a taller box just sits at the bottom with
+headroom above it. The calendar gives its slack to its week rows via
+`grid-auto-rows:1fr`, which reads as slightly roomier day cells rather than a gap
+under the last week.
+
+`dev/measure-panels.js` reports each panel's height and bottom edge at three
+viewport widths and can screenshot the result:
+
+    node dev/measure-panels.js http://localhost:8902/completion 1440 --shot
+
+It seeds an obvious layout fixture first. Measured signed-out the tile has no
+bars, so the row is short and the numbers describe a view nobody uses. That
+fixture lives in the measuring script only — it is never built and never shipped,
+and the values are deliberate nonsense so a measurement screenshot can never be
+mistaken for real homesites.
+
+`dev/verify-server.js` now serves `assets/` and `fonts/` too. It served HTML and
+nothing else, so a logo missing from `public/` looked exactly like one that was
+there — a harness that cannot tell those apart is not checking them.
+
 ## tracker-new stayed deleted
 
 The export ships `tracker-new.html` again and links job numbers to it. It is

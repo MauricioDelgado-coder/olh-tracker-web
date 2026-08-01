@@ -72,6 +72,26 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  /* Static files under assets/ and fonts/.
+   *
+   * This server used to serve HTML and nothing else, so /assets/… 404'd
+   * locally no matter what was in the publish directory -- which is why a
+   * logo that was missing from public/ for days looked exactly the same here
+   * as one that was present. A harness that cannot tell those apart is not
+   * checking them. */
+  const STATIC = /^\/((?:assets|fonts)\/[A-Za-z0-9._-]+)$/.exec(p);
+  if (STATIC) {
+    const full = path.join(DIR, STATIC[1]);
+    if (!fs.existsSync(full)) { res.writeHead(404); res.end('missing ' + STATIC[1]); return; }
+    const ext = path.extname(full).toLowerCase();
+    const type = ext === '.png' ? 'image/png' : ext === '.svg' ? 'image/svg+xml'
+      : ext === '.woff2' ? 'font/woff2' : ext === '.woff' ? 'font/woff'
+        : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'application/octet-stream';
+    res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-store' });
+    res.end(fs.readFileSync(full));
+    return;
+  }
+
   const file = ROUTES[p] || (/^\/[A-Za-z0-9._-]+\.html$/.test(p) ? p.slice(1) : null);
   if (!file) { res.writeHead(404); res.end('not found'); return; }
   const full = path.join(DIR, file);

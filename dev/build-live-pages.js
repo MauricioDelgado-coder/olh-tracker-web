@@ -348,6 +348,136 @@ const PAGES = {
       // and the last of them still referenced window.COMPLETION_SOURCE, a
       // global nothing sets any more.
 
+      /* Regroup the right-hand tile from Construction Stage to Community.
+       *
+       * Stage codes are two digits and told you almost nothing at a glance:
+       * "03 - 166" needs the JDE stage table to read. Community is how the
+       * division is actually organised and how this report gets used. The tile
+       * keeps its behaviour -- click a bar to filter, click again to clear --
+       * it just drives the comm filter now instead of stage. Both filters are
+       * still available as selects in the Filters card.
+       *
+       * Still the top 8 by count, deliberately: the tile's height sets the
+       * bottom of the whole right-hand column, and there are 50-odd
+       * communities. Everything outside the top 8 is reachable from the
+       * Community select. */
+      ['group the tile by community rather than stage',
+       '    // ---- stage bars\n' +
+       '    const sBase = this.filtered("stage");\n' +
+       '    const sc = {};\n' +
+       '    sBase.forEach(r => { if (r.stage) sc[r.stage] = (sc[r.stage] || 0) + 1; });\n' +
+       '    const sKeys = Object.keys(sc).sort((a, b) => sc[b] - sc[a]).slice(0, 8);\n' +
+       '    const sMax = Math.max(1, ...sKeys.map(k => sc[k]));\n' +
+       '    const stageBars = sKeys.map(k => ({\n' +
+       '      label: k, count: sc[k], pct: Math.round(sc[k] / sMax * 100),\n' +
+       '      color: s.stage === k ? "#005DAA" : "#A8C8E2",\n' +
+       '      labelColor: s.stage === k ? "#005DAA" : "#303030",\n' +
+       '      onClick: () => this.set({ stage: s.stage === k ? "" : k })\n' +
+       '    }));',
+       '    // ---- community bars\n' +
+       '    const cBase = this.filtered("comm");\n' +
+       '    const cc = {};\n' +
+       '    cBase.forEach(r => { if (r.community) cc[r.community] = (cc[r.community] || 0) + 1; });\n' +
+       '    const cKeys = Object.keys(cc).sort((a, b) => cc[b] - cc[a] || (a < b ? -1 : 1)).slice(0, 8);\n' +
+       '    const cMax = Math.max(1, ...cKeys.map(k => cc[k]));\n' +
+       '    const commBars = cKeys.map(k => ({\n' +
+       '      label: k, count: cc[k], pct: Math.round(cc[k] / cMax * 100),\n' +
+       '      color: s.comm === k ? "#005DAA" : "#A8C8E2",\n' +
+       '      labelColor: s.comm === k ? "#005DAA" : "#303030",\n' +
+       '      title: k + " \\u00b7 " + cc[k] + " homesite" + (cc[k] === 1 ? "" : "s"),\n' +
+       '      onClick: () => this.set({ comm: s.comm === k ? "" : k })\n' +
+       '    }));'],
+
+      ['retitle the tile',
+       '>Homesites by Stage</span>',
+       '>Homesites by Community</span>'],
+
+      ['pass the community bars to the view',
+       'eddMonths, stageBars,',
+       'eddMonths, commBars,'],
+
+      /* Community names are long where stage codes were two digits, so the
+       * label column has to carry the width and the bar gives some up. Names
+       * are truncated with an ellipsis rather than wrapped -- a wrapped name
+       * makes its row taller than the rest, and this tile's height is what the
+       * left card is aligned against. The full name is on the button title. */
+      ['give the bars room for a community name',
+       '<sc-for list="{{ stageBars }}" as="s" hint-placeholder-count="6">\n' +
+       '          <button sc-camel-on-click="{{ s.onClick }}" style="display:grid;' +
+       'grid-template-columns:34px 1fr 34px;align-items:center;gap:8px;padding:2px 0;' +
+       'border:0;background:transparent;cursor:pointer;text-align:left">\n' +
+       '            <span style="font-size:11.5px;font-weight:600;color:{{ s.labelColor }};' +
+       'font-variant-numeric:tabular-nums">{{ s.label }}</span>',
+       '<sc-for list="{{ commBars }}" as="s" hint-placeholder-count="6">\n' +
+       '          <button sc-camel-on-click="{{ s.onClick }}" title="{{ s.title }}" style="display:grid;' +
+       'grid-template-columns:minmax(0,1fr) 72px 34px;align-items:center;gap:8px;padding:2px 0;' +
+       'border:0;background:transparent;cursor:pointer;text-align:left">\n' +
+       '            <span style="font-size:11.5px;font-weight:600;color:{{ s.labelColor }};' +
+       'overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.label }}</span>'],
+
+      /* Align the bottom of the Filters card with the rest of the top row.
+       *
+       * The three panels share one grid row under align-items:start, so each is
+       * only as tall as its own content and the Filters card -- the shortest --
+       * left a ragged edge under the EDD slicer.
+       *
+       * align-self:stretch rather than a taller slicer. A pixel nudge can only
+       * be right for one data state: the row is as tall as the tallest panel,
+       * and the tallest panel is the community tile, whose height is however
+       * many bars the current filters leave (8 normally, 1 when a community is
+       * selected). Stretch tracks that for free, at any viewport, and the
+       * slicer absorbs the slack because it is the only growable child.
+       *
+       * Bar heights move from px to % for the same reason -- a 40px-scaled bar
+       * in a box that is now taller would just sit at the bottom with headroom
+       * above it. As a percentage the chart actually fills the space it was
+       * given, which is the "longer slicer" this was asked for. */
+      /* The calendar is the third panel in that row and was left 54px short by
+       * the same align-items:start, so fixing only the Filters card just moved
+       * the ragged edge. Its week rows take the slack via grid-auto-rows:1fr --
+       * a few px per row, which reads as slightly roomier day cells rather than
+       * a card with a gap at the bottom. */
+      ['let the calendar card fill the row',
+       '<section style="border:1px solid #E4DED2;border-radius:12px;background:#fff;' +
+       'box-shadow:0 1px 2px rgba(27,42,88,.05);overflow:hidden">',
+       '<section style="display:flex;flex-direction:column;align-self:stretch;' +
+       'border:1px solid #E4DED2;border-radius:12px;background:#fff;' +
+       'box-shadow:0 1px 2px rgba(27,42,88,.05);overflow:hidden">'],
+
+      ['let the calendar weeks take the slack',
+       '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;' +
+       'padding:2px 10px 12px">',
+       '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;' +
+       'padding:2px 10px 12px;flex:1 1 auto;grid-auto-rows:1fr">'],
+
+      ['let the Filters card fill the row',
+       '<section style="display:flex;flex-direction:column;gap:10px;min-width:0;' +
+       'padding:12px 14px 14px;border:1px solid #E4DED2;border-radius:12px;' +
+       'background:#fff;box-shadow:0 1px 2px rgba(27,42,88,.05)">',
+       '<section style="display:flex;flex-direction:column;gap:10px;min-width:0;' +
+       'align-self:stretch;padding:12px 14px 14px;border:1px solid #E4DED2;' +
+       'border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(27,42,88,.05)">'],
+
+      ['let the EDD slicer absorb the extra height',
+       '<div style="display:flex;flex-direction:column;gap:5px;margin-top:2px">\n' +
+       '        <span style="font-size:11px;font-weight:600;color:#6F6963">' +
+       'EDD Range \u00b7 click months to filter</span>\n' +
+       '        <div style="display:flex;align-items:flex-end;gap:3px;height:58px">',
+       '<div style="display:flex;flex-direction:column;gap:5px;margin-top:2px;' +
+       'flex:1 1 auto;min-height:0">\n' +
+       '        <span style="font-size:11px;font-weight:600;color:#6F6963">' +
+       'EDD Range \u00b7 click months to filter</span>\n' +
+       '        <div style="display:flex;align-items:flex-end;gap:3px;' +
+       'flex:1 1 auto;min-height:58px">'],
+
+      ['scale the month bars to the space they are given',
+       'h: Math.max(4, Math.round(mc[k] / max * 40)),',
+       'h: Math.max(5, Math.round(mc[k] / max * 100)),'],
+
+      ['draw the month bars as a share of the slicer height',
+       '<span style="width:100%;height:{{ m.h }}px;border-radius:2px 2px 0 0;',
+       '<span style="width:100%;height:{{ m.h }}%;border-radius:2px 2px 0 0;'],
+
       ['give the header a path back to the homepage',
        '<span style="margin-left:auto"><olh-user-chip style="flex:0 0 auto">' +
        '</olh-user-chip></span>',
