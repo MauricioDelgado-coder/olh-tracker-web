@@ -47,6 +47,11 @@ const kb = (n) => (n / 1024).toFixed(0) + ' KB';
 const LOADER = fs.readFileSync(path.join(__dirname, 'live-loader.js'), 'utf8');
 if (!/\/walk-config/.test(LOADER)) die('live-loader.js does not reference /walk-config');
 
+/* The Completion Report needs a different loader: it reads COMPLETION_DATA in a
+   flat per-homesite shape, not the {id,fields} the walk pages consume. */
+const COMPLETION_LOADER = fs.readFileSync(path.join(__dirname, 'completion-loader.js'), 'utf8');
+if (!/COMPLETION_DATA/.test(COMPLETION_LOADER)) die('completion-loader.js does not set COMPLETION_DATA');
+
 /** The globals a bundled snapshot defines. Finding any of these means demo data. */
 const SNAPSHOT_GLOBALS = ['OLH_DATA', 'WALK_ROSTER', 'WALK_DRIVE', 'WALK_PRODUCT_MAP', 'WALK_COMMUNITIES'];
 
@@ -200,6 +205,14 @@ const PAGES = {
       // admins included. Gated on the roster.manage capability rather than the
       // literal role name, which is what users.js and roles.js already enforce
       // server-side, so granting it in the Roles grid surfaces the link too.
+      // "Data updated 7/29/26" was hardcoded into the landing page, which has
+      // no data of its own and therefore no way to know. It sat beside links to
+      // pages that read Airtable live, so it aged into a false claim. Removed
+      // rather than faked: the pages it links to each report their own state.
+      ['drop the hardcoded data-updated date',
+       '<span style="margin-left:auto;font-size:12.5px;color:#908A82">Data updated 7/29/26</span>',
+       ''],
+
       ['supply isAdmin so the User Administration link can render',
        '  renderVals() {\n' +
        '    const n = this.state.narrow;\n' +
@@ -215,9 +228,50 @@ const PAGES = {
   },
 
   // Reads a COMPLETION_DATA asset, which is real and stays. No fixture.
+  // Was the last page in the suite on frozen data: the export bakes 900 records
+  // from the retired Dynamics Export into the template. completionLive deletes
+  // that block and injects completion-loader.js, which reads /api/jobs.
   'completion.html': {
-    data: false, inject: false, caches: [],
+    data: false, inject: false, completionLive: true, caches: [],
     patches: [
+      // data() re-reads window.COMPLETION_DATA on every render, so the loader
+      // only has to set the global and fire the event -- but something must
+      // call setState or React never re-renders. The page's mount handler only
+      // watched the viewport.
+      ['re-render when live data arrives',
+       '  componentDidMount() {\n' +
+       '    this._offVp = window.OLHViewport.watch(n => this.setState({ narrow: n }));\n' +
+       '  }',
+       '  componentDidMount() {\n' +
+       '    this._offVp = window.OLHViewport.watch(n => this.setState({ narrow: n }));\n' +
+       '    this._onData = () => this.setState({ limit: 200 });\n' +
+       '    window.addEventListener("olh-data", this._onData);\n' +
+       '  }\n\n' +
+       '  componentWillUnmount() {\n' +
+       '    if (this._offVp) this._offVp();\n' +
+       '    if (this._onData) window.removeEventListener("olh-data", this._onData);\n' +
+       '  }'],
+
+      // "Data updated 7/29/26" was a hardcoded string. It was wrong the day
+      // after it shipped and it sat next to data that is now loaded live.
+      ['report the real load state instead of a hardcoded date',
+       'Data updated 7/29/26 \u00b7 Orlando Homes division',
+       '{{ updatedLabel }}'],
+
+      ['supply updatedLabel',
+       '    const nw = s.narrow;\n' +
+       '    return {\n' +
+       '      narrow: nw,',
+       '    const nw = s.narrow;\n' +
+       '    const src = (typeof window !== "undefined" && window.COMPLETION_SOURCE) || null;\n' +
+       '    return {\n' +
+       '      updatedLabel: !src ? "Loading\u2026"\n' +
+       '        : src.source === "error" ? "Data unavailable \u00b7 Orlando Homes division"\n' +
+       '        : src.count + " homesites \u00b7 loaded " +\n' +
+       '          src.at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) +\n' +
+       '          " \u00b7 Orlando Homes division",\n' +
+       '      narrow: nw,'],
+
       ['give the header a path back to the homepage',
        '<span style="margin-left:auto"><olh-user-chip style="flex:0 0 auto">' +
        '</olh-user-chip></span>',
@@ -536,6 +590,58 @@ function dropInlineSnapshots(state, name) {
   return drop;
 }
 
+/**
+ * Delete the baked COMPLETION_DATA block from completion.html.
+ *
+ * This one is separate from dropInlineSnapshots because the data is not a demo
+ * fixture -- the 900 records are real homesites from the retired Dynamics
+ * Export. They are removed because they are FROZEN (29 July), not because they
+ * are fake, and completion-loader.js replaces them with a live /api/jobs read.
+ *
+ * Asserted to match exactly one block: silently finding none would ship the
+ * stale snapshot again with a loader layered uselessly on top of it.
+ */
+function dropCompletionSnapshot(state, name) {
+  const tpl = state.template;
+  const CLOSE = '</script>';
+  let out = '';
+  let i = 0;
+  let found = 0;
+  let size = 0;
+
+  for (;;) {
+    const open = tpl.indexOf('<script', i);
+    if (open === -1) { out += tpl.slice(i); break; }
+    const gt = tpl.indexOf('>', open);
+    const close = gt === -1 ? -1 : tpl.indexOf(CLOSE, gt);
+    if (gt === -1 || close === -1) { out += tpl.slice(i); break; }
+
+    const attrs = tpl.slice(open + '<script'.length, gt);
+    const body = tpl.slice(gt + 1, close);
+    const end = close + CLOSE.length;
+    const plain = !/\bsrc\s*=/.test(attrs) && !/\btype\s*=/.test(attrs);
+
+    if (plain && /(window\.)?COMPLETION_DATA\s*=\s*\[/.test(body)) {
+      found += 1;
+      size += body.length;
+      out += tpl.slice(i, open);
+    } else {
+      out += tpl.slice(i, end);
+    }
+    i = end;
+  }
+
+  if (found !== 1) {
+    die(name + ': expected exactly 1 baked COMPLETION_DATA block, found ' + found +
+        '. The Completion Report reads this global at render time, so a missed ' +
+        'block means the page keeps showing the frozen 29 July snapshot while ' +
+        'appearing to be wired live.');
+  }
+  state.template = out;
+  console.log('  dropped baked data       ' + 'COMPLETION_DATA'.padEnd(42) + kb(size));
+  return size;
+}
+
 /* --- the graft ------------------------------------------------------------- */
 
 function build(name, spec) {
@@ -591,6 +697,16 @@ function build(name, spec) {
   for (const [label, find, replace] of (spec.patches || [])) {
     sub(state, name, label, find, replace);
     console.log('  patched                  ' + label);
+  }
+
+  // 4b. The Completion Report's own snapshot + loader.
+  if (spec.completionLive) {
+    dropCompletionSnapshot(state, name);
+    if (!state.template.includes('</body>')) die(name + ': no </body> to inject the completion loader before');
+    sub(state, name, 'completion loader injection', '</body>',
+      '<script>\n/* completion live data loader \u2014 injected by dev/build-live-pages.js */\n' +
+      COMPLETION_LOADER + '\n</script>\n</body>');
+    console.log('  loader injected          completion -> /api/jobs');
   }
 
   // 5. Inline the loader last, so it runs after the app has mounted and the
