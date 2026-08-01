@@ -804,6 +804,37 @@ The workbook also carries its own QAI/QAA/CEL/ACC dates. Those are **not**
 imported. Airtable's are hand-maintained by the OLH team and the sync has never
 touched them; a frozen spreadsheet does not get to overwrite what someone typed.
 
+## The scope, and the archived rows that were inflating it
+
+The Completion Report showed 1,047 homesites when it should have shown 1,013.
+Every one of the extra 34 satisfied the stated scope — started, not complete, no
+Actual COE, lot status B/S/W/M — because they were **archived**.
+
+The sync sets `Record Status = Closed` when a job stops appearing in the
+Salesforce export and freezes its Salesforce columns at whatever they last were.
+Frozen is the problem: an archived job looks started-and-unfinished forever, so
+it matched the scope permanently. 34 had accumulated over three days (7/30–8/1)
+and the count would have climbed every day the sync ran. `Record Status =
+Active` is now the first clause in `inScope`.
+
+`Actual COE Date` blank was added as well. It changes no count today — every row
+in the table is blank there, because the table comes from the "homesites with no
+Actual COE" pull — but that is a property of the upstream query, not of this
+page, and a closed home does not belong on a completion report if the pull ever
+widens.
+
+The `Projected Completion Date >= 2026-07-01` floor was **kept**, confirmed
+08/01. It hides 11 started-but-unfinished homesites whose projection is already
+in the past (the oldest is 2018) and 3 with no projection at all. Those 14 are a
+data-quality question for the tracker rather than rows to schedule against, and
+this report is the forward-looking view.
+
+`dev/check-completion-scope.js` lifts `inScope` out of the built page and runs it
+over the live Jobs table, rather than re-deriving the predicate — a re-derived
+copy only ever tests itself, and the copy is exactly what drifts:
+
+    AIRTABLE_PAT=… node dev/check-completion-scope.js 1013
+
 ## tracker-new stayed deleted
 
 The export ships `tracker-new.html` again and links job numbers to it. It is

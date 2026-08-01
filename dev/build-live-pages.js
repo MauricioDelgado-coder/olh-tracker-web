@@ -279,6 +279,47 @@ const PAGES = {
        *
        * Area Construction Manager is NOT removed: it is derived from the
        * community map and is a real field on the Jobs table. */
+      /* Two conditions the design's own scope is missing.
+       *
+       * Record Status = Active is the important one. The sync ARCHIVES a job
+       * when it stops appearing in the Salesforce export -- it stays in
+       * Airtable for history and its Salesforce columns freeze at whatever they
+       * last were. Frozen means it still looks started-and-unfinished forever,
+       * so every archived row matched the scope and stayed on the report for
+       * good. 34 of them had accumulated in three days (7/30-8/1) and the count
+       * would have kept climbing. They are not open work; they are not in the
+       * pull at all any more.
+       *
+       * Actual COE Date is belt and braces. Every row in the table is blank
+       * here today because the whole table comes from the "homesites with no
+       * Actual COE" pull, so this changes no count right now -- but that is a
+       * property of the upstream query, not of this page, and a closed home has
+       * no business on a completion report if the pull ever widens.
+       *
+       * The 7/1/26 projected-completion floor is deliberately KEPT. It hides 11
+       * started-but-unfinished homesites with a projection already in the past
+       * (one from 2018) and 3 with no projection at all. Confirmed 08/01 as
+       * intended: this report is the forward-looking view, and those 14 are a
+       * data-quality question for the tracker rather than rows to schedule
+       * against. Scope total: 1,013.
+       */
+      ['scope the report to live, unclosed homesites',
+       'const LOTS = { B: 1, S: 1, W: 1, M: 1 };\n' +
+       '    // Report scope: started, not yet complete, projected to finish 7/1/26 or later, lot status B/S/W/M\n' +
+       '    const inScope = f => !!iso(f["Actual Start Date"])\n' +
+       '      && !iso(f["Actual Completion Date"])\n' +
+       '      && iso(f["Projected Completion Date"]) >= "2026-07-01"\n' +
+       '      && LOTS[(f["Lot Status"] || "").trim().toUpperCase()] === 1;',
+       'const LOTS = { B: 1, S: 1, W: 1, M: 1 };\n' +
+       '    // Report scope: still in the Salesforce pull, started, not yet complete,\n' +
+       '    // no Actual COE, projected to finish 7/1/26 or later, lot status B/S/W/M\n' +
+       '    const inScope = f => (f["Record Status"] || "") === "Active"\n' +
+       '      && !!iso(f["Actual Start Date"])\n' +
+       '      && !iso(f["Actual Completion Date"])\n' +
+       '      && !iso(f["Actual COE Date"])\n' +
+       '      && iso(f["Projected Completion Date"]) >= "2026-07-01"\n' +
+       '      && LOTS[(f["Lot Status"] || "").trim().toUpperCase()] === 1;'],
+
       ['drop the plan/elevation body cells (no Airtable source)',
        '            <sc-raw-td style="padding:7px 10px;border-bottom:1px solid #F1EBE1;' +
        'white-space:nowrap">{{ r.planName }}</sc-raw-td>\n' +
