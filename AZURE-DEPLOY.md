@@ -134,7 +134,12 @@ Then **Review + create** → **Create**. About a minute.
 2. Overview toolbar → **Manage deployment token** → copy it.
 3. GitHub → `olh-tracker-web` → Settings → Secrets and variables → Actions →
    **New repository secret**:
-   - Name: `AZURE_STATIC_WEB_APPS_API_TOKEN`
+   - Name: `AZURE_STATIC_WEB_TOKEN` — must match the workflow exactly. Azure's
+     own generated workflows call this `AZURE_STATIC_WEB_APPS_API_TOKEN`; the
+     name is arbitrary, but a mismatch resolves to an empty string and the
+     deploy fails with `deployment_token was not provided` rather than anything
+     that mentions a secret. The `Check the deployment token is set` step exists
+     to catch that.
    - Secret: the token
 
 Confirm the repo is **private** while you are on that page.
@@ -248,7 +253,7 @@ Confirm it is **private** before the first push; the tracker's data is real.
 
 1. Portal → your static web app → **Manage deployment token** → copy it.
 2. GitHub → repo → Settings → Secrets and variables → Actions → **New repository
-   secret**, named `AZURE_STATIC_WEB_APPS_API_TOKEN`.
+   secret**, named `AZURE_STATIC_WEB_TOKEN` (matching the workflow).
 3. Push. `.github/workflows/azure-static-web-apps.yml` stages `api/_netlify`,
    asserts it matches `netlify/`, and deploys.
 

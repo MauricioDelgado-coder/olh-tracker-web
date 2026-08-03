@@ -68,10 +68,10 @@ jobs:
       # look identical from the outside -- absent versus present-but-wrong.
       - name: Check the deployment token is set
         env:
-          TOK: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          TOK: ${{ secrets.AZURE_STATIC_WEB_TOKEN }}
         run: |
           if [ -z "$TOK" ]; then
-            echo "::error::AZURE_STATIC_WEB_APPS_API_TOKEN is empty. It must be a REPOSITORY secret (Settings -> Secrets and variables -> Actions -> Secrets tab -> New repository secret). An Environment secret, or a Variable instead of a Secret, both resolve to empty here."
+            echo "::error::AZURE_STATIC_WEB_TOKEN is empty. It must be a REPOSITORY secret (Settings -> Secrets and variables -> Actions -> Secrets tab). A name that does not match this one exactly, an Environment secret, or a Variable instead of a Secret all resolve to empty here."
             exit 1
           fi
           echo "Deployment token present (${#TOK} chars)."
@@ -79,7 +79,7 @@ jobs:
       - name: Deploy
         uses: Azure/static-web-apps-deploy@v1
         with:
-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_TOKEN }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: upload
           app_location: 'public'
@@ -98,5 +98,5 @@ jobs:
       - name: Close
         uses: Azure/static-web-apps-deploy@v1
         with:
-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_TOKEN }}
           action: close
