@@ -88,8 +88,14 @@ function pat() {
   const v = process.env.AIRTABLE_PAT;
   if (!v || !String(v).trim()) {
     const e = new Error(
-      'Server is not configured: AIRTABLE_PAT is unset. Set it in Netlify under ' +
-      'Site configuration -> Environment variables, then redeploy.'
+      // Names both hosts because the app now runs on both, and a message that
+      // sends you to the wrong product is worse than one that names neither.
+      // On Azure the setting takes effect at the next cold start; only Netlify
+      // needs the redeploy.
+      'Server is not configured: AIRTABLE_PAT is unset. Set it under ' +
+      'Environment variables for this site -- Azure Static Web Apps: Settings -> ' +
+      'Environment variables; Netlify: Site configuration -> Environment ' +
+      'variables, then redeploy.'
     );
     e.statusCode = 500;
     throw e;
@@ -218,8 +224,10 @@ function secret() {
   if (!v || String(v).trim().length < 32) {
     const e = new Error(
       'Server is not configured: SESSION_SECRET is unset or shorter than 32 characters. ' +
-      'Generate one with `openssl rand -hex 32`, set it in Netlify under Site ' +
-      'configuration -> Environment variables, then redeploy.'
+      'Generate one with `openssl rand -hex 32` and set it under Environment ' +
+      'variables for this site (Azure Static Web Apps: Settings -> Environment ' +
+      'variables; Netlify: Site configuration -> Environment variables, then ' +
+      'redeploy).'
     );
     e.statusCode = 500;
     throw e;

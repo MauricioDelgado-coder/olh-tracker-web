@@ -258,7 +258,8 @@ exports.handler = async (event) => {
     return reply(500, {
       error:
         'Server is not configured: the AIRTABLE_PAT environment variable is unset. ' +
-        'Set it in Netlify (scopes: data.records:read, data.records:write) and redeploy.'
+        'Set it under Environment variables for this site ' +
+        '(scopes: data.records:read, data.records:write).'
     });
   }
 
