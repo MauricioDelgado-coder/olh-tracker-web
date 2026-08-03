@@ -314,9 +314,30 @@ That was the user's explicit choice, so the write endpoint is hardened instead:
    > `node dev/build-live-pages.js` against a directory the repo did not contain,
    > and `dev/seed-admin.js`, the only way to bootstrap the first admin, living
    > on one laptop.
-6. **No browser storage.** The app uses no `localStorage` or `sessionStorage`.
-   Filter state lives in memory and in the URL query string, which is what makes
-   a filtered view shareable by link.
+6. **Browser storage: filter state no, session yes.** Filter state lives in
+   memory and in the URL query string, which is what makes a filtered view
+   shareable by link.
+
+   The **session does** live in `localStorage` (`olh-auth.js` reads and writes it
+   there, along with a cached roles list). This item used to read "the app uses no
+   `localStorage` or `sessionStorage`", which was true before the 2026-08 auth
+   system and false the moment it landed — a stale security claim is worse than
+   none, because it is the kind of line a reviewer takes at face value.
+
+   > What it costs: the session is reachable by any JavaScript running on the
+   > page, where an `httpOnly` cookie would not be. What it does not cost: the
+   > boundary itself. Every data and roster endpoint calls `requireSession` /
+   > `requirePerm` from `netlify/lib/olh-auth.js` before it reads Airtable — the
+   > two that do not are `auth.js` and `password.js`, which cannot, because
+   > sign-in and forgot-password are how you get a session in the first place. So
+   > this affects how a token could be *stolen*, not whether an unauthenticated
+   > read is *refused*.
+   >
+   > `dev/verify-pages.sh` documents the related decision not to preseed a session
+   > from the CLI — doing so would mean shipping a page that mints a session from a
+   > URL parameter, i.e. an auth bypass sitting in `public/` for the sake of test
+   > convenience. The data path is covered instead by `dev/verify-auth.sh` at the
+   > API level.
 
 ### Adding password protection later
 
