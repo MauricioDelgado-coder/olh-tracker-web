@@ -99,11 +99,21 @@ Apps* in the portal and press **Create**.
 | Region | `East US 2` (this sets where the managed functions run) |
 
 > **As actually created, 2026-08-03:** name `webtracker`, resource group
-> `webtracker_group`, Free, subscription `Azure subscription 1`
-> (`c8e4192d-73cc-417d-bf55-68029eada037`), default hostname
-> `https://jolly-mud-0ff2f8910.7.azurestaticapps.net`. The names below differ from
-> the table above; `dev/run-daily-sync.sh` has been updated to match, and
+> `webtracker_group`, Free, region `centralus`, subscription
+> `Azure subscription 1` (`c8e4192d-73cc-417d-bf55-68029eada037`), default
+> hostname `https://jolly-mud-0ff2f8910.7.azurestaticapps.net`. The names differ
+> from the table above; `dev/run-daily-sync.sh` has been updated to match, and
 > `OLH_SWA_NAME` / `OLH_SWA_RESOURCE_GROUP` override them if this ever moves.
+>
+> One environment only (`trafficSplitting.environmentDistribution: {default: 100}`),
+> `provider: None` and `repositoryUrl: null` — confirming the deployment source was
+> left unattached, so the committed workflow is the only thing that deploys.
+> `stableInboundIP: 64.236.125.137`, worth keeping if IT ever wants to allowlist it.
+>
+> **App settings are not in the resource JSON.** They live in the sub-resource
+> `.../staticSites/webtracker/config/appsettings`, excluded from the site's ARM
+> view because they carry secrets. The JSON View blade therefore cannot confirm
+> whether `AIRTABLE_PAT` is set; `az staticwebapp appsettings list` can.
 
 Free covers everything the tracker needs: managed functions, a custom domain with
 a free certificate, 100 GB/month. Standard (~$9/month) buys `allowedIpRanges`
