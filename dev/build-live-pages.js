@@ -204,7 +204,17 @@ const AUTH_PATCHES = [
    '      var h = extra || {};\n' +
    '      h.Accept = "application/json";\n' +
    '      var tok = Auth.token();\n' +
-   '      if (tok) h.Authorization = "Bearer " + tok;\n' +
+   '      if (tok) {\n' +
+   '        /* Both, deliberately. Azure Static Web Apps overwrites\n' +
+   '           Authorization with its own bearer token before a managed\n' +
+   '           function sees it (Azure/static-web-apps#158), so on Azure the\n' +
+   '           only copy that survives is the one in a header its proxy does\n' +
+   '           not recognise. bearer() in netlify/lib/olh-auth.js prefers\n' +
+   '           X-OLH-Token and falls back to Authorization, so one build works\n' +
+   '           on both hosts and neither header is load-bearing alone. */\n' +
+   '        h.Authorization = "Bearer " + tok;\n' +
+   '        h["X-OLH-Token"] = "Bearer " + tok;\n' +
+   '      }\n' +
    '      return h;\n' +
    '    },'],
 

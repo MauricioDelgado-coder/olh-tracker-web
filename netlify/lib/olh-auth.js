@@ -442,9 +442,29 @@ const userByTokenHash = (hash) =>
 
 /* ---- Session resolution --------------------------------------------------- */
 
+/**
+ * Read the session token, preferring X-OLH-Token over Authorization.
+ *
+ * Azure Static Web Apps OVERWRITES the Authorization header on every call to a
+ * managed function: its edge proxy puts its own bearer token there before the
+ * function is invoked, so whatever the browser sent is gone by the time this
+ * runs. The symptom is specific and misleading -- sign-in works (it needs no
+ * token), then every data endpoint 401s with "Your session has expired" even
+ * though the user chip says they are signed in, because bearer() returns
+ * Azure's token and readSession() rightly refuses it.
+ *
+ * Azure/static-web-apps#158 and #275, open since 2020. There is no setting for
+ * it and the original value is not preserved under another name, so the only
+ * fix is a header the proxy does not know about. OLHAuth.authHeaders() sends
+ * BOTH: Authorization for Netlify and anything else, X-OLH-Token for Azure.
+ *
+ * Authorization stays as the fallback rather than being replaced, so a client
+ * that predates this change keeps working on Netlify, and so does curl.
+ */
 function bearer(event) {
   const h = event.headers || {};
-  const raw = h.authorization || h.Authorization || '';
+  const raw = h['x-olh-token'] || h['X-OLH-Token'] ||
+              h.authorization || h.Authorization || '';
   const m = String(raw).match(/^Bearer\s+(.+)$/i);
   return m ? m[1].trim() : '';
 }
