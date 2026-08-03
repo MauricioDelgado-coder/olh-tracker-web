@@ -57,6 +57,25 @@ jobs:
         run: bash dev/check-export-errors.sh public
         continue-on-error: true
 
+      # The deploy action's own failure for a missing token is a 21-second docker
+      # invocation followed by "An unknown exception has occurred", which reads
+      # like the deploy broke rather than like a secret is unset. Checking first
+      # turns that into one line at the top of the job.
+      #
+      # The token goes through `env:` rather than being interpolated into the
+      # script: a secret expanded directly into a `run:` block can end up in the
+      # log. Only its LENGTH is printed, which distinguishes the two cases that
+      # look identical from the outside -- absent versus present-but-wrong.
+      - name: Check the deployment token is set
+        env:
+          TOK: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+        run: |
+          if [ -z "$TOK" ]; then
+            echo "::error::AZURE_STATIC_WEB_APPS_API_TOKEN is empty. It must be a REPOSITORY secret (Settings -> Secrets and variables -> Actions -> Secrets tab -> New repository secret). An Environment secret, or a Variable instead of a Secret, both resolve to empty here."
+            exit 1
+          fi
+          echo "Deployment token present (${#TOK} chars)."
+
       - name: Deploy
         uses: Azure/static-web-apps-deploy@v1
         with:
