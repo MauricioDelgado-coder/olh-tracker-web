@@ -218,6 +218,27 @@ const AUTH_PATCHES = [
    '      return h;\n' +
    '    },'],
 
+  /* The companion to the authHeaders patch above, and the reason the first
+     attempt at this fix looked like it worked and did not.
+
+     There are exactly two places the client attaches the session: authHeaders()
+     for the four data loaders, and api() for everything the auth module owns --
+     sign-in, /session, /users, /roles. Patching only the first fixed the data
+     endpoints while leaving /session broken, and /session is what every page
+     calls on load to restore the session. So on Azure each page decided the
+     user was signed out and bounced to the sign-in screen, which reads as
+     "login does not stick" rather than as a header problem.
+
+     Same reasoning as authHeaders(): Azure Static Web Apps overwrites
+     Authorization before a managed function sees it, so send both and let
+     bearer() prefer the one that survives. */
+  ['api(): send the session in a header Azure cannot overwrite',
+   '    if (state.token) headers.Authorization = "Bearer " + state.token;',
+   '    if (state.token) {\n' +
+   '      headers.Authorization = "Bearer " + state.token;\n' +
+   '      headers["X-OLH-Token"] = "Bearer " + state.token;\n' +
+   '    }'],
+
   ['users: do not show a fabricated directory when the server refuses',
    '      }).catch(seedUsers);',
    '      }).catch(function (err) { if (err && err.status) throw err; return seedUsers(); });']
