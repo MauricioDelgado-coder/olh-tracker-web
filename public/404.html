@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Not found — OLH Tracker</title>
+<!--
+  Served by responseOverrides["404"] in staticwebapp.config.json.
+
+  Deliberately static and empty of data. Static Web Apps has no equivalent of
+  Netlify's implicit 404, and the alternative — navigationFallback to index.html
+  — would answer 200 with the landing page for every mistyped path, including
+  /api typos, handing a fetch() HTML where it expects JSON.
+
+  No fonts, no logo, no API call: a 404 that depends on the rest of the site
+  loading is a 404 that can fail.
+-->
+<style>
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: #f7f8fa; color: #1a1d21;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .box { text-align: center; padding: 32px; max-width: 30rem; }
+  h1 { font-size: 1.25rem; margin: 0 0 .5rem; font-weight: 600; }
+  p { margin: 0 0 1.25rem; color: #6b7280; font-size: .875rem; line-height: 1.5; }
+  a { color: #2563eb; font-size: .875rem; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+  <div class="box">
+    <h1>That page isn&rsquo;t here</h1>
+    <p>The address may be mistyped, or the page may have been removed.</p>
+    <a href="/">Back to the OLH Tracker</a>
+  </div>
+</body>
+</html>

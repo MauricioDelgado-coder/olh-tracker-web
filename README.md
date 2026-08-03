@@ -1,5 +1,13 @@
 # OLH QA & Closing Tracker — Web Front End
 
+> **Azure:** the site can also be deployed to Azure Static Web Apps. Nothing in
+> `netlify/` changed — `api/src/netlify-adapter.js` wraps the same eight handlers
+> — so both hosts run from this tree and the cutover is reversible. Resource
+> creation, app settings, the four ways Azure does not behave like Netlify, and
+> the cutover checklist are in **[AZURE-DEPLOY.md](AZURE-DEPLOY.md)**. The rest of
+> this file is host-agnostic apart from the Netlify-specific deploy sections
+> below.
+
 An internal tool for viewing and editing QA / closing milestones on ~930 live
 job records held in Airtable. No npm dependencies for the front end, and no
 build step on Netlify — the HTML is served straight from the repo root.

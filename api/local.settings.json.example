@@ -1,0 +1,10 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "AzureWebJobsStorage": "",
+    "AIRTABLE_PAT": "paste_token_here",
+    "SESSION_SECRET": "openssl rand -hex 32",
+    "SITE_URL": "http://localhost:4280"
+  }
+}

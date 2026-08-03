@@ -1,0 +1,17 @@
+{
+  "name": "olh-tracker-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Azure Functions host for the OLH tracker API. Wraps the handlers in netlify/functions unchanged -- see src/netlify-adapter.js.",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "prestart": "node ../dev/build-azure-api.js",
+    "start": "func start"
+  },
+  "dependencies": {
+    "@azure/functions": "^4.6.0"
+  }
+}

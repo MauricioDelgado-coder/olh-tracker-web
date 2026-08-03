@@ -52,6 +52,16 @@
   status = 404
   force = true
 
+# AZURE-DEPLOY.md names the base id and the app settings, same as README.md, and
+# for the same reason is not something to hand out at an unlisted URL. Blocked
+# here as well as in public/staticwebapp.config.json so neither host is the one
+# that serves it.
+[[redirects]]
+  from = "/AZURE-DEPLOY.md"
+  to = "/blocked"
+  status = 404
+  force = true
+
 [[redirects]]
   from = "/.gitignore"
   to = "/blocked"

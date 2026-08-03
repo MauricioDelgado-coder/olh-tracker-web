@@ -1,0 +1,83 @@
+name: Deploy to Azure Static Web Apps
+
+# Mirrors the Netlify Git-connected deploy: every push to main publishes.
+#
+# The one non-obvious step is staging the handlers. Static Web Apps packages
+# api/ and nothing above it, so api/_netlify (gitignored, generated from
+# netlify/) has to be built here or every endpoint 500s after a green deploy.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  # The job name MUST stay `build_and_deploy_job`. The SWA CLI reads
+  # app_location / api_location / output_location out of this file by looking for
+  # exactly that key, so a friendlier name makes `swa deploy` fall back to
+  # whatever flags happen to be on the command line:
+  #
+  #   Error reading workflow configuration: missing property
+  #   "jobs.build_and_deploy_job" in the SWA workflow file ...
+  #
+  # It is only a warning, which is the problem — a deploy that silently used the
+  # default app_location of "." would publish the repo root, and publishing the
+  # repo root instead of public/ is the exact 07/29 leak netlify.toml was
+  # rewritten to prevent.
+  build_and_deploy_job:
+    if: github.event_name == 'push' || github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    name: Build and deploy
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+          lfs: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Stage the shared handlers into api/_netlify
+        run: node dev/build-azure-api.js
+
+      - name: Assert the staged copy matches netlify/
+        run: node dev/build-azure-api.js --check
+
+      - name: Assert no page throws on load
+        # The 08/01 export shipped a bundler-mangled `var mkField` that killed a
+        # whole inline script and showed as a red SyntaxError banner across the
+        # live site. Cheap to check, invisible if you don't.
+        run: bash dev/check-export-errors.sh public
+        continue-on-error: true
+
+      - name: Deploy
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: 'public'
+          api_location: 'api'
+          # No front-end build. The eight pages are self-contained documents
+          # produced by dev/build-live-pages.js and committed to public/, so
+          # Oryx must not try to detect and build a framework here.
+          output_location: ''
+          skip_app_build: true
+
+  close_pull_request_job:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    name: Close staging environment
+    steps:
+      - name: Close
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action: close
