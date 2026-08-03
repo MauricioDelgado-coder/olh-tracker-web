@@ -294,9 +294,23 @@ check('statusCode -> status, headers and body preserved', () => {
   assert.deepStrictEqual(JSON.parse(out.body), { error: 'Set a password first.', mustSetPassword: true });
 });
 
-check('a 204 with an empty body stays a 204', () => {
+check('a 204 keeps its headers and carries NO body property', () => {
   const out = adapter.toAzureResponse({ statusCode: 204, headers: { Allow: 'GET' }, body: '' });
   assert.strictEqual(out.status, 204);
+  assert.strictEqual(out.headers.Allow, 'GET');
+  // Regression test for a live-site 500. The handlers return `body: ''` with a
+  // 204; passing that through made the Azure host answer OPTIONS /api/jobs with
+  // an empty 500. '' is still a body to the host, so the property must be absent.
+  assert.ok(!('body' in out), 'a 204 must not carry a body property at all');
+});
+
+check('a 304 is treated the same as a 204', () => {
+  const out = adapter.toAzureResponse({ statusCode: 304, headers: {}, body: '' });
+  assert.ok(!('body' in out));
+});
+
+check('a 200 with an empty body still sends one', () => {
+  const out = adapter.toAzureResponse({ statusCode: 200, headers: {}, body: '' });
   assert.strictEqual(out.body, '');
 });
 

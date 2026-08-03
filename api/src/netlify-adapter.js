@@ -138,11 +138,20 @@ function toAzureResponse(result) {
       jsonBody: { error: 'The handler returned no response.' }
     };
   }
-  return {
-    status: result.statusCode || 200,
-    headers: result.headers || {},
-    body: result.body == null ? '' : String(result.body)
-  };
+  const status = result.statusCode || 200;
+  const out = { status, headers: result.headers || {} };
+
+  // A 204 or 304 must not carry a body. The handlers return `body: ''` with
+  // their 204s, which Netlify accepted and Azure's Functions host does not --
+  // it answered `OPTIONS /api/jobs` with a bodyless 500 in production while the
+  // same handler returned 204 locally. Omit the property entirely rather than
+  // setting it to '', because '' is still a body as far as the host is
+  // concerned. Found on the live site, not in the local suite: nothing here
+  // exercised OPTIONS against a real Functions host.
+  if (status !== 204 && status !== 304) {
+    out.body = result.body == null ? '' : String(result.body);
+  }
+  return out;
 }
 
 /**
