@@ -315,3 +315,22 @@
   for = "/fonts/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
+
+
+# ---- /version.json must never be cached ------------------------------------
+# Written by dev/release.sh: {gitSha, exportDate, builtAt}. dev/whats-live.sh
+# reads it to answer "is prod current?", and a CDN-cached copy makes it answer
+# that question wrongly -- reporting a stale SHA, which is the one failure mode a
+# tool whose entire job is currency must not have. The no-store rules above cover
+# /*.html and /api/*; this file is neither.
+#
+# It exposes a short commit SHA and a build timestamp to anyone who asks. That is
+# a deliberate trade for being able to check what is deployed without an
+# investigation: the repo is private, the SHA reveals nothing without it, and the
+# alternative was patching a build stamp into eight bundled pages on every
+# re-export.
+[[headers]]
+  for = "/version.json"
+  [headers.values]
+    Cache-Control = "no-store, must-revalidate"
+    X-Robots-Tag = "noindex, nofollow, noarchive"

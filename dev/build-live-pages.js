@@ -671,6 +671,28 @@ const PAGES = {
 
 /* --- bundle helpers -------------------------------------------------------- */
 
+/**
+ * Pages in the publish directory that are legitimately not design bundles.
+ *
+ * Deliberately a short, explicit list rather than a shape test: see the comment
+ * in checkStaticRefs(). Anything else with an .html extension in publish is
+ * something nobody declared, and publish is served.
+ */
+const HAND_WRITTEN_PAGES = ['404.html'];
+
+/**
+ * Is this file a design-tool bundle at all?
+ *
+ * loadBundle() is deliberately fatal on a malformed bundle -- a page declared in
+ * PAGES that has lost its manifest is a broken export and must stop the build.
+ * But "not a bundle" and "a broken bundle" are different facts, and only the
+ * caller knows which one is an error. checkStaticRefs() walks every .html in the
+ * publish directory, where hand-written pages legitimately live.
+ */
+function isBundle(file) {
+  return fs.readFileSync(file, 'utf8').includes('<script type="__bundler/manifest">');
+}
+
 function loadBundle(file) {
   const lines = fs.readFileSync(file, 'utf8').split('\n');
   const find = (type) => {
@@ -1095,6 +1117,40 @@ for (const [name, spec] of Object.entries(PAGES)) {
 function checkStaticRefs(pub) {
   const refs = new Map();
   for (const name of fs.readdirSync(pub).filter((f) => f.endsWith('.html'))) {
+    /* Not every page in publish is a design-tool bundle. 404.html is hand
+       written, and loadBundle() calls die() on anything with no
+       __bundler/manifest block -- so pointing this build at a publish dir that
+       contains one killed the whole run at the very last step, AFTER every page
+       had already been written:
+
+         BUILD FAILED: 404.html: no __bundler/manifest block
+
+       It went unnoticed because 404.html was added on 08/03, after the 08/01
+       build, so no release had reached this line since.
+
+       Skipped by NAME, not by "does it happen to be a bundle". Walking every
+       .html and refusing to read anything unexpected was, by accident, the only
+       thing in the release path that noticed a file in publish that nobody put
+       there deliberately -- and publish is an allow-list precisely because a
+       file in it is a served file. Turning the hard failure into a soft "not a
+       bundle, skipping" would have handed that back. So a non-bundle page is
+       fine only if it is on this list, and a new one has to be added here on
+       purpose.
+
+       Note this check is about asset references the bundler HID inside
+       compressed manifest entries. A hand-written page's <img src> is in plain
+       sight, but "visible" is not "verified" -- if 404.html ever references an
+       image, add the reference scan for it rather than assuming someone looked. */
+    if (!isBundle(path.join(pub, name))) {
+      if (!HAND_WRITTEN_PAGES.includes(name)) {
+        die('unexpected file in the publish directory: ' + name + '\n' +
+            '  It is not a design bundle and not a known hand-written page, which\n' +
+            '  means nobody declared it -- and everything in publish is served.\n' +
+            '  Delete it, or add it to HAND_WRITTEN_PAGES if it belongs.');
+      }
+      console.log('  skipped  ' + name + '  (declared hand-written, not a bundle)');
+      continue;
+    }
     const state = loadBundle(path.join(pub, name));
     const texts = [state.template];
     for (const entry of Object.values(state.manifest)) {

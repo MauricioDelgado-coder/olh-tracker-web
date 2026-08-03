@@ -27,6 +27,8 @@
 
     { "route": "/*.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
 
+    { "route": "/version.json", "headers": { "Cache-Control": "no-store, must-revalidate" } },
+
     { "route": "/api/*", "headers": { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" } },
 
     { "route": "/fonts/*", "headers": { "Cache-Control": "public, max-age=31536000, immutable" } },

@@ -78,3 +78,18 @@ support.js
 uploads/
 production/
 .thumbnail
+
+# ---------------------------------------------------------------------------
+# Staged design exports (dev/release.sh)
+# ---------------------------------------------------------------------------
+# exports/<date>/ is where release.sh puts each export: raw/ verbatim, pages/
+# renamed to deployed names. Same reason as the rules above -- olh-data.js is
+# ~2 MB of real homesite records, and the .dc.html templates are large. They are
+# build inputs, not source we maintain.
+#
+# exports/manifest.json IS committed, and is the whole point of the arrangement:
+# without it, a design change is a 1 MB diff in a generated file with no way to
+# tell which export produced it. The manifest is names, sizes and content hashes
+# -- diffable, no data in it, and enough to answer "which export is prod on?"
+exports/*
+!exports/manifest.json
