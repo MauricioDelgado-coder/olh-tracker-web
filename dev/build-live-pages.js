@@ -872,9 +872,16 @@ const PAGES = {
       // silently did nothing (it shipped once that way). With the fixture deleted
       // there is no sample data on this page in any state, so the branch cannot
       // legitimately be reached and saying "Sample data" is never correct.
+      //
+      // The 08-03 (evening) export appended a ` + loaded` page-load stamp to all
+      // three branches of syncedLabel, which moved this anchor and stopped the
+      // build -- the assertion working as intended. The suffix is carried through
+      // rather than dropped: it is the design's own stamp and the other two
+      // branches keep it, so removing it here would make the failure state the
+      // one label that cannot tell you how old the tab is.
       ['do not call an empty tracker "Sample data"',
-       "return 'Sample data · ' + when;",
-       "return 'No data loaded · ' + when;"],
+       "return 'Sample data · ' + when + loaded;",
+       "return 'No data loaded · ' + when + loaded;"],
 
       // The tracker has its own loadLive()/persist() and never went through
       // OLHAuth.api(), so both its read and its write were anonymous. The read
