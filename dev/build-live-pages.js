@@ -91,15 +91,29 @@ const MANGLED_DECL = /\b(?:var|let|const)\s+([a-z_$][a-z0-9_$]*[A-Z][A-Za-z0-9_$
  *   nameBytes  minimal xlsx writer, zip local-header filename bytes
  *   cdSize     minimal xlsx writer, central-directory size
  */
-/* The "back to the homepage" link in each page's header.
+/* --- the "back to the homepage" link: RETIRED 2026-08-03 (evening) ----------
  *
- * Five of the seven inner pages ship one from the design tool; tracker and
- * completion do not, and a page with no way back to index.html is a dead end
- * for anyone who lands on it from a bookmark. Kept here so both patches below
- * stay identical to the five the export already provides. */
-const HOME_LINK =
-  '<a href="index.html" style="flex:0 0 auto;font-size:12.5px;font-weight:500;' +
-  'color:#BFB8AB;white-space:nowrap">← All Views</a>';
+ * There used to be a HOME_LINK constant here and two patches that grafted it
+ * into the tracker and completion headers. Through the 08-01 export those two
+ * were the only inner pages the design tool shipped without a way back to
+ * index.html, and a page with no way home is a dead end for anyone arriving on
+ * a bookmark. The 08-03 (evening) export ships "← All Views" on all nine inner
+ * pages itself, so both patches are gone and so is the constant.
+ *
+ * Worth keeping the account, because the two failed differently and the quiet
+ * one is the lesson:
+ *
+ *   tracker     the anchor moved (a Refresh button landed in the header), so
+ *               the patch matched 0 times and stopped the build. Loud, correct.
+ *   completion  the anchor did NOT move. The patch would have applied cleanly
+ *               on top of the link the design now provides and shipped a header
+ *               with two "All Views" links, on a green build.
+ *
+ * Which is the argument for deleting a patch the moment the design absorbs what
+ * it was adding, rather than leaving it in because it still applies. An
+ * exact-match patch asserts that something is ABSENT, and nothing here can
+ * check that on its behalf -- sub() verifies the anchor exists, not that the
+ * edit is still wanted. */
 
 /* --- design-tool link names ------------------------------------------------
  *
@@ -544,15 +558,13 @@ const PAGES = {
 
       ['draw the month bars as a share of the slicer height',
        '<span style="width:100%;height:{{ m.h }}px;border-radius:2px 2px 0 0;',
-       '<span style="width:100%;height:{{ m.h }}%;border-radius:2px 2px 0 0;'],
+       '<span style="width:100%;height:{{ m.h }}%;border-radius:2px 2px 0 0;']
 
-      ['give the header a path back to the homepage',
-       '<span style="margin-left:auto"><olh-user-chip style="flex:0 0 auto">' +
-       '</olh-user-chip></span>',
-       '<span style="margin-left:auto;display:flex;align-items:center;gap:14px">' +
-       '<olh-user-chip style="flex:0 0 auto"></olh-user-chip>' +
-       '<span style="width:1px;height:22px;background:rgba(255,255,255,.28)"></span>' +
-       HOME_LINK + '</span>']
+      // REMOVED in the 08-03 (evening) release: 'give the header a path back to
+      // the homepage'. See the note where HOME_LINK used to be defined. This one
+      // is the more instructive of the two: its anchor still matched, so the
+      // build would have gone green and shipped a header with two "All Views"
+      // links. Only the tracker's copy failed loudly.
     ]
   },
 
@@ -893,12 +905,12 @@ const PAGES = {
 
       ['authenticate the tracker write',
        "        headers:{'Content-Type':'application/json', Accept:'application/json'},",
-       "        headers: this._authHeaders({'Content-Type':'application/json'}),"],
+       "        headers: this._authHeaders({'Content-Type':'application/json'}),"]
 
-      // The only inner page with no way back to index.html besides completion.
-      ['give the header a path back to the homepage',
-       'color:#303030">Refresh</button>\n  </header>',
-       'color:#303030">Refresh</button>\n    ' + HOME_LINK + '\n  </header>']
+      // REMOVED in the 08-03 (evening) release: 'give the header a path back to
+      // the homepage'. See the note where HOME_LINK used to be defined -- the
+      // design now ships the link on all nine inner pages, so this patch was
+      // adding a second one.
     ]
   },
 
