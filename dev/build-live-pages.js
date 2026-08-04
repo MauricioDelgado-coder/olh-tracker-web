@@ -253,18 +253,33 @@ const AUTH_PATCHES = [
  * caches:  memo caches to clear inside tick() when data arrives.
  */
 const PAGES = {
-  // No data of its own, but it is the sign-in landing page, so it carries the
-  // auth module and needs its patches. It used to be a straight copy.
+  /* The sign-in landing page and tile menu. It carries the auth module, which
+   * is why it was here even when it was otherwise a straight copy.
+   *
+   * data/inject FLIPPED to true in the 2026-08-03 export. The page stopped
+   * being static: it now polls for window.OLH_DATA, listens for the olh-data
+   * event, and derives its "Data updated" stamp in updatedLabel() from the
+   * newest "Last Synced" across the dataset. So it ships with the 2.2 MB
+   * snapshot like every other page and needs the same graft.
+   *
+   * The build refused to run until this was changed, which is the assertion
+   * doing its job: a page declared data:false that turns out to carry a
+   * snapshot would otherwise have published 900 synthetic homesites' sync
+   * dates as the suite's freshness stamp.
+   *
+   * walkRef:false -- the page reads OLH_DATA.jobs and nothing WALK_*.
+   */
   'index.html': {
-    data: false, inject: false, caches: [],
+    data: true, inject: true, walkRef: false, caches: [],
     patches: [
-      // "Data updated 7/29/26" was hardcoded into the landing page, which has
-      // no data of its own and therefore no way to know. It sat beside links to
-      // pages that read Airtable live, so it aged into a false claim. Removed
-      // rather than faked: the pages it links to each report their own state.
-      ['drop the hardcoded data-updated date',
-       '<span style="margin-left:auto;font-size:12.5px;color:#908A82">Data updated 7/29/26</span>',
-       '']
+      // GONE (08/03 export): "drop the hardcoded data-updated date". The page
+      // used to print "Data updated 7/29/26" as a literal, which aged into a
+      // false claim beside links to pages that read Airtable live, so the patch
+      // deleted it rather than faking it. updatedLabel() now computes the same
+      // line from the data itself and falls back to the empty string when there
+      // is none. Deleted rather than re-anchored: the design owns this now, and
+      // a patch searching for a string that no longer exists is a build failure
+      // waiting for the next re-export.
 
       // GONE (08/01 export): "supply isAdmin". The template used to gate the
       // User Administration link on {{ isAdmin }}, which renderVals() never
@@ -379,72 +394,33 @@ const PAGES = {
       // and the last of them still referenced window.COMPLETION_SOURCE, a
       // global nothing sets any more.
 
-      /* Regroup the right-hand tile from Construction Stage to Community.
+      /* GONE (08/03 export): "group the tile by community rather than stage",
+       * "retitle the tile" and "pass the community bars to the view".
        *
-       * Stage codes are two digits and told you almost nothing at a glance:
-       * "03 - 166" needs the JDE stage table to read. Community is how the
-       * division is actually organised and how this report gets used. The tile
-       * keeps its behaviour -- click a bar to filter, click again to clear --
-       * it just drives the comm filter now instead of stage. Both filters are
-       * still available as selects in the Filters card.
+       * The right-hand tile used to group by Construction Stage, whose two-digit
+       * codes told you almost nothing at a glance -- "03 - 166" needs the JDE
+       * stage table to read -- so these three patches regrouped it by community,
+       * which is how the division is actually organised. The design has now
+       * adopted that wholesale: it computes the same top-8-by-count bars off
+       * this.filtered("comm") under the comment "top communities by homesite
+       * count", drives the comm filter on click, and titles the tile itself.
        *
-       * Still the top 8 by count, deliberately: the tile's height sets the
-       * bottom of the whole right-hand column, and there are 50-odd
-       * communities. Everything outside the top 8 is reachable from the
-       * Community select. */
-      ['group the tile by community rather than stage',
-       '    // ---- stage bars\n' +
-       '    const sBase = this.filtered("stage");\n' +
-       '    const sc = {};\n' +
-       '    sBase.forEach(r => { if (r.stage) sc[r.stage] = (sc[r.stage] || 0) + 1; });\n' +
-       '    const sKeys = Object.keys(sc).sort((a, b) => sc[b] - sc[a]).slice(0, 8);\n' +
-       '    const sMax = Math.max(1, ...sKeys.map(k => sc[k]));\n' +
-       '    const stageBars = sKeys.map(k => ({\n' +
-       '      label: k, count: sc[k], pct: Math.round(sc[k] / sMax * 100),\n' +
-       '      color: s.stage === k ? "#005DAA" : "#A8C8E2",\n' +
-       '      labelColor: s.stage === k ? "#005DAA" : "#303030",\n' +
-       '      onClick: () => this.set({ stage: s.stage === k ? "" : k })\n' +
-       '    }));',
-       '    // ---- community bars\n' +
-       '    const cBase = this.filtered("comm");\n' +
-       '    const cc = {};\n' +
-       '    cBase.forEach(r => { if (r.community) cc[r.community] = (cc[r.community] || 0) + 1; });\n' +
-       '    const cKeys = Object.keys(cc).sort((a, b) => cc[b] - cc[a] || (a < b ? -1 : 1)).slice(0, 8);\n' +
-       '    const cMax = Math.max(1, ...cKeys.map(k => cc[k]));\n' +
-       '    const commBars = cKeys.map(k => ({\n' +
-       '      label: k, count: cc[k], pct: Math.round(cc[k] / cMax * 100),\n' +
-       '      color: s.comm === k ? "#005DAA" : "#A8C8E2",\n' +
-       '      labelColor: s.comm === k ? "#005DAA" : "#303030",\n' +
-       '      title: k + " \\u00b7 " + cc[k] + " homesite" + (cc[k] === 1 ? "" : "s"),\n' +
-       '      onClick: () => this.set({ comm: s.comm === k ? "" : k })\n' +
-       '    }));'],
-
-      ['retitle the tile',
-       '>Homesites by Stage</span>',
-       '>Homesites by Community</span>'],
-
-      ['pass the community bars to the view',
-       'eddMonths, stageBars,',
-       'eddMonths, commBars,'],
-
-      /* Community names are long where stage codes were two digits, so the
-       * label column has to carry the width and the bar gives some up. Names
-       * are truncated with an ellipsis rather than wrapped -- a wrapped name
-       * makes its row taller than the rest, and this tile's height is what the
-       * left card is aligned against. The full name is on the button title. */
-      ['give the bars room for a community name',
-       '<sc-for list="{{ stageBars }}" as="s" hint-placeholder-count="6">\n' +
-       '          <button sc-camel-on-click="{{ s.onClick }}" style="display:grid;' +
-       'grid-template-columns:34px 1fr 34px;align-items:center;gap:8px;padding:2px 0;' +
-       'border:0;background:transparent;cursor:pointer;text-align:left">\n' +
-       '            <span style="font-size:11.5px;font-weight:600;color:{{ s.labelColor }};' +
-       'font-variant-numeric:tabular-nums">{{ s.label }}</span>',
-       '<sc-for list="{{ commBars }}" as="s" hint-placeholder-count="6">\n' +
-       '          <button sc-camel-on-click="{{ s.onClick }}" title="{{ s.title }}" style="display:grid;' +
-       'grid-template-columns:minmax(0,1fr) 72px 34px;align-items:center;gap:8px;padding:2px 0;' +
-       'border:0;background:transparent;cursor:pointer;text-align:left">\n' +
-       '            <span style="font-size:11.5px;font-weight:600;color:{{ s.labelColor }};' +
-       'overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.label }}</span>'],
+       * Deleted rather than re-anchored. All three would now be searching for
+       * stage-bar code that no longer exists, which is a hard build failure, and
+       * the second and third would be rewriting a variable the design already
+       * spells the way we want. Note the design kept the name `stageBars` for
+       * what are now community bars -- that is its business, not something to
+       * patch, and renaming it here would only break on the next export.
+       *
+       * The fourth patch in that group, "give the bars room for a community
+       * name", is gone with them and for the same reason. It widened the label
+       * column, truncated long names with an ellipsis instead of wrapping (a
+       * wrapped name makes its row taller than the rest, and this tile's height
+       * is what the left card is aligned against) and put the full name on a
+       * hover title. The design now ships all three: the heading reads "Top
+       * Communities", the grid is minmax(0,1fr) 76px 30px, and the label span
+       * carries both the ellipsis rules and title="{{ s.label }}". Nothing was
+       * lost in the handover. */
 
       /* Align the bottom of the Filters card with the rest of the top row.
        *
@@ -489,12 +465,25 @@ const PAGES = {
        'align-self:stretch;padding:12px 14px 14px;border:1px solid #E4DED2;' +
        'border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(27,42,88,.05)">'],
 
+      /* RE-ANCHORED for the 08/03 export, which changed the slicer wrapper from
+       * margin-top:2px to margin-top:auto;padding-top:2px -- the design solving
+       * the ragged bottom edge its own way, by pushing the slicer down inside
+       * whatever height the card happens to have.
+       *
+       * Complementary rather than a replacement, so the patch stays: the auto
+       * margin PINS the slicer to the bottom, flex:1 1 auto GROWS it, and only
+       * the second gives the "longer slicer" this was asked for. Kept also
+       * because it cannot be dropped on its own -- "scale the month bars" below
+       * scales h to 100 rather than 40 and the bar markup is height:{{ m.h }}px,
+       * so a fixed 58px box with 100px bars overflows by 42px. That changes no
+       * text and throws nothing, which is to say neither check-export-errors.sh
+       * nor verify-pages.sh would say a word about it. */
       ['let the EDD slicer absorb the extra height',
-       '<div style="display:flex;flex-direction:column;gap:5px;margin-top:2px">\n' +
+       '<div style="display:flex;flex-direction:column;gap:5px;margin-top:auto;padding-top:2px">\n' +
        '        <span style="font-size:11px;font-weight:600;color:#6F6963">' +
        'EDD Range \u00b7 click months to filter</span>\n' +
        '        <div style="display:flex;align-items:flex-end;gap:3px;height:58px">',
-       '<div style="display:flex;flex-direction:column;gap:5px;margin-top:2px;' +
+       '<div style="display:flex;flex-direction:column;gap:5px;margin-top:auto;padding-top:2px;' +
        'flex:1 1 auto;min-height:0">\n' +
        '        <span style="font-size:11px;font-weight:600;color:#6F6963">' +
        'EDD Range \u00b7 click months to filter</span>\n' +

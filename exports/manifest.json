@@ -1,126 +1,56 @@
 {
   "exportDate": "2026-08-03",
-  "exportName": "olh-export",
+  "exportName": "OLH export 2026-08-03b (production only)",
   "files": [
     {
       "file": "production/admin.html",
-      "bytes": 1150162,
-      "sha256": "997e895c158b0c7b"
+      "bytes": 1707469,
+      "sha256": "bfce6f99a60460f9"
     },
     {
       "file": "production/completion.html",
-      "bytes": 1137882,
-      "sha256": "aa5ceea5034af15c"
+      "bytes": 1704929,
+      "sha256": "1fb5b39cb763b89a"
     },
     {
       "file": "production/index.html",
-      "bytes": 963542,
-      "sha256": "bb94f201355422e2"
+      "bytes": 1677004,
+      "sha256": "5e4fa4a26a148021"
+    },
+    {
+      "file": "production/qa-management.html",
+      "bytes": 1691588,
+      "sha256": "4c4725657ffbb975"
     },
     {
       "file": "production/scheduler.html",
-      "bytes": 1158063,
-      "sha256": "b6e1f10f3eddecb0"
+      "bytes": 1715186,
+      "sha256": "5a1087e6de3c8197"
     },
     {
       "file": "production/tracker-new.html",
-      "bytes": 1129958,
-      "sha256": "bcbf33c7a8af6c17"
+      "bytes": 1686688,
+      "sha256": "e8c31b7186e118e0"
     },
     {
       "file": "production/tracker.html",
-      "bytes": 1153404,
-      "sha256": "8f3ed48c6b0dcb10"
+      "bytes": 1712743,
+      "sha256": "2f0d7cfdb6dd4dc9"
     },
     {
       "file": "production/walk-calendar.html",
-      "bytes": 1172672,
-      "sha256": "73b80c8228d0c760"
+      "bytes": 1729787,
+      "sha256": "7b96bbaebcc93a7f"
     },
     {
       "file": "production/workload-visualizer.html",
-      "bytes": 1152509,
-      "sha256": "8de0a87b93085c86"
+      "bytes": 1709632,
+      "sha256": "d7747554a7e41299"
     },
     {
       "file": "production/workload.html",
-      "bytes": 1145993,
-      "sha256": "938e51344308070f"
-    },
-    {
-      "file": "OLH Completion Report.dc.html",
-      "bytes": 37840,
-      "sha256": "b23df437e42beef2"
-    },
-    {
-      "file": "OLH Home.dc.html",
-      "bytes": 15674,
-      "sha256": "c705e564c63d6e66"
-    },
-    {
-      "file": "OLH Tracker - Current.dc.html",
-      "bytes": 73533,
-      "sha256": "119db588d0f22cd2"
-    },
-    {
-      "file": "OLH Tracker - New Views.dc.html",
-      "bytes": 76098,
-      "sha256": "3dec1e0a3d545dc4"
-    },
-    {
-      "file": "OLH User Admin.dc.html",
-      "bytes": 45108,
-      "sha256": "5c2ec7157ca037a2"
-    },
-    {
-      "file": "Scheduler.dc.html",
-      "bytes": 52669,
-      "sha256": "f85ce8a898331e7f"
-    },
-    {
-      "file": "Walk Schedule Export.dc.html",
-      "bytes": 63118,
-      "sha256": "8343c635975c4d11"
-    },
-    {
-      "file": "Workload Predictor.dc.html",
-      "bytes": 40868,
-      "sha256": "4054bede5f8c52b8"
-    },
-    {
-      "file": "Workload Visualizer.dc.html",
-      "bytes": 47162,
-      "sha256": "c19f9188c0726ea6"
-    },
-    {
-      "file": "olh-auth.js",
-      "bytes": 48066,
-      "sha256": "8c2ae6efebec1a84"
-    },
-    {
-      "file": "olh-data.js",
-      "bytes": 2206874,
-      "sha256": "6273e10e9515134b"
-    },
-    {
-      "file": "olh-viewport.js",
-      "bytes": 1577,
-      "sha256": "a64c29f066939ad6"
-    },
-    {
-      "file": "scheduler-data.js",
-      "bytes": 21120,
-      "sha256": "95b0a7422e2dd53e"
-    },
-    {
-      "file": "support.js",
-      "bytes": 69150,
-      "sha256": "8fe7df74405f3c55"
-    },
-    {
-      "file": "xlsx-writer.js",
-      "bytes": 7042,
-      "sha256": "b48ad2e829758c64"
+      "bytes": 1703116,
+      "sha256": "9601ebaac55441e0"
     }
   ]
 }
