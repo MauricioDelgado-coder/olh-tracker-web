@@ -14,10 +14,8 @@
     { "route": "/*.tar.gz", "statusCode": 404 },
     { "route": "/*.xlsx", "statusCode": 404 },
 
-    { "route": "/tracker-new", "redirect": "/tracker", "statusCode": 301 },
-    { "route": "/tracker-new.html", "redirect": "/tracker", "statusCode": 301 },
-
     { "route": "/tracker", "rewrite": "/tracker.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
+    { "route": "/homesite", "rewrite": "/homesite.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
     { "route": "/completion", "rewrite": "/completion.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
     { "route": "/scheduler", "rewrite": "/scheduler.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
     { "route": "/walk-calendar", "rewrite": "/walk-calendar.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },

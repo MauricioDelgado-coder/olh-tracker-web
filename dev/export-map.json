@@ -12,11 +12,13 @@
     "                       it needs the manifest/template blocks the bundler emits.",
     "",
     "So there is no rename to do: the design tool already emits deployed names.",
-    "What this file actually pins down is the ALLOW-LIST -- which of the nine",
-    "bundled pages ship. That matters because build-live-pages.js fails on any",
-    "page in its input that is not declared in PAGES, so pointing it at",
-    "production/ as-is dies on tracker-new.html every single time. The old fix was",
-    "to delete that file from the export by hand before each build.",
+    "What this file actually pins down is the ALLOW-LIST -- which bundled pages",
+    "ship. All ten of the 2026-08-03 (evening) export do: homesite.html joined as",
+    "the Homesite Detail page that JOB_LINK() resolves to, and tracker-new.html",
+    "-- the superseded 'New Views' prototype that used to need an ignore entry --",
+    "is gone from the export entirely. 'ignore' is empty as a result, and should",
+    "stay that way: an export that grows a page ought to stop the build and be a",
+    "decision, not an entry someone adds to make the error go away.",
     "",
     "Keys are filenames inside production/. Values must match PAGES in",
     "dev/build-live-pages.js exactly.",
@@ -36,12 +38,11 @@
     "walk-calendar.html": "walk-calendar.html",
     "qa-management.html": "qa-management.html",
     "workload.html": "workload.html",
-    "workload-visualizer.html": "workload-visualizer.html"
+    "workload-visualizer.html": "workload-visualizer.html",
+    "homesite.html": "homesite.html"
   },
 
-  "ignore": {
-    "tracker-new.html": "Superseded 'New Views' prototype, DELETED 2026-08. netlify.toml and public/staticwebapp.config.json both 301 /tracker-new to /tracker, and it is absent from PAGES, so build-live-pages.js would abort on it. dev/build-new-views.js (which built it from 'OLH Tracker - New Views.dc.html') is kept for history but is NOT part of the release path."
-  },
+  "ignore": {},
 
   "assetDirs": ["assets", "fonts"]
 }

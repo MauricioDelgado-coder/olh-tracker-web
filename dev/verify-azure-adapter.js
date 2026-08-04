@@ -357,7 +357,7 @@ check('every page in public/ has an extensionless rewrite', () => {
     // responseOverrides. Neither is linked to extensionless.
     .filter((f) => f !== 'index.html' && f !== '404.html');
 
-  assert.ok(pages.length >= 7, 'expected the seven non-index pages, found ' + pages.length);
+  assert.ok(pages.length >= 9, 'expected the nine non-index pages, found ' + pages.length);
 
   for (const page of pages) {
     const route = '/' + page.replace(/\.html$/, '');
@@ -370,18 +370,48 @@ check('every page in public/ has an extensionless rewrite', () => {
   }
 });
 
-check('the tracker-new 301s precede any /tracker rule', () => {
+/* The /tracker-new 301s were removed in the 2026-08-03 (evening) release, and
+ * the assertion that used to guard their ordering went with them. What replaces
+ * it is the inverse: nothing may reintroduce a prefix rule ahead of /tracker.
+ *
+ * Azure stops at the FIRST matching route, so any rule sitting above /tracker
+ * that also matches "/tracker…" silently shadows it -- which is precisely why
+ * the old 301s had to be ordered, and precisely the trap a future glob like
+ * "/tracker*" would fall into. Cheaper to assert than to rediscover. */
+check('no route shadows /tracker', () => {
   const config = JSON.parse(
     require('fs').readFileSync(path.join(ROOT, 'public', 'staticwebapp.config.json'), 'utf8')
   );
   const routes = config.routes.map((r) => r.route);
-  assert.ok(
-    routes.indexOf('/tracker-new') < routes.indexOf('/tracker'),
-    'evaluation stops at the first match, so /tracker-new must come first'
+  const iTracker = routes.indexOf('/tracker');
+  assert.ok(iTracker !== -1, 'no /tracker route at all');
+
+  const shadow = routes.slice(0, iTracker).filter((r) =>
+    r.endsWith('*') && '/tracker'.startsWith(r.slice(0, -1))
   );
-  const trackerNew = config.routes.find((r) => r.route === '/tracker-new');
-  assert.strictEqual(trackerNew.redirect, '/tracker');
-  assert.strictEqual(trackerNew.statusCode, 301);
+  assert.deepStrictEqual(shadow, [],
+    'these route(s) precede /tracker and also match it, so /tracker is dead: ' +
+    shadow.join(', '));
+
+  assert.ok(!routes.includes('/tracker-new'),
+    '/tracker-new was retired in the 08-03 release; nothing links there any more. ' +
+    'If it is back, dev/build-live-pages.js DESIGN_LINKS should be handling it at ' +
+    'build time instead.');
+});
+
+/* homesite.html is not on the tile menu -- it is reached only from a job number,
+ * via JOB_LINK() on seven pages. So no human clicks it during a smoke test of
+ * the landing page, and a missing rewrite would 404 for every user who clicks a
+ * job number while every page someone actually checks looks fine. */
+check('/homesite is rewritten and never cached', () => {
+  const config = JSON.parse(
+    require('fs').readFileSync(path.join(ROOT, 'public', 'staticwebapp.config.json'), 'utf8')
+  );
+  const rule = config.routes.find((r) => r.route === '/homesite');
+  assert.ok(rule, 'no /homesite route; every job-number link in the suite 404s');
+  assert.strictEqual(rule.rewrite, '/homesite.html');
+  assert.match(rule.headers['Cache-Control'], /no-store/,
+    'homesite writes through /api/update-job; a cached bundle posts stale fields');
 });
 
 check('the private paths are blocked before anything can match them', () => {

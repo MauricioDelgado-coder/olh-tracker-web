@@ -159,17 +159,29 @@
 # anonymous visitor would have rendered 900 invented homesites to them instead of
 # stopping. Blocking the path would have left the file uploaded; removing it is
 # the only version that is actually true.
-[[redirects]]
-  from = "/tracker-new"
-  to = "/tracker"
-  status = 301
-  force = true
+#
+# The /tracker-new and /tracker-new.html 301s that stood here were REMOVED in the
+# 2026-08-03 (evening) release. They existed to catch links from inside the suite
+# and there are none left: the 08-03 export dropped the page, and homesite.html
+# now serves the job-detail role it was prototyping. What remains of the guard is
+# DESIGN_LINKS in dev/build-live-pages.js, which still maps the design tool's
+# "OLH Tracker - New Views.dc.html" onto tracker.html, so a re-export that
+# resurrects such a link is rewritten at build time rather than shipped dead.
+# An external bookmark now gets 404.html, which is the honest answer.
 
-[[redirects]]
-  from = "/tracker-new.html"
-  to = "/tracker"
-  status = 301
-  force = true
+# homesite.html is the Homesite Detail page, new in the 08-03 (evening) export
+# and the page tracker-new was a prototype for. It is reached from a job number
+# rather than from the tile menu: JOB_LINK() on seven pages builds
+# "homesite.html?job=<job#>", so unlike every other page here it has inbound
+# links from all over the suite and a stale copy would be reached constantly.
+# It is also the third page that WRITES -- commit() -> persist() PATCHes one
+# field at a time through /api/update-job -- which is the same reason
+# qa-management must never be cached: a stale bundle posts yesterday's field
+# names. no-store.
+[[headers]]
+  for = "/homesite.html"
+  [headers.values]
+    Cache-Control = "no-store, must-revalidate"
 
 # scheduler / walk-calendar / workload are the QAM walk-planning pages. All
 # three are bundled documents whose data comes entirely from the API at runtime:

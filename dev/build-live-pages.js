@@ -129,9 +129,12 @@ const DESIGN_LINKS = {
   'Workload Predictor.dc.html': 'workload.html',
   'Workload Visualizer.dc.html': 'workload-visualizer.html',
   'OLH User Admin.dc.html': 'admin.html',
-  // Superseded prototype, deleted 2026-08 and 301'd to /tracker on both hosts.
-  // Mapped rather than ignored so a stray link lands on the page that replaced
-  // it instead of on a 404.
+  'Homesite Detail.dc.html': 'homesite.html',
+  // Superseded prototype, deleted 2026-08. The /tracker-new 301s were removed in
+  // the 2026-08-03 (evening) release because nothing points there any more, so
+  // this mapping is now the only thing that would catch a stray link to it.
+  // Mapped rather than ignored so such a link lands on the page that replaced it
+  // instead of on a 404.
   'OLH Tracker - New Views.dc.html': 'tracker.html'
 };
 
@@ -550,6 +553,52 @@ const PAGES = {
        '<olh-user-chip style="flex:0 0 auto"></olh-user-chip>' +
        '<span style="width:1px;height:22px;background:rgba(255,255,255,.28)"></span>' +
        HOME_LINK + '</span>']
+    ]
+  },
+
+  /* Homesite Detail -- one homesite, opened from a job number anywhere in the
+   * suite. New in the 2026-08-03 (evening) export; it is the page tracker-new
+   * was a prototype for, and JOB_LINK() on seven pages now resolves to
+   * 'homesite.html?job=<job#>'.
+   *
+   * It WRITES, and unlike qa-management it needs no patch to do so: commit()
+   * already calls persist(), which POSTs {apiBase}/update-job one field at a
+   * time and restores the previous value on failure. Verified in the export
+   * before shipping rather than assumed -- that is the check qa-management
+   * taught us to run on any page with an editable field.
+   *
+   * walkRef:true -- mgrById() merges window.WALK_ROSTER over OLH_DATA.managers
+   * to resolve walk-manager names, per the grep-for-WALK_ rule from
+   * walk-calendar. Without walk-config every milestone manager renders blank.
+   *
+   * caches:[] with an explicit patch, for the same reason walk-calendar needs
+   * one: the caches mechanism anchors on "const tick = …" and this page's
+   * handler is "const settle = …".
+   */
+  'homesite.html': {
+    data: true, inject: true, walkRef: true, caches: [],
+    patches: [
+      /* mgrById() memoises into this._mgr on first render, which happens before
+       * any data has arrived -- so it freezes an EMPTY map and every milestone
+       * manager, buyer and person field renders blank for the life of the page.
+       *
+       * The page's own loadLive() clears _mgr correctly, but it is not the only
+       * way data arrives: the injected loader fetches /api/jobs too and
+       * announces it with the olh-data event, and settle() is what runs then.
+       * Whichever of the two lands first wins, so the invalidation has to be on
+       * both paths or the bug is a race rather than a certainty. */
+      ['invalidate the manager index when reference data arrives',
+       'const settle = () => {\n' +
+       '      if(!this._offVp && window.OLHViewport) this._offVp = window.OLHViewport.watch(n => this.setState({narrow:n}));\n' +
+       '      this._vpSeed();\n' +
+       '      this.setState(s => ({tick: s.tick + 1}));\n' +
+       '    };',
+       'const settle = () => {\n' +
+       '      if(!this._offVp && window.OLHViewport) this._offVp = window.OLHViewport.watch(n => this.setState({narrow:n}));\n' +
+       '      this._vpSeed();\n' +
+       '      this._mgr = null;\n' +
+       '      this.setState(s => ({tick: s.tick + 1}));\n' +
+       '    };']
     ]
   },
 
@@ -1466,7 +1515,7 @@ function checkPageLinks(pub) {
   // netlify.toml and public/staticwebapp.config.json -- a link to a route that
   // neither host declares is as dead as a link to a missing file.
   const routes = new Set(['/', '/tracker', '/completion', '/qa-management', '/scheduler',
-    '/walk-calendar', '/workload', '/workload-visualizer', '/admin']);
+    '/walk-calendar', '/workload', '/workload-visualizer', '/admin', '/homesite']);
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   const bad = new Map();
