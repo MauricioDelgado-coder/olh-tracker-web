@@ -327,13 +327,21 @@ Nothing has been committed. Read the diff above, then:
 
     git add public exports/manifest.json
     git commit -m "Rebuild on the <date> export"
-    git push          # the push IS the deploy: Netlify (git-connected) and
-                      # Azure SWA (.github/workflows) both publish from main
+    git push          # deploys AZURE ONLY (.github/workflows/azure-*.yml)
 
-Then confirm both hosts caught up:
+Netlify is NOT git-connected -- `netlify api getSite` returns repo_url: null,
+and it never has been. A push does nothing to it: it keeps serving its last CLI
+upload perfectly, with no banner and no error, so the only symptom is that the
+site is old. On 2026-08-03 it sat three commits behind while Azure was current
+and /qa-management 404'd on it alone. Until a repository is linked, updating it
+takes a CLI deploy, and the standing warning about that command is why the two
+checks come first -- it uploads your WORKING TREE, not main:
+
+    git status --short                      # must be empty
+    git rev-parse --short HEAD origin/main  # must match
+    netlify deploy --prod --dir public --functions netlify/functions
+
+Then confirm BOTH hosts caught up -- do not assume the push was enough:
 
     bash dev/whats-live.sh
-
-Do not run `netlify deploy --prod`. It publishes your working tree rather than
-main, which is how prod and the repo drift apart with nothing to show it.
 EOF
