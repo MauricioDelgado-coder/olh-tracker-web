@@ -284,7 +284,7 @@ function readSession(token) {
  */
 const ALL_PAGES = [
   'page.home', 'page.tracker', 'page.completion', 'page.walks',
-  'page.scheduler', 'page.workload', 'page.admin'
+  'page.qamgmt', 'page.scheduler', 'page.workload', 'page.admin'
 ];
 
 // Mirrors DEFAULT_ROLES in the frontend auth module. Used when the Roles table
@@ -292,11 +292,12 @@ const ALL_PAGES = [
 const DEFAULT_ROLES = {
   admin: ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage'].concat(ALL_PAGES),
   qam: ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply',
-    'page.home', 'page.tracker', 'page.completion', 'page.walks', 'page.scheduler', 'page.workload'],
+    'page.home', 'page.tracker', 'page.completion', 'page.walks', 'page.qamgmt',
+    'page.scheduler', 'page.workload'],
   cm: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.completion', 'page.walks'],
-  ccr: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.walks'],
+  ccr: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.walks', 'page.qamgmt'],
   leadership: ['suite.view', 'page.home', 'page.tracker', 'page.completion',
-    'page.walks', 'page.scheduler', 'page.workload']
+    'page.walks', 'page.qamgmt', 'page.scheduler', 'page.workload']
 };
 const PERMS = ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage']
   .concat(ALL_PAGES);
@@ -523,6 +524,7 @@ const PAGE_LABEL = {
   'page.tracker': 'QA & Closing Tracker',
   'page.completion': 'Completion Report',
   'page.walks': 'Walk Schedule',
+  'page.qamgmt': 'QA Management',
   'page.scheduler': 'Schedule Optimizer',
   'page.workload': 'Workload Predictor',
   'page.admin': 'User Administration'

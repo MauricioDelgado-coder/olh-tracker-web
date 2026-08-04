@@ -21,6 +21,7 @@
     { "route": "/completion", "rewrite": "/completion.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
     { "route": "/scheduler", "rewrite": "/scheduler.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
     { "route": "/walk-calendar", "rewrite": "/walk-calendar.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
+    { "route": "/qa-management", "rewrite": "/qa-management.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
     { "route": "/workload", "rewrite": "/workload.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
     { "route": "/workload-visualizer", "rewrite": "/workload-visualizer.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
     { "route": "/admin", "rewrite": "/admin.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },

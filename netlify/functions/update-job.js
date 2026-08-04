@@ -41,6 +41,19 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
  * would come back as a 422. Validating here turns that into a clean 400.
  * If an option is renamed in Airtable, change it here in the same commit.
  */
+/* Why a missed walk needs a reason list here at all: typecast is off, so
+   Airtable will not invent an option. A select on the whitelist whose value is
+   not already a choice in the base fails as a 422 that reads like a permissions
+   problem, which is a bad half hour. These four lists mirror REASONS in the QA
+   Management page and the singleSelect choices on the Jobs table. All three
+   have to agree; changing one means changing all three in the same commit. */
+const MISS_REASONS = Object.freeze([
+  'Home not ready',
+  'Buyer no-show',
+  'Manager unavailable',
+  'Other'
+]);
+
 const SELECT_OPTIONS = Object.freeze({
   'Key Status': Object.freeze([
     'Pending',
@@ -50,11 +63,15 @@ const SELECT_OPTIONS = Object.freeze({
     'Delivered to WHC',
     'Other',
     'Issue'
-  ])
+  ]),
+  'QAI Miss Reason': MISS_REASONS,
+  'QAA Miss Reason': MISS_REASONS,
+  'CEL Miss Reason': MISS_REASONS,
+  'ACC Miss Reason': MISS_REASONS
 });
 
 /**
- * THE WHITELIST. Exactly 26 entries. Anything else is rejected.
+ * THE WHITELIST. Exactly 38 entries. Anything else is rejected.
  * Keys are the literal Airtable field names; values are the expected type.
  *   checkbox -> boolean
  *   date     -> 'YYYY-MM-DD'
@@ -69,17 +86,29 @@ const EDITABLE = Object.freeze({
   'QAI Date': 'date',
   'QAI Manager': 'link',
   'QAI Complete': 'checkbox',
+  'QAI Missed': 'checkbox',
+  'QAI Miss Reason': 'select',
+  'QAI Miss Note': 'text',
   'QAA Date': 'date',
   'QAA Manager': 'link',
   'QAA Accepted': 'checkbox',
+  'QAA Missed': 'checkbox',
+  'QAA Miss Reason': 'select',
+  'QAA Miss Note': 'text',
   'CEL Date': 'datetime',
   'CEL Manager': 'link',
   'CEL Completed': 'checkbox',
   'Buyer Attended CEL': 'checkbox',
+  'CEL Missed': 'checkbox',
+  'CEL Miss Reason': 'select',
+  'CEL Miss Note': 'text',
   'ACC Date': 'datetime',
   'ACC Manager': 'link',
   'ACC Completed': 'checkbox',
   'Buyer Attended ACC': 'checkbox',
+  'ACC Missed': 'checkbox',
+  'ACC Miss Reason': 'select',
+  'ACC Miss Note': 'text',
   'NOC Lock Date': 'date',
   'Power Meter': 'checkbox',
   'Water Meter': 'checkbox',

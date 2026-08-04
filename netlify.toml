@@ -191,6 +191,17 @@
   [headers.values]
     Cache-Control = "no-store, must-revalidate"
 
+# qa-management is the day-of walk console: today's walks grouped by community,
+# each marked completed or missed. It is the second page after the tracker that
+# WRITES, and the only one that writes in a batch, so it is also the one where a
+# cached document does the most damage -- a stale bundle would post marks built
+# from yesterday's field names. Same fixture-stripping as the pages above, and
+# it reads WALK_ROSTER for manager names as well as /api/jobs.
+[[headers]]
+  for = "/qa-management.html"
+  [headers.values]
+    Cache-Control = "no-store, must-revalidate"
+
 [[headers]]
   for = "/workload.html"
   [headers.values]

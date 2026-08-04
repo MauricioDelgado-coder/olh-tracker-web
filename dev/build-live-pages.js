@@ -541,6 +541,170 @@ const PAGES = {
     ]
   },
 
+  /* QA Management -- today's walks by community, marked completed or missed.
+   *
+   * Shipped 2026-08-03 after being held back on its first export. The design
+   * gives it a save() that only mutates window.OLH_DATA and then posts to
+   * /api/audit, so a QA Manager marked twelve walks, saw "Batch Saved",
+   * refreshed, and found nothing -- while the append-only change log
+   * permanently recorded twelve completions that never reached Airtable. An
+   * audit trail that can be wrong in that direction is worse than none, and
+   * nothing downstream reconciles it. The patches below give save() a real
+   * write path; see dev/../qa-management-handoff.md for the full account.
+   *
+   * walkRef:true -- the page reads window.WALK_ROSTER to resolve manager names
+   * (mgrNames/_mgr). The build deletes the bundled WALK_* fixture, so getting
+   * this wrong ships a page whose every walk is attributed to nobody. This is
+   * the same mistake walk-calendar shipped with; the rule from that one is to
+   * grep the page for WALK_ rather than reason about what it "should" need.
+   */
+  'qa-management.html': {
+    data: true, inject: true, walkRef: true, caches: [],
+    patches: [
+      /* Each writes.push() gains a `patch` -- the exact /api/update-job fields
+       * payload for that one mark. Kept beside the audit entry it belongs to so
+       * the log and the write cannot describe different things, and anchored on
+       * the pushes themselves rather than on save() as a whole, so a re-export
+       * that reflows the method does not silently drop the write path. */
+      ['carry the completion write beside its audit entry',
+       "        writes.push({recordId:w.recordId, job:rec.fields['Job #'] || w.recordId, field:w.spec.done,\n" +
+       "          label:w.spec.label + ' completed', from:'No', to:'Yes', action:'edit'});",
+       "        writes.push({recordId:w.recordId, job:rec.fields['Job #'] || w.recordId, field:w.spec.done,\n" +
+       "          label:w.spec.label + ' completed', from:'No', to:'Yes', action:'edit',\n" +
+       "          patch:{[w.spec.done]:true}});"],
+
+      /* A missed walk had no representation anywhere: the design logged it
+       * against the walk's DATE field with the prose value "Missed - reason",
+       * which only survived because /api/audit takes any string. It now writes
+       * the three real fields added to the Jobs table on 2026-08-03, and the
+       * audit entry names the field it actually wrote rather than a date field
+       * it did not. The note is optional and omitted when blank -- an empty
+       * string would overwrite a note left by an earlier save. */
+      ['write a missed walk to its own fields, not to the date field',
+       "        writes.push({recordId:w.recordId, job:rec.fields['Job #'] || w.recordId, field:w.spec.date,\n" +
+       "          label:w.spec.label + ' missed', from:fmtD(w.raw),\n" +
+       "          to:'Missed \\u2014 ' + reason + (note ? ' \\u00b7 ' + note : ''), action:'edit'});",
+       "        const miss = {};\n" +
+       "        miss[w.spec.code + ' Missed'] = true;\n" +
+       "        miss[w.spec.code + ' Miss Reason'] = reason;\n" +
+       "        if(note) miss[w.spec.code + ' Miss Note'] = note;\n" +
+       "        rec.fields[w.spec.code + ' Missed'] = true;\n" +
+       "        rec.fields[w.spec.code + ' Miss Reason'] = reason;\n" +
+       "        writes.push({recordId:w.recordId, job:rec.fields['Job #'] || w.recordId,\n" +
+       "          field:w.spec.code + ' Missed',\n" +
+       "          label:w.spec.label + ' missed', from:'No',\n" +
+       "          to:'Yes \\u2014 ' + reason + (note ? ' \\u00b7 ' + note : ''), action:'edit',\n" +
+       "          patch:miss});"],
+
+      /* The rescheduled value has to be captured before it is formatted: the
+       * audit entry carries fmtD(d.resched) for a human, and Airtable needs the
+       * ISO value with the original time component preserved. */
+      ['carry the reschedule write beside its audit entry',
+       "        if(d.resched){\n" +
+       "          const old = rec.fields[w.spec.date];\n" +
+       "          rec.fields[w.spec.date] = /T\\d/.test(String(old)) ? d.resched + String(old).slice(10) : d.resched;\n" +
+       "          moved++;\n" +
+       "          writes.push({recordId:w.recordId, job:rec.fields['Job #'] || w.recordId, field:w.spec.date,\n" +
+       "            label:w.spec.label + ' rescheduled', from:fmtD(old), to:fmtD(d.resched), action:'schedule'});\n" +
+       "        }",
+       "        if(d.resched){\n" +
+       "          const old = rec.fields[w.spec.date];\n" +
+       "          const next = /T\\d/.test(String(old)) ? d.resched + String(old).slice(10) : d.resched;\n" +
+       "          rec.fields[w.spec.date] = next;\n" +
+       "          moved++;\n" +
+       "          writes.push({recordId:w.recordId, job:rec.fields['Job #'] || w.recordId, field:w.spec.date,\n" +
+       "            label:w.spec.label + ' rescheduled', from:fmtD(old), to:fmtD(d.resched), action:'schedule',\n" +
+       "            patch:{[w.spec.date]:next}});\n" +
+       "        }"],
+
+      /* The tail of save() fired the audit posts, cleared the draft and toasted
+       * "Batch Saved" synchronously -- all three before anything had been
+       * written. _commit owns that tail now so each one follows its write. */
+      ['hand the tail of save() to the real write path',
+       "    if(window.OLHAudit) writes.forEach(x => window.OLHAudit.record(Object.assign({page:'QA Management'}, x)).catch(() => {}));\n" +
+       "    this._mgr = null;\n" +
+       "    this.writeDraft({});\n" +
+       "    setTimeout(() => this.setState(s => ({saving:false, draft:{}, tick:s.tick+1})), 320);\n" +
+       "    const bits = [done + ' completed', missed + ' missed'];\n" +
+       "    if(moved) bits.push(moved + ' rescheduled');\n" +
+       "    this.toast('ok','Batch Saved', bits.join(' \\u00b7 ') + '.');",
+       "    this._commit(writes, done, missed, moved);"],
+
+      ['add the write path itself',
+       "  save(){\n" +
+       "    if(!this.can('walk.schedule')){",
+       "  /* Authorization header or a legible failure -- never an anonymous write.\n" +
+       "     /api/update-job reads Bearer and has no cookie fallback, so a request\n" +
+       "     without this header is a guaranteed 401. olh-auth.js is a bundler asset\n" +
+       "     and may not have executed yet, which is why this is a check and not an\n" +
+       "     assumption. */\n" +
+       "  _authHeaders(){\n" +
+       "    if(!window.OLHAuth || typeof window.OLHAuth.authHeaders !== 'function'){\n" +
+       "      throw new Error('The sign-in module has not loaded, so this page cannot save. Reload the page.');\n" +
+       "    }\n" +
+       "    return window.OLHAuth.authHeaders({'Content-Type':'application/json'});\n" +
+       "  }\n" +
+       "\n" +
+       "  /* PATCH first, audit second, and report per record.\n" +
+       "\n" +
+       "     The ordering is the whole point. /api/audit is append-only and takes\n" +
+       "     its author from the session and its timestamp from the server clock,\n" +
+       "     deliberately, so that the log is trustworthy. Recording before the\n" +
+       "     write inverts that guarantee: it produces an authoritative entry,\n" +
+       "     attributed to a real person at a real time, for a change that never\n" +
+       "     happened. So nothing is logged until the PATCH it describes returns.\n" +
+       "\n" +
+       "     Per record, because update-job.js takes one record at a time and there\n" +
+       "     is no batch endpoint -- a twelve-walk save is twelve requests and any\n" +
+       "     one of them can fail alone. A blanket 'Batch Saved' over a partial\n" +
+       "     failure is the same lie in a smaller font.\n" +
+       "\n" +
+       "     On failure the draft is deliberately LEFT IN PLACE. It is in\n" +
+       "     localStorage under olh.qamgmt.draft.v1, so the marks that did not land\n" +
+       "     survive a reload and can be saved again; clearing it would discard the\n" +
+       "     only remaining record of them. */\n" +
+       "  async _commit(writes, done, missed, moved){\n" +
+       "    let ok = 0;\n" +
+       "    const failed = [];\n" +
+       "    for(const x of writes){\n" +
+       "      if(!x.patch){ ok++; continue; }\n" +
+       "      try{\n" +
+       "        const res = await fetch('/api/update-job', {\n" +
+       "          method:'POST', headers:this._authHeaders(),\n" +
+       "          body: JSON.stringify({recordId:x.recordId, fields:x.patch})\n" +
+       "        });\n" +
+       "        const data = await res.json().catch(() => null);\n" +
+       "        if(!res.ok) throw new Error((data && data.error) || ('Save failed (' + res.status + ')'));\n" +
+       "        ok++;\n" +
+       "        if(window.OLHAudit){\n" +
+       "          const entry = Object.assign({page:'QA Management'}, x);\n" +
+       "          delete entry.patch;\n" +
+       "          await window.OLHAudit.record(entry).catch(() => {});\n" +
+       "        }\n" +
+       "      }catch(err){\n" +
+       "        failed.push((x.job || x.recordId) + ' \\u00b7 ' + x.label + ': ' + ((err && err.message) || err));\n" +
+       "      }\n" +
+       "    }\n" +
+       "    if(failed.length){\n" +
+       "      this.setState(s => ({saving:false, tick:s.tick+1}));\n" +
+       "      this.toast('err', ok ? 'Partly Saved' : 'Nothing Saved',\n" +
+       "        ok + ' of ' + (ok + failed.length) + ' written. ' + failed[0] +\n" +
+       "        (failed.length > 1 ? ' (and ' + (failed.length - 1) + ' more)' : ''));\n" +
+       "      return;\n" +
+       "    }\n" +
+       "    this._mgr = null;\n" +
+       "    this.writeDraft({});\n" +
+       "    this.setState(s => ({saving:false, draft:{}, tick:s.tick+1}));\n" +
+       "    const bits = [done + ' completed', missed + ' missed'];\n" +
+       "    if(moved) bits.push(moved + ' rescheduled');\n" +
+       "    this.toast('ok','Batch Saved', bits.join(' \\u00b7 ') + '.');\n" +
+       "  }\n" +
+       "\n" +
+       "  save(){\n" +
+       "    if(!this.can('walk.schedule')){"]
+    ]
+  },
+
   // The tracker ships its own loadLive() and the /update-job write path. It
   // still needs the fixture gone: its catch block left window.OLH_DATA pointing
   // at the mock and componentDidMount called loadLive(false, false) --

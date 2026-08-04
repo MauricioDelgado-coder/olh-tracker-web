@@ -34,6 +34,7 @@
     "completion.html": "completion.html",
     "scheduler.html": "scheduler.html",
     "walk-calendar.html": "walk-calendar.html",
+    "qa-management.html": "qa-management.html",
     "workload.html": "workload.html",
     "workload-visualizer.html": "workload-visualizer.html"
   },
