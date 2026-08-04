@@ -101,6 +101,51 @@ const HOME_LINK =
   '<a href="index.html" style="flex:0 0 auto;font-size:12.5px;font-weight:500;' +
   'color:#BFB8AB;white-space:nowrap">← All Views</a>';
 
+/* --- design-tool link names ------------------------------------------------
+ *
+ * The design tool writes inter-page links using its own SOURCE filenames, not
+ * the deployed ones. Through the 08/01 export it happened to emit deployed
+ * names ("tracker.html") and nobody noticed this was luck rather than contract;
+ * the 08/03 export switched to source names ("OLH Tracker - Current.dc.html")
+ * and every link between pages became a 404 -- all seven landing-page tiles and
+ * the "All Views" back-link on six pages, thirteen in total.
+ *
+ * Nothing caught it. The pages built clean, loaded clean in headless Chrome and
+ * threw nothing, because a dead <a href> is not an error until somebody clicks
+ * it. checkStaticRefs() only ever resolved assets/ and fonts/. checkPageLinks()
+ * below now closes that gap, and this map is the fix it enforces.
+ *
+ * Keys are what the design tool writes; values must exist in the publish dir.
+ * A key with no matching page is a page nobody wired -- deliberately fatal
+ * rather than silently left as a broken link.
+ */
+const DESIGN_LINKS = {
+  'OLH Home.dc.html': 'index.html',
+  'OLH Tracker - Current.dc.html': 'tracker.html',
+  'OLH Completion Report.dc.html': 'completion.html',
+  'Walk Schedule Export.dc.html': 'walk-calendar.html',
+  'QA Management.dc.html': 'qa-management.html',
+  'Scheduler.dc.html': 'scheduler.html',
+  'Workload Predictor.dc.html': 'workload.html',
+  'Workload Visualizer.dc.html': 'workload-visualizer.html',
+  'OLH User Admin.dc.html': 'admin.html',
+  // Superseded prototype, deleted 2026-08 and 301'd to /tracker on both hosts.
+  // Mapped rather than ignored so a stray link lands on the page that replaced
+  // it instead of on a 404.
+  'OLH Tracker - New Views.dc.html': 'tracker.html'
+};
+
+/** Point every design-tool page link at the page that actually ships. */
+function rewriteDesignLinks(text) {
+  let n = 0;
+  for (const [from, to] of Object.entries(DESIGN_LINKS)) {
+    const parts = text.split('href="' + from + '"');
+    n += parts.length - 1;
+    text = parts.join('href="' + to + '"');
+  }
+  return { text, n };
+}
+
 const MANGLE_SAFE_RENAMES = [
   ['mkField', 'mkfield'],
   ['nameBytes', 'namebytes'],
@@ -1206,6 +1251,36 @@ function build(name, spec) {
     console.log('  memo invalidation        ' + spec.caches.join(', '));
   }
 
+  // 3b. Point design-tool page links at the pages that actually ship. Runs
+  //     BEFORE the page patches so a patch can still anchor on a rewritten
+  //     link, and covers the auth module asset too -- its PAGES[].href carries
+  //     the same source names, and although nothing navigates by it today, a
+  //     table of page links where every href is a 404 is a trap for whatever
+  //     reads it next.
+  {
+    const r = rewriteDesignLinks(state.template);
+    state.template = r.text;
+    let inAuth = 0;
+    for (const entry of Object.values(state.manifest)) {
+      const txt = assetText(entry);
+      if (!txt || !txt.includes('.dc.html')) continue;
+      const a = rewriteDesignLinks(txt);
+      // PAGES[].href is a bare property, not an href="…" attribute, so rewrite
+      // those by value as well. Same map, so the two cannot drift.
+      let t = a.text;
+      let m = a.n;
+      for (const [from, to] of Object.entries(DESIGN_LINKS)) {
+        const parts = t.split('href: "' + from + '"');
+        m += parts.length - 1;
+        t = parts.join('href: "' + to + '"');
+      }
+      if (m) { writeAssetText(entry, t); inAuth += m; }
+    }
+    if (r.n || inAuth) {
+      console.log('  page links rewritten     ' + r.n + ' in template, ' + inAuth + ' in assets');
+    }
+  }
+
   // 4. Page-specific patches.
   for (const [label, find, replace] of (spec.patches || [])) {
     sub(state, name, label, find, replace);
@@ -1364,8 +1439,84 @@ function checkStaticRefs(pub) {
   }
 }
 
+/* Every internal <a href> in a built page must lead somewhere.
+ *
+ * This exists because thirteen of them did not, and everything else said the
+ * build was fine. The 08/03 export renamed inter-page links to design-tool
+ * source names, so all seven landing-page tiles and the "All Views" back-link
+ * on six pages 404'd. The pages built clean, every assertion passed, and
+ * headless Chrome loaded all ten without an uncaught error -- because a dead
+ * link throws nothing until somebody clicks it. The first report was a person
+ * saying the admin console "is not working".
+ *
+ * checkStaticRefs() above is the same idea for assets/ and fonts/. The gap was
+ * that nothing did it for pages, on the tacit assumption that the design tool
+ * emits deployed names. It does not; through 08/01 it coincided.
+ *
+ * Three things are deliberately NOT failures:
+ *   - "{{ expr }}"     a template expression, resolved per row at runtime
+ *                      (r.jobHref and friends open Salesforce).
+ *   - a bare UUID      a bundler asset handle, resolved by the runtime from the
+ *                      manifest, not by the server.
+ *   - external schemes  http(s), mailto, tel, data, and in-page #anchors.
+ */
+function checkPageLinks(pub) {
+  const present = new Set(fs.readdirSync(pub));
+  // The extensionless routes both hosts rewrite. Kept in sync by hand with
+  // netlify.toml and public/staticwebapp.config.json -- a link to a route that
+  // neither host declares is as dead as a link to a missing file.
+  const routes = new Set(['/', '/tracker', '/completion', '/qa-management', '/scheduler',
+    '/walk-calendar', '/workload', '/workload-visualizer', '/admin']);
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  const bad = new Map();
+  let checked = 0;
+  for (const name of fs.readdirSync(pub).filter((f) => f.endsWith('.html'))) {
+    const file = path.join(pub, name);
+    const texts = [];
+    if (isBundle(file)) {
+      const state = loadBundle(file);
+      texts.push(state.template);
+      for (const entry of Object.values(state.manifest)) {
+        const txt = assetText(entry);
+        if (txt !== null) texts.push(txt);
+      }
+    } else {
+      texts.push(fs.readFileSync(file, 'utf8'));
+    }
+    for (const txt of texts) {
+      for (const m of txt.matchAll(/href="([^"]*)"/g)) {
+        const href = m[1].trim();
+        if (!href) continue;
+        if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(href)) continue;  // external or anchor
+        if (href.includes('{{')) continue;                            // template expression
+        if (UUID.test(href)) continue;                                // bundler asset handle
+        const target = href.split(/[?#]/)[0];
+        checked++;
+        const ok = routes.has(target) || present.has(target.replace(/^\.?\//, ''));
+        if (!ok) {
+          if (!bad.has(href)) bad.set(href, new Set());
+          bad.get(href).add(name);
+        }
+      }
+    }
+  }
+  if (bad.size) {
+    die('the built pages link to ' + bad.size + ' target(s) that do not exist in ' + pub + ':\n' +
+        [...bad].sort().map(([href, pages]) =>
+          '         ' + href + '  <- ' + [...pages].sort().join(', ')).join('\n') +
+        '\n       These are 404s on the live site and nothing else in this build ' +
+        'would notice.\n       If the design tool renamed its links again, add the ' +
+        'new name to DESIGN_LINKS.');
+  }
+  console.log('  ok       ' + checked + ' internal link(s), all resolve');
+}
+
 console.log('\nstatic references');
 checkStaticRefs(PUB);
+
+console.log('\npage links');
+checkPageLinks(PUB);
 
 const saved = results.reduce((a, r) => a + (r.before - r.after), 0);
 console.log('\nbuilt ' + results.length + ' pages, removed ' + kb(saved) + ' of bundled snapshot data');
