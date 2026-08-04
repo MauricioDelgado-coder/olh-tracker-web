@@ -1,5 +1,6 @@
-/* Live data loader, inlined into the scheduler / workload / walk-calendar
- * bundles by dev/build-live-pages.js.
+/* Live data loader, inlined by dev/build-live-pages.js into every page whose
+ * PAGES[] entry sets inject:true (completion, scheduler, workload,
+ * workload-visualizer, walk-calendar, admin, homesite).
  *
  * The build step DELETES the bundled olh-data demo fixture and the WALK_*
  * snapshot from these pages, so there is no local data at all when this runs.
@@ -11,6 +12,17 @@
  * Contract:
  *   GET /api/jobs        -> { jobs:[{id,fields}], managers:[...] }
  *   GET /api/walk-config -> { roster, drive, productMap, communities, unscheduled }
+ *
+ * WHERE THIS RUNS (2026-08-04): outside the bundler's __bundler/template blob,
+ * as a sibling of the bundler's own bootstrap script -- see the injection-site
+ * note in dev/build-live-pages.js. That is why boot() is triggered by polling
+ * for window.OLHAuth below rather than by document.readyState: this script now
+ * executes on the ordinary synchronous parse of the tiny OUTER shell document,
+ * long before the async bootstrap has fetched the manifest, parsed the real
+ * page out of the template, or replayed any of ITS scripts. DOMContentLoaded
+ * of the shell fires almost immediately and describes nothing about whether
+ * the real page -- or window.OLHAuth, which authheaders() depends on -- exists
+ * yet.
  */
 (function () {
   'use strict';
@@ -192,9 +204,18 @@
     }
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot);
-  } else {
+  /* Poll for the signal that the real page has actually mounted, rather than
+     waiting on this shell document's own readyState. Every injected page
+     carries window.OLHAuth once mounted, and authheaders() needs it anyway,
+     so it doubles as the "the real page exists now" signal. Same 6s budget as
+     tracker.html's own _loadWhenAuthed. Past it, run anyway: an
+     unauthenticated fetch surfaces a clear 401 in the error banner, which is
+     strictly better than this loader hanging silently forever because the
+     page never finished mounting. */
+  function whenReady(tries) {
+    if (window.OLHAuth && typeof window.OLHAuth.authHeaders === 'function') { boot(); return; }
+    if (tries < 120) { setTimeout(function () { whenReady(tries + 1); }, 50); return; }
     boot();
   }
+  whenReady(0);
 })();

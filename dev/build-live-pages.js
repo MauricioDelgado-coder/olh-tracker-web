@@ -28,6 +28,43 @@
  * Every patch asserts an exact match count, and the emitted payload is re-parsed
  * the way the browser loader does, so a re-export that moves this code fails the
  * build loudly rather than shipping a page stuck on no data.
+ *
+ * WHERE THE LOADER IS INJECTED (fixed 2026-08-04, was inside state.template):
+ *
+ * The bundler's own bootstrap script -- the plain, un-bundled <script> that
+ * every exported page carries alongside its __bundler/manifest and
+ * __bundler/template blocks -- reconstructs the real page from the template
+ * via DOMParser, then replaces document.documentElement with it. Scripts
+ * inserted that way are inert per spec, so the bootstrap walks
+ * document.scripts afterward and manually re-creates each one with
+ * createElement, IN DOCUMENT ORDER -- and for any script with a src (React,
+ * ReactDOM, Babel, the CDN/blob chunks), it AWAITS that one script's
+ * load/error event before moving to the next, with no timeout.
+ *
+ * A script placed at the end of state.template (which is where this used to
+ * live, anchored on the template's own "</body>") sits last in that replay
+ * queue. If any earlier external script is slow, or never fires load/error at
+ * all -- a flaky CDN fetch, a throttled background tab -- the whole replay
+ * hangs on that one `await`, and every script after it, including this one,
+ * never executes. No exception is thrown (a stuck promise doesn't throw), so
+ * this fails completely silently: no console error, no network request, and
+ * the loader's own diagnostic attributes (data-olh-source and friends) never
+ * get set. That is exactly what shipped on completion.html and
+ * walk-calendar.html on 2026-08-04 -- both carry page-specific `patches`
+ * (unlike scheduler.html/workload.html, which carry none), though the actual
+ * trigger is CDN timing, not the patches themselves, which is why it read as
+ * intermittent rather than deterministically broken.
+ *
+ * The fix: inject the loader as a real <script> in the OUTER file, a sibling
+ * of the bootstrap script itself, rather than inside state.template. The
+ * bootstrap script is not bundled -- it is literal markup in the served file
+ * -- so the browser's ordinary HTML parser reaches and executes a sibling of
+ * it on the initial, synchronous parse, before the async
+ * fetch-manifest/parse-template/replay-scripts sequence even starts. It can
+ * never get stuck behind a CDN load because it never enters that queue at
+ * all. See the insertion in build() below, and the "WHERE THIS RUNS" note at
+ * the top of dev/live-loader.js for why boot() now polls for window.OLHAuth
+ * instead of trusting document.readyState.
  */
 'use strict';
 
@@ -1355,14 +1392,38 @@ function build(name, spec) {
     console.log('  patched                  ' + label);
   }
 
-  // 5. Inline the loader last, so it runs after the app has mounted and the
-  //    event listeners are registered.
+  // 5. Inject the loader OUTSIDE state.template -- as a sibling of the
+  //    bundler's own bootstrap script in the OUTER file -- rather than inside
+  //    the template blob. See the "WHERE THE LOADER IS INJECTED" note at the
+  //    top of this file for why: a script inside the template can get stuck
+  //    behind a slow or stalled external <script src> in the runtime's
+  //    sequential replay loop and never run at all, silently.
+  //
+  //    state.iManifest points at the __bundler/manifest CONTENT line, so
+  //    state.iManifest - 1 is the "<script type=\"__bundler/manifest\">" tag
+  //    line -- inserting just before it places the loader as literal markup
+  //    that the browser's ordinary parser reaches before any of the bundler's
+  //    own async work starts. Splicing shifts every later line, so iManifest
+  //    and iTemplate (both used by emit() below) move with it.
   if (spec.inject) {
-    if (!state.template.includes('</body>')) die(name + ': no </body> to inject the loader before');
-    sub(state, name, 'loader injection', '</body>',
-      '<script>window.__OLH_LIVE = { walkRef: ' + (spec.walkRef ? 'true' : 'false') + ' };</script>\n' +
-      '<script>\n/* live data loader — injected by dev/build-live-pages.js */\n' + LOADER + '\n</script>\n</body>');
-    console.log('  loader injected          walkRef=' + (spec.walkRef ? 'true' : 'false'));
+    const outerBlock = [
+      '<script>',
+      'window.__OLH_LIVE = { walkRef: ' + (spec.walkRef ? 'true' : 'false') + ' };',
+      '/* live data loader — injected by dev/build-live-pages.js, OUTSIDE the',
+      '   __bundler/template blob so the runtime\'s script-replay loop cannot',
+      '   starve it. See the note in dev/build-live-pages.js. */',
+      LOADER,
+      '</script>'
+    ].join('\n');
+    const insertAt = state.iManifest - 1;
+    if (!/^\s*<script type="__bundler\/manifest">\s*$/.test(state.lines[insertAt])) {
+      die(name + ': expected the __bundler/manifest opening tag immediately before its content line');
+    }
+    const added = outerBlock.split('\n');
+    state.lines.splice(insertAt, 0, ...added);
+    state.iManifest += added.length;
+    state.iTemplate += added.length;
+    console.log('  loader injected (outer)  walkRef=' + (spec.walkRef ? 'true' : 'false'));
   }
 
   // 6. Nothing in any plain inline script may carry a declaration the bundler
@@ -1397,8 +1458,11 @@ function build(name, spec) {
   }
 
   if (spec.inject) {
-    if (!/\/walk-config/.test(round)) die(name + ': loader missing from emitted page');
-    if (!/dispatchEvent\(new Event\('olh-data'\)\)/.test(round)) die(name + ': loader lost the olh-data dispatch');
+    // The loader now lives outside state.template (see step 5), so check the
+    // whole emitted file rather than `round`, which is only the template.
+    const emitted = fs.readFileSync(out, 'utf8');
+    if (!/\/walk-config/.test(emitted)) die(name + ': loader missing from emitted page');
+    if (!/dispatchEvent\(new Event\('olh-data'\)\)/.test(emitted)) die(name + ': loader lost the olh-data dispatch');
   }
   if (name === 'tracker.html' && !/loadLive/.test(round)) {
     die(name + ': expected the page to carry its own loadLive()');
