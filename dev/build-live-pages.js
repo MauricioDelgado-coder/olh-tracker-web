@@ -457,13 +457,21 @@ const PAGES = {
        '      && LOTS[(f["Lot Status"] || "").trim().toUpperCase()] === 1;',
        'const LOTS = { B: 1, S: 1, W: 1, M: 1 };\n' +
        '    // Report scope: still in the Salesforce pull, started, not yet complete,\n' +
-       '    // no Actual COE, projected to finish 7/1/26 or later, lot status B/S/W/M\n' +
+       '    // no Actual COE, projected to finish 7/1/26 or later, lot status B/S/W/M.\n' +
+       '    // Reads "Actual Completion"/"Projected Completion" (no "Date" suffix) --\n' +
+       '    // those are the fields the COE-mode sync refreshes daily. The "...Date"\n' +
+       '    // variants are frozen leftovers from the old Dynamics Export source and\n' +
+       '    // are no longer written, so scoping off them silently drifts stale.\n' +
        '    const inScope = f => (f["Record Status"] || "") === "Active"\n' +
        '      && !!iso(f["Actual Start Date"])\n' +
-       '      && !iso(f["Actual Completion Date"])\n' +
+       '      && !iso(f["Actual Completion"])\n' +
        '      && !iso(f["Actual COE Date"])\n' +
-       '      && iso(f["Projected Completion Date"]) >= "2026-07-01"\n' +
+       '      && iso(f["Projected Completion"]) >= "2026-07-01"\n' +
        '      && LOTS[(f["Lot Status"] || "").trim().toUpperCase()] === 1;'],
+
+      ['use the fresh Projected Completion field for the EDD column/calendar/chart (not the frozen legacy "...Date" field)',
+       'edd: iso(f["Projected Completion Date"]),',
+       'edd: iso(f["Projected Completion"]),'],
 
       ['drop the plan/elevation body cells (no Airtable source)',
        '            <sc-raw-td style="padding:7px 10px;border-bottom:1px solid #F1EBE1;' +
