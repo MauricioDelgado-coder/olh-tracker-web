@@ -71,7 +71,7 @@ const SELECT_OPTIONS = Object.freeze({
 });
 
 /**
- * THE WHITELIST. Exactly 38 entries. Anything else is rejected.
+ * THE WHITELIST. Exactly 44 entries. Anything else is rejected.
  * Keys are the literal Airtable field names; values are the expected type.
  *   checkbox -> boolean
  *   date     -> 'YYYY-MM-DD'
@@ -109,6 +109,12 @@ const EDITABLE = Object.freeze({
   'ACC Missed': 'checkbox',
   'ACC Miss Reason': 'select',
   'ACC Miss Note': 'text',
+  'QAI Walk Miss Reconciled': 'checkbox',
+  'QAA Walk Miss Reconciled': 'checkbox',
+  'CEL Walk Miss Reconciled': 'checkbox',
+  'ACC Walk Miss Reconciled': 'checkbox',
+  'CEL Reschedule Flag': 'checkbox',
+  'ACC Reschedule Flag': 'checkbox',
   'NOC Lock Date': 'date',
   'Power Meter': 'checkbox',
   'Water Meter': 'checkbox',

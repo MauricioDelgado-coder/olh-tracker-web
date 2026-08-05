@@ -284,20 +284,23 @@ function readSession(token) {
  */
 const ALL_PAGES = [
   'page.home', 'page.tracker', 'page.completion', 'page.walks',
-  'page.qamgmt', 'page.scheduler', 'page.workload', 'page.admin'
+  'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.workload', 'page.admin'
 ];
 
 // Mirrors DEFAULT_ROLES in the frontend auth module. Used when the Roles table
 // has no row for a slug, so an empty table is a safe state.
+// page.missedwalks follows page.qamgmt exactly -- reconciling a miss is the same
+// tier of work as recording one, so whoever can mark a walk missed can also
+// clear it once it's been handled.
 const DEFAULT_ROLES = {
   admin: ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage'].concat(ALL_PAGES),
   qam: ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply',
-    'page.home', 'page.tracker', 'page.completion', 'page.walks', 'page.qamgmt',
+    'page.home', 'page.tracker', 'page.completion', 'page.walks', 'page.qamgmt', 'page.missedwalks',
     'page.scheduler', 'page.workload'],
   cm: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.completion', 'page.walks'],
-  ccr: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.walks', 'page.qamgmt'],
+  ccr: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.walks', 'page.qamgmt', 'page.missedwalks'],
   leadership: ['suite.view', 'page.home', 'page.tracker', 'page.completion',
-    'page.walks', 'page.qamgmt', 'page.scheduler', 'page.workload']
+    'page.walks', 'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.workload']
 };
 const PERMS = ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage']
   .concat(ALL_PAGES);
@@ -525,6 +528,7 @@ const PAGE_LABEL = {
   'page.completion': 'Completion Report',
   'page.walks': 'Walk Schedule',
   'page.qamgmt': 'QA Management',
+  'page.missedwalks': 'Missed Walks',
   'page.scheduler': 'Schedule Optimizer',
   'page.workload': 'Workload Predictor',
   'page.admin': 'User Administration'

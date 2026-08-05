@@ -1,0 +1,1242 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Missed Walks — OLH Tracker</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:#FBF6F3;color:#303030;font:400 14px/1.45 Arial,Helvetica,sans-serif;-webkit-font-smoothing:antialiased}
+  button,input,select{font:inherit;color:inherit}
+  :focus-visible{outline:3px solid rgba(0,93,170,.35);outline-offset:1px}
+  a{color:#005DAA;text-decoration:none}
+  a:hover{color:#203F7C;text-decoration:underline}
+  table{border-collapse:collapse;width:100%}
+  th,td{text-align:left;padding:8px 10px;font-size:12.5px;vertical-align:top}
+  th{position:sticky;top:0;background:#F6F2EA;color:#6F6963;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;border-bottom:1px solid #D8CFBE;white-space:nowrap}
+  td{border-bottom:1px solid #F1EBE1}
+  tr:nth-child(even) td{background:#FCFAF6}
+</style>
+</head>
+<body>
+<div style="min-height:100vh;display:flex;flex-direction:column;background:#FBF6F3">
+
+  <header style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:14px 32px;background:#1B2A58">
+    <h1 style="margin:0;font-size:18px;font-weight:600;letter-spacing:.005em;color:#fff;white-space:nowrap">Missed Walks</h1>
+    <span style="font-size:11.5px;color:#C7BFB2;white-space:nowrap">Reconcile or reschedule every QAI, QAA, Celebration and Acceptance walk that was marked missed</span>
+    <span style="margin-left:auto;display:flex;align-items:center;gap:14px">
+      <olh-user-chip></olh-user-chip>
+    </span>
+    <a href="index.html" style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 13px;border:1px solid rgba(255,255,255,.28);border-radius:4px;color:#C7BFB2;font-size:13px;font-weight:500;white-space:nowrap">← All Views</a>
+  </header>
+
+  <div id="readOnlyBar" style="display:none;align-items:center;gap:12px;padding:11px 32px;background:#FBEDED;border-bottom:1px solid #EFCFCF">
+    <span style="height:19px;padding:0 9px;border-radius:999px;background:#fff;color:#AA1F23;font-size:9.5px;font-weight:700;line-height:19px;letter-spacing:.09em">READ ONLY</span>
+    <span id="readOnlyNote" style="font-size:12.5px;font-weight:500;color:#AA1F23"></span>
+  </div>
+
+  <main style="flex:1 1 auto;max-width:1400px;width:100%;margin:0 auto;padding:20px 32px 40px">
+
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;border:1px solid #E4DED2;border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(27,42,88,.05);margin-bottom:14px">
+      <input id="q" type="search" placeholder="Search job, community, address…" autocomplete="off" style="height:32px;width:250px;padding:0 10px;border:1px solid #BFB8AB;border-radius:4px;font-size:12.5px">
+      <select id="fType" style="height:32px;padding:0 8px;border:1px solid #BFB8AB;border-radius:4px;font-size:12.5px">
+        <option value="">All walk types</option>
+        <option value="QAI">QAI</option>
+        <option value="QAA">QAA</option>
+        <option value="CEL">CEL</option>
+        <option value="ACC">ACC</option>
+      </select>
+      <select id="fComm" style="height:32px;padding:0 8px;border:1px solid #BFB8AB;border-radius:4px;font-size:12.5px;min-width:180px">
+        <option value="">All communities</option>
+      </select>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:#6F6963;margin-left:8px">
+        <input id="fReconciled" type="checkbox"> Show reconciled too
+      </label>
+      <span style="margin-left:auto;font-size:12px;color:#908A82" id="countNote"></span>
+      <button id="btnRefresh" style="height:30px;padding:0 12px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;color:#6F6963;font-size:12.5px;font-weight:500;cursor:pointer">Refresh</button>
+    </div>
+
+    <div style="border:1px solid #E4DED2;border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(27,42,88,.05);overflow:auto;max-height:70vh">
+      <table>
+        <thead>
+          <tr>
+            <th>Walk</th>
+            <th>Job</th>
+            <th>Community</th>
+            <th>Address</th>
+            <th>Current Date</th>
+            <th>Current Status</th>
+            <th>Miss Reason</th>
+            <th>Miss Note</th>
+            <th>Manager</th>
+            <th>Reschedule Flag</th>
+            <th>Reconciled</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div id="emptyNote" style="display:none;margin-top:14px;padding:38px 24px;border:1px dashed #D8CFBE;border-radius:12px;background:#fff;text-align:center;color:#6F6963;font-size:14px"></div>
+  </main>
+
+</div>
+
+<div id="toasts" style="position:fixed;right:18px;bottom:18px;z-index:60;display:flex;flex-direction:column;gap:8px;max-width:400px" aria-live="polite"></div>
+
+<script>
+/* OLH shared authentication + change tracking.
+ *
+ * Backend contract (Airtable-backed, same {apiBase} as /jobs and /update-job):
+ *   POST {apiBase}/sign-in   {email, password}  -> {user:{…}, token}
+ *                            409 {error, mustSetPassword:true, inviteToken} when the
+ *                            account is still pending its first password.
+ *   GET  {apiBase}/session   Authorization: Bearer <token> -> {user}
+ *   POST {apiBase}/sign-out
+ *
+ * Password lifecycle (invite-based — the backend owns every credential):
+ *   POST {apiBase}/invite            {userId}                -> {ok:true}
+ *        Admin re-sends the set-password email. Creating a user sends it once
+ *        automatically, so this is only for expired or lost invites.
+ *   GET  {apiBase}/invite/:token     -> {email, name, expiresAt}
+ *        Validates a set-password link before showing the form.
+ *   POST {apiBase}/set-password      {token, password}       -> {user, token}
+ *        Consumes a single-use invite or reset token and signs the user in.
+ *   POST {apiBase}/forgot-password   {email}                 -> {ok:true}
+ *        Always 200, even for unknown emails, so the endpoint cannot be used
+ *        to discover who has an account.
+ *
+ * The frontend never hashes, stores, or transmits a password anywhere except
+ * these endpoints over TLS. The backend must: hash with bcrypt/argon2 (never
+ * store plaintext or a reversible form), issue single-use tokens with a short
+ * expiry (24h invite, 1h reset), invalidate a token once consumed, and enforce
+ * the password policy server-side — the client-side meter below is guidance
+ * for the person typing, not a security control.
+ *   POST {apiBase}/audit     {recordId, job, field, label, from, to, action, page}
+ *                            -> {entry, conflict?:{by,at,value}}
+ *   GET  {apiBase}/audit?recordId=rec…&field=…&since=ISO -> {entries:[…]}
+ *
+ * Airtable tables this expects:
+ *   Users     — Name, Email, Role (Admin | QA Manager | Construction Manager |
+ *               Leadership | Customer Care), Division, Active
+ *   Audit Log — Record Id, Job #, Field, Label, From, To, Action, Page,
+ *               Changed By, Changed At   (append-only, never pruned)
+ *
+ * With no backend reachable the module runs in DEMO mode: the sign-in screen
+ * accepts any roster name, the session lives in localStorage, and the audit log
+ * is local to the browser. Demo mode is always labelled on screen so nobody
+ * mistakes a local log for the shared one. */
+(function () {
+  // The runtime can evaluate helmet scripts more than once. The custom elements
+  // close over the first instance's state, so a second evaluation must not
+  // replace window.OLHAuth with a fresh, empty one.
+  if (window.OLHAuth && window.OLHAudit) return;
+
+  var SESSION_KEY = "olh.session.v1";
+  var LOG_KEY = "olh.audit.v1";
+
+  /* The permission catalog. Adding a capability means naming it here and
+     checking it with Auth.can() at the point of use. */
+  /* The pages a role can open. Each is a "page.*" permission so page access
+     and capabilities share one grid, one save, and one Auth.can() check. */
+  var PAGES = [
+    { key: "page.home", label: "All Views (home)", href: "index.html", note: "The launcher. A role without this lands on the first page it can open." },
+    { key: "page.tracker", label: "QA & Closing Tracker", href: "tracker.html", note: "The homesite grid \u2014 walk dates, meters, keys and notes." },
+    { key: "page.completion", label: "Completion Report", href: "completion.html", note: "Homesites under construction with their projected completion and closing dates." },
+    { key: "page.walks", label: "Walk Schedule", href: "walk-calendar.html", note: "The published walk calendar and its export." },
+    { key: "page.qamgmt", label: "QA Management", href: "qa-management.html", note: "Today's walks by community \u2014 mark each one completed or missed." },
+    { key: "page.scheduler", label: "Schedule Optimizer", href: "scheduler.html", note: "Proposed walk moves and the workload balance behind them." },
+    { key: "page.workload", label: "Workload Predictor", href: "workload.html", note: "Forecast walk volume per QA Manager." },
+    { key: "page.admin", label: "User Administration", href: "admin.html", note: "This console \u2014 the roster and this grid." }
+  ];
+
+  var PERMS = [
+    { key: "suite.view", label: "View the suite", note: "Sign in and read every page. Grant only this and the role is view only \u2014 nothing on any page can be changed." },
+    { key: "tracker.edit", label: "Edit tracker fields", note: "Change dates, walk managers, notes and checkboxes on the QA & Closing Tracker." },
+    { key: "walk.schedule", label: "Schedule & reassign walks", note: "Book Celebration and Acceptance Walks and move them between QA Managers." },
+    { key: "optimizer.apply", label: "Apply optimizer suggestions", note: "Accept the schedule optimizer's proposed moves, one at a time or all at once." },
+    { key: "roster.manage", label: "Manage users & permissions", note: "Add and suspend users, change roles, and edit this grid." }
+  ];
+
+  var ALL_PAGES = PAGES.map(function (p) { return p.key; });
+
+  // Shipped defaults. An admin can override these; ROLE_LOCKS keeps the
+  // console reachable no matter what the grid is set to.
+  var DEFAULT_ROLES = {
+    admin: { label: "Admin", can: ["suite.view", "tracker.edit", "walk.schedule", "optimizer.apply", "roster.manage"].concat(ALL_PAGES) },
+    qam: { label: "QA Manager", can: ["suite.view", "tracker.edit", "walk.schedule", "optimizer.apply", "page.home", "page.tracker", "page.completion", "page.walks", "page.qamgmt", "page.scheduler", "page.workload"] },
+    cm: { label: "Construction Manager", can: ["suite.view", "tracker.edit", "page.home", "page.tracker", "page.completion", "page.walks"] },
+    ccr: { label: "Customer Care", can: ["suite.view", "tracker.edit", "page.home", "page.tracker", "page.walks", "page.qamgmt"] },
+    leadership: { label: "Division Leadership", can: ["suite.view", "page.home", "page.tracker", "page.completion", "page.walks", "page.qamgmt", "page.scheduler", "page.workload"] }
+  };
+  var ROLE_LOCKS = { admin: ["suite.view", "roster.manage", "page.admin"] };
+  /* Only admins run the console, so page.admin is never handed to anyone else. */
+  var ADMIN_ONLY_PAGES = ["page.admin"];
+  /* Every capability implies being able to see the thing you are changing, so
+     an editing permission drags "View the suite" along with it. */
+  var IMPLIES_VIEW = ["tracker.edit", "walk.schedule", "optimizer.apply", "roster.manage"].concat(ALL_PAGES);
+  /* An editing capability is meaningless without the page it edits. */
+  var NEEDS_PAGE = { "tracker.edit": "page.tracker", "walk.schedule": "page.walks", "optimizer.apply": "page.scheduler", "roster.manage": "page.admin" };
+  var ROLES_KEY = "olh.roles.v1";
+
+  var ROLES = {};
+
+  /* The single owner of the matrix rules: locked permissions are always
+     present, and anything that edits implies being able to view. Both the
+     saved matrix and the grid's in-progress draft run through this, so what
+     an admin sees is exactly what gets written. */
+  function normalizeMatrix(src) {
+    var out = {};
+    Object.keys(DEFAULT_ROLES).forEach(function (r) {
+      var can = (src && src[r]) ? src[r].slice() : DEFAULT_ROLES[r].can.slice();
+      (ROLE_LOCKS[r] || []).forEach(function (p) { if (can.indexOf(p) < 0) can.push(p); });
+      if (can.some(function (p) { return IMPLIES_VIEW.indexOf(p) >= 0; }) && can.indexOf("suite.view") < 0)
+        can.push("suite.view");
+      Object.keys(NEEDS_PAGE).forEach(function (cap) {
+        if (can.indexOf(cap) >= 0 && can.indexOf(NEEDS_PAGE[cap]) < 0) can.push(NEEDS_PAGE[cap]);
+      });
+      if (r !== "admin") can = can.filter(function (p) { return ADMIN_ONLY_PAGES.indexOf(p) < 0; });
+      out[r] = can;
+    });
+    return out;
+  }
+
+  function applyMatrix(src) {
+    var norm = normalizeMatrix(src);
+    Object.keys(DEFAULT_ROLES).forEach(function (r) {
+      ROLES[r] = { label: DEFAULT_ROLES[r].label, can: norm[r] };
+    });
+  }
+  applyMatrix(readStoreEarly(ROLES_KEY));
+  function readStoreEarly(k) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
+  var DENY = {
+    "suite.view": "Your account does not have access to the OLH Suite yet. Ask an admin to grant it.",
+    "tracker.edit": "Your role can view the tracker but not change it.",
+    "walk.schedule": "Only QA Managers and admins can schedule or reassign walks.",
+    "optimizer.apply": "Only QA Managers and admins can apply optimizer suggestions.",
+    "roster.manage": "Only admins can change the roster."
+  };
+  PAGES.forEach(function (p) { DENY[p.key] = "Your role does not have access to the " + p.label + " page."; });
+  var ROLE_ALIAS = {
+    "admin": "admin", "qa manager": "qam", "qam": "qam",
+    "construction manager": "cm", "cm": "cm",
+    "customer care": "ccr", "customer care rep": "ccr", "ccr": "ccr",
+    "leadership": "leadership", "division leadership": "leadership"
+  };
+
+  var state = { user: null, token: null, demo: false, base: "/api", ready: false };
+  var listeners = [];
+  function emit() { listeners.slice().forEach(function (fn) { try { fn(state.user); } catch (e) {} }); }
+
+  function matrixOf() {
+    var out = {};
+    Object.keys(ROLES).forEach(function (r) { out[r] = ROLES[r].can.slice(); });
+    return out;
+  }
+
+  function readStore(k, d) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
+  function writeStore(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+
+  function normRole(r) { return ROLE_ALIAS[String(r || "").toLowerCase().trim()] || "leadership"; }
+  function initials(n) {
+    return String(n || "?").split(/[\s,]+/).filter(Boolean).slice(0, 2)
+      .map(function (p) { return p[0].toUpperCase(); }).join("");
+  }
+
+  /* Roster fallback for demo mode: the walk roster is the QA Manager list, the
+     tracker's managers are the construction managers. */
+  function demoDirectory() {
+    var out = [];
+    (window.WALK_ROSTER || []).forEach(function (p) {
+      out.push({
+        id: p.id, name: p.name.replace(/\s*\(OLH\)\s*$/i, ""),
+        email: p.name.toLowerCase().replace(/[^a-z]+/g, ".").replace(/^\.|\.$/g, "") + "@lennar.com",
+        role: p.role === "QAM" ? "qam" : "ccr", division: p.home || "Central Florida"
+      });
+    });
+    ((window.OLH_DATA && window.OLH_DATA.managers) || []).slice(0, 40).forEach(function (m) {
+      if (out.some(function (u) { return u.name === m.name; })) return;
+      out.push({
+        id: m.id, name: m.name,
+        email: m.name.toLowerCase().replace(/[^a-z]+/g, ".").replace(/^\.|\.$/g, "") + "@lennar.com",
+        role: "cm", division: "Central Florida"
+      });
+    });
+    out.unshift({ id: "usr-admin", name: "OLH Administrator", email: "olh.admin@lennar.com", role: "admin", division: "Central Florida" });
+    out.splice(1, 0, { id: "usr-lead", name: "Division Leadership", email: "division.leadership@lennar.com", role: "leadership", division: "Central Florida" });
+    return out;
+  }
+
+  function api(path, opts) {
+    opts = opts || {};
+    var headers = { "Content-Type": "application/json", Accept: "application/json" };
+    if (state.token) {
+      headers.Authorization = "Bearer " + state.token;
+      headers["X-OLH-Token"] = "Bearer " + state.token;
+    }
+    return fetch(state.base + path, {
+      method: opts.method || "GET", headers: headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined
+    }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (data) {
+        if (!res.ok) {
+          var e = new Error((data && data.error) || "Request failed (" + res.status + ")");
+          if (data) { e.mustSetPassword = data.mustSetPassword; e.inviteToken = data.inviteToken; }
+          e.status = res.status;
+          throw e;
+        }
+        return data;
+      });
+    });
+  }
+
+  var Auth = {
+    roles: ROLES,
+    configure: function (base) { if (base) state.base = String(base).replace(/\/$/, ""); return Auth; },
+    user: function () { return state.user; },
+    isDemo: function () { return state.demo; },
+    token: function () {
+      if (state.token) return state.token;
+      var st = readStore(SESSION_KEY, null);
+      return (st && st.token) || "";
+    },
+    authHeaders: function (extra) {
+      var h = extra || {};
+      h.Accept = "application/json";
+      var tok = Auth.token();
+      if (tok) {
+        /* Both, deliberately. Azure Static Web Apps overwrites
+           Authorization with its own bearer token before a managed
+           function sees it (Azure/static-web-apps#158), so on Azure the
+           only copy that survives is the one in a header its proxy does
+           not recognise. bearer() in netlify/lib/olh-auth.js prefers
+           X-OLH-Token and falls back to Authorization, so one build works
+           on both hosts and neither header is load-bearing alone. */
+        h.Authorization = "Bearer " + tok;
+        h["X-OLH-Token"] = "Bearer " + tok;
+      }
+      return h;
+    },
+    ready: function () { return state.ready; },
+    onChange: function (fn) { listeners.push(fn); return function () { listeners = listeners.filter(function (f) { return f !== fn; }); }; },
+
+    roleLabel: function (r) { var x = ROLES[r || (state.user && state.user.role)]; return x ? x.label : "Viewer"; },
+    can: function (perm) {
+      var u = state.user; if (!u) return false;
+      var r = ROLES[u.role]; return !!(r && r.can.indexOf(perm) >= 0);
+    },
+    denyReason: function (perm) { return DENY[perm] || "You do not have access to that."; },
+
+    /* Resolve the session: a live backend first, the stored session second.
+       Never blocks the UI on a dead endpoint for longer than a moment. */
+    restore: function () {
+      if (state._restoring) return state._restoring;
+      var stored = readStore(SESSION_KEY, null);
+      if (stored && stored.token) state.token = stored.token;
+      var timeout = new Promise(function (_, rej) { setTimeout(function () { rej(new Error("timeout")); }, 3500); });
+      state._restoring = Promise.race([api("/session"), timeout]).then(function (data) {
+        if (!data || !data.user) throw Object.assign(new Error("no session"), { status: 401 });
+        state.user = Object.assign({}, data.user, { role: normRole(data.user.role) });
+        state.demo = false;
+      }).catch(function (err) {
+        // A backend that ANSWERED -- 401 for no session, 403 for suspended --
+        // is a live backend, and being signed out is not preview mode. Only a
+        // network failure or the timeout above may fall back to demo.
+        if (err && err.status) {
+          state.demo = false; state.user = null; state.token = null;
+          try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
+          return;
+        }
+        state.demo = true;
+        state.user = stored && stored.user ? stored.user : null;
+      }).then(function () {
+        return Auth.loadMatrix().catch(function () {});
+      }).then(function () {
+        state.ready = true; emit(); return state.user;
+      });
+      return state._restoring;
+    },
+
+    signIn: function (email, password) {
+      return api("/sign-in", { method: "POST", body: { email: email, password: password } })
+        .then(function (data) {
+          state.user = Object.assign({}, data.user, { role: normRole(data.user.role) });
+          state.token = data.token || null; state.demo = false; state.ready = true;
+          writeStore(SESSION_KEY, { user: state.user, token: state.token });
+          emit(); return state.user;
+        })
+        .catch(function (err) {
+          // A real backend answering "set your password first" is not a
+          // preview-mode signal — pass it through untouched.
+          if (err && err.mustSetPassword) throw err;
+          // The server answered and said no. Falling through to the roster
+          // below would turn a wrong password into a successful sign-in.
+          if (err && err.status) throw err;
+          // No backend: fall back to the roster directory.
+          var dir = demoDirectory();
+          var q = String(email || "").toLowerCase().trim();
+          var hit = dir.find(function (u) { return u.email === q || u.name.toLowerCase() === q; });
+          if (!hit) throw new Error(state.demo ? "Cannot reach the OLH server, so sign-in is unavailable. Check your connection and try again." : (err.message || "Sign-in failed."));
+          state.user = hit; state.token = null; state.demo = true; state.ready = true;
+          writeStore(SESSION_KEY, { user: hit, token: null });
+          emit(); return hit;
+        });
+    },
+
+    signOut: function () {
+      var done = function () {
+        state.user = null; state.token = null;
+        state._restoring = Promise.resolve(null);
+        try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
+        emit();
+      };
+      return api("/sign-out", { method: "POST" }).then(done, done);
+    },
+
+    directory: demoDirectory,
+
+    /* ---- Role matrix ---------------------------------------------------
+     * GET {apiBase}/roles         -> {roles:{admin:["tracker.edit",…],…}}
+     * PUT {apiBase}/roles {roles} -> {roles}
+     * Airtable: a Roles table with Role and Permissions (multi-select). */
+    perms: function () { return PERMS.slice(); },
+    pages: function () { return PAGES.slice(); },
+    /* Pages this role can open, in catalog order — drives the home tiles and
+       the "where do I send them" fallback after sign-in. */
+    allowedPages: function (role) {
+      var can = (ROLES[role || (state.user && state.user.role)] || { can: [] }).can;
+      return PAGES.filter(function (p) { return can.indexOf(p.key) >= 0; });
+    },
+    canViewPage: function (key) { return Auth.can(key); },
+    /* Call at the top of a page: returns null when allowed, or a reason plus
+       somewhere the person can actually go. */
+    pageGuard: function (key) {
+      if (!state.user) return null;
+      if (Auth.can(key)) return null;
+      var page = PAGES.filter(function (p) { return p.key === key; })[0];
+      var open = Auth.allowedPages();
+      return {
+        title: "You Do Not Have Access to This Page",
+        reason: "Your role (" + Auth.roleLabel() + ") cannot open " +
+          (page ? page.label : "this page") + ". An admin can grant it under Roles & Permissions \u2192 Page Access.",
+        fallback: open[0] || null
+      };
+    },
+    normalizeMatrix: normalizeMatrix,
+    matrix: matrixOf,
+    /* "View the suite" can't be unchecked while the role holds anything that
+       requires seeing a page first. */
+    lockedPerms: function (role, draft) {
+      var locks = (ROLE_LOCKS[role] || []).slice();
+      var can = (draft && draft[role]) || (ROLES[role] ? ROLES[role].can : []);
+      if (can.some(function (p) { return IMPLIES_VIEW.indexOf(p) >= 0; }) && locks.indexOf("suite.view") < 0)
+        locks.push("suite.view");
+      if (role !== "admin") ADMIN_ONLY_PAGES.forEach(function (p) { if (locks.indexOf(p) < 0) locks.push(p); });
+      Object.keys(NEEDS_PAGE).forEach(function (cap) {
+        if (can.indexOf(cap) >= 0 && locks.indexOf(NEEDS_PAGE[cap]) < 0) locks.push(NEEDS_PAGE[cap]);
+      });
+      return locks;
+    },
+    lockReason: function (role, perm, draft) {
+      if ((ROLE_LOCKS[role] || []).indexOf(perm) >= 0)
+        return (ROLES[role] ? ROLES[role].label : role) + " always keeps this so the console stays reachable";
+      if (role !== "admin" && ADMIN_ONLY_PAGES.indexOf(perm) >= 0)
+        return "User Administration is admin-only";
+      if (perm === "suite.view")
+        return "Comes with the editing permissions below \u2014 clear those to make this role view only";
+      var owner = Object.keys(NEEDS_PAGE).filter(function (c) { return NEEDS_PAGE[c] === perm; })[0];
+      if (owner) {
+        var cap = PERMS.filter(function (p) { return p.key === owner; })[0];
+        return "Comes with \u201c" + (cap ? cap.label : owner) + "\u201d \u2014 clear that to take this page away";
+      }
+      return "";
+    },
+
+    loadMatrix: function () {
+      if (state.demo) { applyMatrix(readStore(ROLES_KEY, null)); emit(); return Promise.resolve(matrixOf()); }
+      return api("/roles").then(function (d) {
+        if (d && d.roles) { applyMatrix(d.roles); emit(); }
+        return matrixOf();
+      }).catch(function () { applyMatrix(readStore(ROLES_KEY, null)); emit(); return matrixOf(); });
+    },
+
+    saveMatrix: function (next) {
+      applyMatrix(next);
+      writeStore(ROLES_KEY, matrixOf());
+      emit();
+      if (state.demo) return Promise.resolve(matrixOf());
+      return api("/roles", { method: "PUT", body: { roles: matrixOf() } })
+        .then(function () { return matrixOf(); })
+        .catch(function () { return matrixOf(); });
+    },
+
+    resetMatrix: function () {
+      applyMatrix(null);
+      try { localStorage.removeItem(ROLES_KEY); } catch (e) {}
+      emit();
+      if (!state.demo) api("/roles", { method: "PUT", body: { roles: matrixOf() } }).catch(function () {});
+      return matrixOf();
+    }
+  };
+
+  /* ---- Change tracking -------------------------------------------------- */
+
+  function localLog() { return readStore(LOG_KEY, []); }
+
+  var Audit = {
+    /* Append one change. Returns {entry, conflict} — conflict is set when the
+       backend saw a newer change to the same field from someone else. */
+    record: function (change) {
+      var u = state.user;
+      var entry = Object.assign({
+        id: "a" + Date.now() + Math.random().toString(36).slice(2, 7),
+        at: new Date().toISOString(),
+        by: u ? u.name : "Unknown",
+        byId: u ? u.id : null,
+        byRole: u ? u.role : null
+      }, change);
+      if (state.demo) {
+        var log = localLog(); log.push(entry); writeStore(LOG_KEY, log);
+        return Promise.resolve({ entry: entry, conflict: null });
+      }
+      return api("/audit", { method: "POST", body: entry })
+        .then(function (d) { return { entry: (d && d.entry) || entry, conflict: (d && d.conflict) || null }; })
+        .catch(function (err) {
+          // The Audit Log is append-only and shared. Diverting a refused
+          // write into localStorage would leave it missing a change that the
+          // person watched succeed on screen.
+          if (err && err.status) throw err;
+          var log = localLog(); log.push(entry); writeStore(LOG_KEY, log);
+          return { entry: entry, conflict: null };
+        });
+    },
+
+    /* Full history for one homesite, newest first. */
+    forRecord: function (recordId) {
+      var mine = function () {
+        return localLog().filter(function (e) { return e.recordId === recordId; })
+          .sort(function (a, b) { return b.at.localeCompare(a.at); });
+      };
+      if (state.demo) return Promise.resolve(mine());
+      return api("/audit?recordId=" + encodeURIComponent(recordId))
+        .then(function (d) { return (d && d.entries) || []; })
+        .catch(mine);
+    },
+
+    /* Has anyone else touched this field since we loaded the record? */
+    checkConflict: function (recordId, field, sinceIso) {
+      if (state.demo) return Promise.resolve(null);
+      return api("/audit?recordId=" + encodeURIComponent(recordId) +
+        "&field=" + encodeURIComponent(field) + "&since=" + encodeURIComponent(sinceIso))
+        .then(function (d) {
+          var e = (d && d.entries || []).filter(function (x) { return x.byId !== (state.user && state.user.id); })[0];
+          return e || null;
+        }).catch(function () { return null; });
+    }
+  };
+
+  /* ---- User administration --------------------------------------------
+   * Admin-only. Backend contract:
+   *   GET    {apiBase}/users            -> {users:[{id,name,email,role,division,active}]}
+   *   POST   {apiBase}/users   {user}   -> {user}   (also sends the invite email)
+   *   PATCH  {apiBase}/users/:id {patch}-> {user}
+   *   DELETE {apiBase}/users/:id        -> {ok:true}
+   * Maps to the Airtable Users table. In preview mode the directory lives in
+   * localStorage so the screen is still exercisable without a backend. */
+
+  var USERS_KEY = "olh.users.v1";
+
+  function seedUsers() {
+    var seeded = readStore(USERS_KEY, null);
+    if (seeded) return seeded;
+    var dir = demoDirectory().map(function (u) { return Object.assign({ active: true }, u); });
+    writeStore(USERS_KEY, dir);
+    return dir;
+  }
+
+  /* Password policy. Mirrored server-side — this copy exists so the person
+     typing gets told before they submit, not after. */
+  var POLICY = [
+    { key: "len", label: "At least 12 characters", test: function (v) { return v.length >= 12; } },
+    { key: "case", label: "Upper and lowercase letters", test: function (v) { return /[a-z]/.test(v) && /[A-Z]/.test(v); } },
+    { key: "num", label: "A number", test: function (v) { return /\d/.test(v); } },
+    { key: "sym", label: "A symbol", test: function (v) { return /[^A-Za-z0-9]/.test(v); } }
+  ];
+
+  var Passwords = {
+    policy: function () { return POLICY.slice(); },
+    check: function (v) {
+      v = v || "";
+      var results = POLICY.map(function (r) { return { key: r.key, label: r.label, ok: r.test(v) }; });
+      var met = results.filter(function (r) { return r.ok; }).length;
+      return {
+        rules: results,
+        met: met,
+        valid: met === POLICY.length,
+        strength: !v ? 0 : Math.round((met / POLICY.length) * 100),
+        label: met < 2 ? "Weak" : met < POLICY.length ? "Getting there" : "Strong",
+        color: met < 2 ? "#AA1F23" : met < POLICY.length ? "#83553C" : "#0D773C"
+      };
+    },
+    // Re-send the set-password email for someone who never used their invite.
+    invite: function (userId) {
+      if (state.demo) return Promise.resolve({ ok: true, demo: true });
+      return api("/invite", { method: "POST", body: { userId: userId } });
+    },
+    verifyInvite: function (token) {
+      if (state.demo) return Promise.resolve({ email: "preview@lennar.com", name: "Preview User" });
+      return api("/invite/" + encodeURIComponent(token));
+    },
+    setPassword: function (token, password) {
+      if (state.demo) return Promise.resolve({ ok: true, demo: true });
+      return api("/set-password", { method: "POST", body: { token: token, password: password } })
+        .then(function (d) {
+          if (d && d.user) {
+            state.user = Object.assign({}, d.user, { role: normRole(d.user.role) });
+            state.token = d.token || null; state.demo = false; state.ready = true;
+            writeStore(SESSION_KEY, { user: state.user, token: state.token });
+            emit();
+          }
+          return d;
+        });
+    },
+    forgot: function (email) {
+      if (state.demo) return Promise.resolve({ ok: true, demo: true });
+      // Always resolves — a rejection here would reveal whether the account exists.
+      return api("/forgot-password", { method: "POST", body: { email: email } })
+        .catch(function () { return { ok: true }; });
+    }
+  };
+
+  var Users = {
+    roleOptions: function () {
+      return Object.keys(ROLES).map(function (k) { return { value: k, label: ROLES[k].label }; });
+    },
+    list: function () {
+      if (state.demo) return Promise.resolve(seedUsers());
+      return api("/users").then(function (d) {
+        return ((d && d.users) || []).map(function (u) { return Object.assign({}, u, { role: normRole(u.role) }); });
+      }).catch(function (err) { if (err && err.status) throw err; return seedUsers(); });
+    },
+    create: function (user) {
+      // pending stays true until the invite is used; the backend clears it.
+      var rec = Object.assign({ active: true, pending: true }, user, { role: normRole(user.role) });
+      if (state.demo) {
+        var all = seedUsers();
+        if (all.some(function (u) { return u.email.toLowerCase() === String(rec.email).toLowerCase(); }))
+          return Promise.reject(new Error("That email is already on the roster."));
+        rec.id = "usr" + Date.now().toString(36);
+        all.push(rec); writeStore(USERS_KEY, all);
+        return Promise.resolve(rec);
+      }
+      return api("/users", { method: "POST", body: rec }).then(function (d) { return (d && d.user) || rec; });
+    },
+    update: function (id, patch) {
+      if (state.demo) {
+        var all = seedUsers().map(function (u) { return u.id === id ? Object.assign({}, u, patch) : u; });
+        writeStore(USERS_KEY, all);
+        return Promise.resolve(all.find(function (u) { return u.id === id; }));
+      }
+      return api("/users/" + encodeURIComponent(id), { method: "PATCH", body: patch })
+        .then(function (d) { return d && d.user; });
+    },
+    remove: function (id) {
+      if (state.demo) {
+        writeStore(USERS_KEY, seedUsers().filter(function (u) { return u.id !== id; }));
+        return Promise.resolve(true);
+      }
+      return api("/users/" + encodeURIComponent(id), { method: "DELETE" }).then(function () { return true; });
+    }
+  };
+
+  function passwordField(labelText) {
+    var wrap = el("label", "display:flex;flex-direction:column;gap:5px");
+    wrap.appendChild(el("span", "font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:#908A82", labelText));
+    var input = el("input", "height:40px;padding:0 12px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;font-family:" + FONT + ";font-size:14px;color:#303030");
+    input.type = "password"; input.autocomplete = "new-password";
+    input.addEventListener("focus", function () { input.style.borderColor = "#005DAA"; input.style.boxShadow = "0 0 0 3px rgba(0,93,170,.35)"; });
+    input.addEventListener("blur", function () { input.style.borderColor = "#BFB8AB"; input.style.boxShadow = "none"; });
+    wrap.appendChild(input);
+
+    var meter = el("span", "display:block;height:3px;margin-top:3px;border-radius:999px;background:#F1EBE1;overflow:hidden");
+    var bar = el("span", "display:block;height:100%;width:0;background:#AA1F23;transition:width 200ms cubic-bezier(.2,.6,.2,1),background 200ms cubic-bezier(.2,.6,.2,1)");
+    meter.appendChild(bar);
+    wrap.appendChild(meter);
+
+    var list = el("span", "display:flex;flex-direction:column;gap:3px;margin-top:5px");
+    var rows = Passwords.policy().map(function (r) {
+      var row = el("span", "display:flex;align-items:center;gap:7px;font-size:11.5px;color:#908A82");
+      var dot = el("span", "width:13px;height:13px;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;border-radius:999px;border:1px solid #BFB8AB;font-size:9px;line-height:1;color:#fff");
+      row.appendChild(dot);
+      row.appendChild(el("span", null, r.label));
+      list.appendChild(row);
+      return { row: row, dot: dot };
+    });
+    wrap.appendChild(list);
+
+    function refresh() {
+      var res = Passwords.check(input.value);
+      bar.style.width = res.strength + "%";
+      bar.style.background = res.color;
+      res.rules.forEach(function (r, i) {
+        var t = rows[i];
+        t.dot.textContent = r.ok ? "\u2713" : "";
+        t.dot.style.background = r.ok ? "#0D773C" : "transparent";
+        t.dot.style.borderColor = r.ok ? "#0D773C" : "#BFB8AB";
+        t.row.style.color = r.ok ? "#0D773C" : "#908A82";
+      });
+      return res;
+    }
+    input.addEventListener("input", refresh);
+    refresh();
+    return { wrap: wrap, input: input, refresh: refresh, valid: function () { return Passwords.check(input.value).valid; } };
+  }
+
+  /* ---- Sign-in gate ----------------------------------------------------- */
+
+  var FONT = "'TT Commons Pro','Helvetica Neue',Arial,sans-serif";
+  var SERIF = "'Reckless','Times New Roman',serif";
+
+  function el(tag, style, text) {
+    var n = document.createElement(tag);
+    if (style) n.setAttribute("style", style);
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  /* The gate is a full-viewport layer appended to document.body, never to the
+     app's own tree — a React-owned node cannot remove itself, and this overlay
+     needs to sit above everything regardless of who rendered the page. */
+  class OLHSignIn extends HTMLElement {
+    connectedCallback() {
+      if (this._wired) return;
+      this._wired = true;
+      Auth.configure(this.getAttribute("api-base"));
+      // An invite or reset link owns the screen — no session lookup needed.
+      var p = new URLSearchParams(location.search);
+      var token = p.get("invite") || p.get("reset");
+      if (token) { this.paintSetPassword(token); return; }
+      // One subscription drives every repaint; restore runs exactly once.
+      this._off = Auth.onChange(this.paint.bind(this));
+      this.paint();
+      if (!Auth.ready()) Auth.restore();
+    }
+    disconnectedCallback() { if (this._off) this._off(); }
+
+    hide() {
+      this.style.display = "none";
+      this.innerHTML = "";
+    }
+
+    /* A plain message card — used after a reset email goes out, where the
+       honest answer is "we sent it if the account exists". */
+    notice(title, body) {
+      this.innerHTML = "";
+      var card = el("div", "width:min(420px,calc(100vw - 48px));margin:auto;flex:0 0 auto;display:flex;flex-direction:column;gap:15px;padding:34px 32px 28px;border:1px solid #E4DED2;border-radius:20px;background:#fff;box-shadow:0 24px 60px -28px rgba(27,42,88,.35)");
+      var logo = document.createElement("img");
+      logo.src = "assets/lennar-logo-blue.png"; logo.alt = "Lennar";
+      logo.setAttribute("style", "height:20px;width:auto;align-self:flex-start");
+      card.appendChild(logo);
+      card.appendChild(el("h1", "margin:0;font-family:" + SERIF + ";font-weight:300;font-size:29px;line-height:1.15;letter-spacing:-.03em;color:#1B2A58", title));
+      card.appendChild(el("p", "margin:0;font-size:13.5px;line-height:1.55;color:#6F6963;text-wrap:pretty", body));
+      var back = el("button", "align-self:flex-start;height:38px;padding:0 16px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;color:#303030;font-family:" + FONT + ";font-size:13.5px;font-weight:600;cursor:pointer", "Back to Sign In");
+      var self = this;
+      back.addEventListener("click", function () { self.paint(); });
+      card.appendChild(back);
+      this.appendChild(card);
+    }
+
+    /* Consumes an invite or reset token: the person picks their own password
+       and is signed straight in. The token is single-use and server-verified. */
+    paintSetPassword(token) {
+      var self = this;
+      this.style.cssText = "position:fixed;inset:0;z-index:9000;display:flex;justify-content:center;overflow:auto;padding:24px 16px;background:#FBF6F3;font-family:" + FONT;
+      this.innerHTML = "";
+      var card = el("div", "width:min(420px,calc(100vw - 48px));margin:auto;flex:0 0 auto;display:flex;flex-direction:column;gap:16px;padding:36px 34px 30px;border:1px solid #E4DED2;border-radius:20px;background:#fff;box-shadow:0 24px 60px -28px rgba(27,42,88,.35)");
+      var logo = document.createElement("img");
+      logo.src = "assets/lennar-logo-blue.png"; logo.alt = "Lennar";
+      logo.setAttribute("style", "height:22px;width:auto;align-self:flex-start");
+      card.appendChild(logo);
+      card.appendChild(el("h1", "margin:0;font-family:" + SERIF + ";font-weight:300;font-size:31px;line-height:1.15;letter-spacing:-.03em;color:#1B2A58", "Set Your Password"));
+      var who = el("p", "margin:0;font-size:13px;line-height:1.5;color:#6F6963;text-wrap:pretty", "Choose a password for your OLH account. You will use it with your Lennar email from now on.");
+      card.appendChild(who);
+
+      Passwords.verifyInvite(token).then(function (d) {
+        if (d && d.email) who.textContent = "Choose a password for " + d.email + ". You will use it to sign in from now on.";
+      }).catch(function () {
+        who.textContent = "This link has expired or has already been used. Ask an admin to send a new invite.";
+        who.style.color = "#AA1F23";
+      });
+
+      var form = el("form", "display:flex;flex-direction:column;gap:14px");
+      var pw = passwordField("New Password");
+      var confirm = el("label", "display:flex;flex-direction:column;gap:5px");
+      confirm.appendChild(el("span", "font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:#908A82", "Confirm Password"));
+      var cin = el("input", "height:40px;padding:0 12px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;font-family:" + FONT + ";font-size:14px;color:#303030");
+      cin.type = "password"; cin.autocomplete = "new-password";
+      confirm.appendChild(cin);
+      form.appendChild(pw.wrap); form.appendChild(confirm);
+
+      var err = el("span", "display:none;font-size:12px;font-weight:500;color:#AA1F23;text-wrap:pretty");
+      form.appendChild(err);
+
+      var btn = el("button", "height:44px;border:0;border-radius:4px;background:#005DAA;color:#fff;font-family:" + FONT + ";font-size:14.5px;font-weight:600;cursor:pointer", "Set Password & Sign In");
+      btn.type = "submit";
+      form.appendChild(btn);
+
+      form.addEventListener("submit", function (ev) {
+        ev.preventDefault();
+        err.style.display = "none";
+        if (!pw.valid()) { err.textContent = "Your password does not meet all four requirements yet."; err.style.display = "block"; return; }
+        if (pw.input.value !== cin.value) { err.textContent = "The two passwords do not match."; err.style.display = "block"; return; }
+        btn.disabled = true; btn.textContent = "Setting\u2026"; btn.style.opacity = ".6";
+        Passwords.setPassword(token, pw.input.value).then(function () {
+          self.paint();
+        }).catch(function (e) {
+          err.textContent = (e && e.message) || "That link is no longer valid. Ask an admin for a new invite.";
+          err.style.display = "block";
+          btn.disabled = false; btn.textContent = "Set Password & Sign In"; btn.style.opacity = "1";
+        });
+      });
+      card.appendChild(form);
+      this.appendChild(card);
+    }
+
+    paintNoAccess() {
+      var u = Auth.user();
+      this.innerHTML = "";
+      var card = el("div", "width:min(420px,calc(100vw - 48px));margin:auto;flex:0 0 auto;display:flex;flex-direction:column;gap:15px;padding:34px 32px 28px;border:1px solid #EFCFCF;border-radius:20px;background:#fff;box-shadow:0 24px 60px -28px rgba(27,42,88,.35)");
+      card.appendChild(el("span", "align-self:flex-start;height:19px;padding:0 9px;border-radius:999px;background:#FBEDED;color:#AA1F23;font-size:9.5px;font-weight:700;line-height:19px;letter-spacing:.09em", "NO ACCESS"));
+      card.appendChild(el("h1", "margin:0;font-family:" + SERIF + ";font-weight:300;font-size:31px;line-height:1.15;letter-spacing:-.03em;color:#1B2A58", "You Are Not Set Up Yet"));
+      card.appendChild(el("p", "margin:0;font-size:13.5px;line-height:1.55;color:#6F6963;text-wrap:pretty",
+        "Signed in as " + u.name + " (" + Auth.roleLabel(u.role) + "), but that role has not been given access to the OLH Suite. An admin can grant it under Roles & Permissions."));
+      var out = el("button", "align-self:flex-start;height:38px;padding:0 16px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;color:#303030;font-family:" + FONT + ";font-size:13.5px;font-weight:600;cursor:pointer", "Sign Out");
+      out.addEventListener("click", function () { Auth.signOut().then(function () { location.reload(); }); });
+      card.appendChild(out);
+      this.appendChild(card);
+    }
+
+    paint() {
+      /* A card taller than the viewport must scroll, not centre-clip: the
+         container scrolls and the card centres via auto margins, which collapse
+         to the padding edge once it no longer fits. */
+      var shell = "position:fixed;inset:0;z-index:9000;display:flex;justify-content:center;overflow:auto;padding:24px 16px;background:#FBF6F3;font-family:" + FONT;
+      if (Auth.user() && Auth.can("suite.view")) {
+        if (!this._announced) { this._announced = true; document.dispatchEvent(new CustomEvent("olh-auth", { detail: Auth.user() })); }
+        this.hide();
+        return;
+      }
+      if (Auth.user()) { this.style.cssText = shell; this.paintNoAccess(); return; }
+      this.style.cssText = shell;
+      if (!Auth.ready()) { this.innerHTML = ""; this.appendChild(el("span", "font-size:13px;color:#908A82", "Checking your session\u2026")); return; }
+      this.innerHTML = "";
+
+      var card = el("div", "width:min(420px,calc(100vw - 48px));margin:auto;flex:0 0 auto;display:flex;flex-direction:column;gap:18px;padding:36px 34px 30px;border:1px solid #E4DED2;border-radius:20px;background:#fff;box-shadow:0 24px 60px -28px rgba(27,42,88,.35)");
+      var mark = el("div", "display:flex;align-items:center;gap:10px");
+      // The real wordmark, never a type substitute — the brand guide allows
+      // Cobalt Blue, Charcoal Black or White only.
+      var logo = document.createElement("img");
+      logo.src = "assets/lennar-logo-blue.png";
+      logo.alt = "Lennar";
+      logo.setAttribute("style", "height:22px;width:auto;flex:0 0 auto");
+      mark.appendChild(logo);
+      mark.appendChild(el("span", "font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.18em;color:#908A82", "OLH Suite"));
+      card.appendChild(mark);
+
+      var h = el("h1", "margin:0;font-family:" + SERIF + ";font-weight:300;font-size:31px;line-height:1.15;letter-spacing:-.03em;color:#1B2A58", "Sign In to Continue");
+      card.appendChild(h);
+      card.appendChild(el("p", "margin:0;font-size:13px;line-height:1.5;color:#6F6963;text-wrap:pretty",
+        "Your name is recorded on every change you make to a homesite or a walk."));
+
+      var form = el("form", "display:flex;flex-direction:column;gap:12px");
+      var mkField = function (label, type, ph, name) {
+        var w = el("label", "display:flex;flex-direction:column;gap:5px");
+        w.appendChild(el("span", "font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:#908A82", label));
+        var i = el("input", "height:40px;padding:0 12px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;font-family:" + FONT + ";font-size:14px;color:#303030");
+        i.type = type; i.placeholder = ph; i.name = name; i.autocomplete = name === "email" ? "username" : "current-password";
+        i.addEventListener("focus", function () { i.style.borderColor = "#005DAA"; i.style.boxShadow = "0 0 0 3px rgba(0,93,170,.35)"; });
+        i.addEventListener("blur", function () { i.style.borderColor = "#BFB8AB"; i.style.boxShadow = "none"; });
+        w.appendChild(i);
+        return { wrap: w, input: i };
+      };
+      var email = mkField("Lennar Email", "email", "first.last@lennar.com", "email");
+      var pass = mkField("Password", "password", "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022", "password");
+      form.appendChild(email.wrap);
+
+      var forgot = el("button", "align-self:flex-end;margin-top:-26px;border:0;background:transparent;color:#005DAA;font-family:" + FONT + ";font-size:11.5px;font-weight:600;cursor:pointer;padding:0", "Forgot?");
+      forgot.type = "button";
+      form.appendChild(pass.wrap);
+      pass.wrap.style.position = "relative";
+      forgot.style.cssText = "position:absolute;top:0;right:0;border:0;background:transparent;color:#005DAA;font-family:" + FONT + ";font-size:11px;font-weight:600;cursor:pointer;padding:0";
+      pass.wrap.appendChild(forgot);
+
+      var err = el("span", "display:none;font-size:12px;font-weight:500;color:#AA1F23;text-wrap:pretty");
+      form.appendChild(err);
+
+      var btn = el("button", "height:44px;margin-top:2px;border:0;border-radius:4px;background:#005DAA;color:#fff;font-family:" + FONT + ";font-size:14.5px;font-weight:600;cursor:pointer;transition:background 160ms cubic-bezier(.2,.6,.2,1)", "Sign In");
+      btn.type = "submit";
+      btn.addEventListener("mouseenter", function () { btn.style.background = "#203F7C"; });
+      btn.addEventListener("mouseleave", function () { btn.style.background = "#005DAA"; });
+      form.appendChild(btn);
+
+      var self = this;
+
+      /* The response is identical whether or not the address exists, so this
+         cannot be used to find out who has an account. */
+      forgot.addEventListener("click", function () {
+        var addr = email.input.value.trim();
+        if (!addr) { err.textContent = "Enter your Lennar email first, then choose Forgot."; err.style.display = "block"; email.input.focus(); return; }
+        forgot.disabled = true; forgot.textContent = "Sending\u2026";
+        Passwords.forgot(addr).then(function () {
+          err.style.display = "none";
+          self.notice("Check Your Email",
+            "If " + addr + " has an OLH account, a link to set a new password is on its way. It expires in an hour.");
+        });
+      });
+
+      form.addEventListener("submit", function (ev) {
+        ev.preventDefault();
+        err.style.display = "none";
+        btn.disabled = true; btn.textContent = "Signing In\u2026"; btn.style.opacity = ".6";
+        Auth.signIn(email.input.value, pass.input.value).then(function () {
+          self.paint();
+        }).catch(function (e) {
+          // A pending account is sent to set a password instead of being refused.
+          if (e && e.mustSetPassword) { self.paintSetPassword(e.inviteToken); return; }
+          err.textContent = e.message || "Sign-in failed.";
+          err.style.display = "block";
+          btn.disabled = false; btn.textContent = "Sign In"; btn.style.opacity = "1";
+        });
+      });
+      card.appendChild(form);
+
+      if (Auth.isDemo()) {
+        var demo = el("div", "display:flex;flex-direction:column;gap:7px;padding-top:14px;border-top:1px solid #F1EBE1");
+        demo.appendChild(el("span", "font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:#83553C", "Preview Mode \u00b7 No Backend"));
+        demo.appendChild(el("span", "font-size:12px;line-height:1.5;color:#6F6963;text-wrap:pretty",
+          "The sign-in service is not reachable from this preview. Enter any name from the OLH roster to continue \u2014 the change log will be local to this browser."));
+        var row = el("div", "display:flex;flex-wrap:wrap;gap:6px;margin-top:2px");
+        Auth.directory().slice(0, 4).forEach(function (u) {
+          var chip = el("button", "height:26px;padding:0 10px;border:1px solid #BFB8AB;border-radius:999px;background:#fff;font-family:" + FONT + ";font-size:11.5px;font-weight:500;color:#303030;cursor:pointer", u.name + " \u00b7 " + Auth.roleLabel(u.role));
+          chip.type = "button";
+          chip.addEventListener("click", function () { email.input.value = u.email; pass.input.value = "preview"; });
+          row.appendChild(chip);
+        });
+        demo.appendChild(row);
+        card.appendChild(demo);
+      }
+
+      this.appendChild(card);
+    }
+  }
+
+  /* ---- Header identity chip --------------------------------------------- */
+
+  /* Renders into a shadow root: this element sits inside a React-rendered
+     header, and React must never see the nodes it manages. */
+  class OLHUserChip extends HTMLElement {
+    connectedCallback() {
+      if (!this._root) this._root = this.attachShadow({ mode: "open" });
+      if (!this._off) this._off = Auth.onChange(this.paint.bind(this));
+      this.paint();
+      if (!Auth.ready()) Auth.restore();
+    }
+    disconnectedCallback() { if (this._off) { this._off(); this._off = null; } }
+    paint() {
+      var u = Auth.user();
+      var root = this._root || this.attachShadow({ mode: "open" });
+      this._root = root;
+      root.innerHTML = "";
+      // :host styling lives in the shadow root — React owns the style attribute
+      // on this element and would clobber anything set inline here.
+      var host = el("span", "display:inline-flex;align-items:center;gap:9px;font-family:" + FONT);
+      var css = document.createElement("style");
+      css.textContent = ":host{display:inline-flex;align-items:center}";
+      root.appendChild(css);
+      if (!u) return;
+      var dark = this.getAttribute("tone") !== "light";
+      var av = el("span", "flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:999px;background:" + (dark ? "rgba(255,255,255,.16)" : "#EAF2F9") + ";color:" + (dark ? "#fff" : "#005DAA") + ";font-size:10.5px;font-weight:700;letter-spacing:.02em", initials(u.name));
+      var txt = el("span", "display:flex;flex-direction:column;line-height:1.2;flex:0 0 auto");
+      txt.appendChild(el("span", "font-size:12px;font-weight:600;color:" + (dark ? "#fff" : "#303030") + ";white-space:nowrap", u.name));
+      txt.appendChild(el("span", "font-size:10px;font-weight:500;color:" + (dark ? "#C7BFB2" : "#908A82") + ";white-space:nowrap",
+        Auth.roleLabel(u.role) + (Auth.isDemo() ? " \u00b7 preview" : "")));
+      var out = el("button", "height:26px;padding:0 10px;border:1px solid " + (dark ? "rgba(255,255,255,.35)" : "#BFB8AB") + ";border-radius:4px;background:transparent;color:" + (dark ? "#fff" : "#303030") + ";font-family:" + FONT + ";font-size:11.5px;font-weight:500;cursor:pointer;white-space:nowrap;flex:0 0 auto", "Sign Out");
+      out.addEventListener("click", function () { Auth.signOut().then(function () { location.reload(); }); });
+      host.appendChild(av); host.appendChild(txt); host.appendChild(out);
+      root.appendChild(host);
+    }
+  }
+
+  if (!customElements.get("olh-signin")) customElements.define("olh-signin", OLHSignIn);
+
+  /* Mount the gate outside any framework root. It repaints itself from the
+     auth subscription, so sign-out brings it straight back. */
+  function mountGate() {
+    if (document.querySelector("olh-signin[data-olh-gate]")) return;
+    var g = document.createElement("olh-signin");
+    g.setAttribute("data-olh-gate", "");
+    document.body.appendChild(g);
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mountGate);
+  else mountGate();
+  if (!customElements.get("olh-user-chip")) customElements.define("olh-user-chip", OLHUserChip);
+
+  window.OLHPasswords = Passwords;
+  window.OLHUsers = Users;
+  window.OLHAuth = Auth;
+  window.OLHAudit = Audit;
+})();
+
+</script>
+
+<script>
+(function(){
+  'use strict';
+  var API = '/api';
+  var WALKS = [
+    {code:'QAI', label:'QA Inspection', date:'QAI Date', mgr:'QAI Manager', done:'QAI Complete', recon:'QAI Walk Miss Reconciled', flag:null, accent:'#005DAA'},
+    {code:'QAA', label:'QA Acceptance', date:'QAA Date', mgr:'QAA Manager', done:'QAA Accepted', recon:'QAA Walk Miss Reconciled', flag:null, accent:'#006368'},
+    {code:'CEL', label:'Celebration',   date:'CEL Date', mgr:'CEL Manager', done:'CEL Completed', recon:'CEL Walk Miss Reconciled', flag:'CEL Reschedule Flag', accent:'#83553C'},
+    {code:'ACC', label:'Acceptance',    date:'ACC Date', mgr:'ACC Manager', done:'ACC Completed', recon:'ACC Walk Miss Reconciled', flag:'ACC Reschedule Flag', accent:'#0D773C'}
+  ];
+  var jobs = [];
+  var managers = [];
+  var mgrById = null;
+
+  function pd(v){ if(!v) return null;
+    var s = String(v);
+    var d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(s+'T12:00:00') : new Date(s);
+    return isNaN(d.getTime()) ? null : d; }
+  function fmtD(v){ var d = pd(v); if(!d) return '\u2014';
+    return (d.getMonth()+1)+'/'+d.getDate()+'/'+String(d.getFullYear()).slice(2); }
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function mgrNames(ids){
+    if(!Array.isArray(ids) || !ids.length) return '';
+    if(!mgrById) mgrById = new Map(managers.map(function(m){ return [m.id, m]; }));
+    return ids.map(function(id){ var m = mgrById.get(id); return m ? m.name : id; })
+      .map(function(nm){ return String(nm).replace(/\s*\(OLH\)/gi,'').replace(/\s*DO NOT USE\s*/gi,'').trim(); })
+      .filter(Boolean).join(', ');
+  }
+  function jobLink(job){
+    if(!job) return null;
+    return 'homesite.html?job=' + encodeURIComponent(job);
+  }
+
+  function toast(kind, title, body){
+    var el = document.createElement('div');
+    el.style.cssText = 'display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:4px;background:#fff;border:1px solid #D8CFBE;border-left:3px solid ' +
+      (kind === 'err' ? '#AA1F23' : '#016738') + ';box-shadow:0 6px 20px rgba(48,48,48,.12);font-size:12.5px;line-height:1.4';
+    el.innerHTML = '<div><span style="font-weight:600;display:block;margin-bottom:1px;color:' +
+      (kind === 'err' ? '#AA1F23' : '#303030') + '">' + esc(title) + '</span><span style="color:#6F6963">' + esc(body) + '</span></div>';
+    document.getElementById('toasts').appendChild(el);
+    setTimeout(function(){ el.remove(); }, kind === 'err' ? 8000 : 3200);
+  }
+
+  function authHeaders(extra){
+    if(!window.OLHAuth || typeof window.OLHAuth.authHeaders !== 'function'){
+      throw new Error('The sign-in module has not loaded, so this page cannot authenticate. Reload the page.');
+    }
+    return window.OLHAuth.authHeaders(extra);
+  }
+
+  function canEdit(){ return window.OLHAuth ? window.OLHAuth.can('tracker.edit') : false; }
+
+  /* Every missed, still-open walk across every homesite -- not scoped to one
+     day, unlike the QA Management page, since the whole point of this queue is
+     to catch misses regardless of when they happened. */
+  function buildRows(){
+    var out = [];
+    jobs.forEach(function(r){
+      var f = r.fields;
+      if(f['Record Status'] === 'Closed') return;
+      WALKS.forEach(function(w){
+        if(!f[w.code + ' Missed']) return;
+        var reconciled = !!f[w.recon];
+        out.push({
+          recordId: r.id, w: w, reconciled: reconciled,
+          job: f['Job #'] || '', community: f['Community'] || 'Unassigned Community',
+          address: f['Street Address'] || '',
+          currentDate: f[w.date] || null,
+          done: !!f[w.done],
+          reason: f[w.code + ' Miss Reason'] || '\u2014',
+          note: f[w.code + ' Miss Note'] || '',
+          mgr: mgrNames(Array.isArray(f[w.mgr]) ? f[w.mgr] : []),
+          flagged: w.flag ? !!f[w.flag] : false
+        });
+      });
+    });
+    return out;
+  }
+
+  function statusOf(row){
+    if(row.done) return {label:'Completed since', color:'#016738'};
+    var d = pd(row.currentDate);
+    var today = new Date(); today.setHours(0,0,0,0);
+    if(d && d.getTime() < today.getTime()) return {label:'Still open \u2014 past due', color:'#AA1F23'};
+    if(d) return {label:'Open \u2014 rescheduled to ' + fmtD(row.currentDate), color:'#83553C'};
+    return {label:'Open \u2014 no date set', color:'#AA1F23'};
+  }
+
+  async function reconcile(row, btn){
+    if(!canEdit()){ toast('err','Read-Only Access', window.OLHAuth ? window.OLHAuth.denyReason('tracker.edit') : 'You do not have access to that.'); return; }
+    btn.disabled = true;
+    btn.textContent = 'Saving\u2026';
+    try{
+      var res = await fetch(API + '/update-job', {
+        method:'POST', headers: authHeaders({'Content-Type':'application/json'}),
+        body: JSON.stringify({recordId: row.recordId, fields: {[row.w.recon]: true}})
+      });
+      var data = await res.json().catch(function(){ return null; });
+      if(!res.ok) throw new Error((data && data.error) || ('Save failed (' + res.status + ')'));
+      if(window.OLHAudit){
+        window.OLHAudit.record({
+          recordId: row.recordId, job: row.job, field: row.w.code + ' Walk Miss Reconciled',
+          label: row.w.label + ' miss reconciled', from: 'No', to: 'Yes', action: 'edit',
+          page: 'Missed Walks'
+        }).catch(function(){});
+      }
+      row.reconciled = true;
+      toast('ok', 'Reconciled', row.job + ' \u00b7 ' + row.w.code + ' cleared from the queue.');
+      render();
+    }catch(err){
+      btn.disabled = false;
+      btn.textContent = 'Mark Reconciled';
+      toast('err', 'Could Not Save', (err && err.message) || String(err));
+    }
+  }
+
+  function render(){
+    var q = (document.getElementById('q').value || '').trim().toLowerCase();
+    var fType = document.getElementById('fType').value;
+    var fComm = document.getElementById('fComm').value;
+    var showReconciled = document.getElementById('fReconciled').checked;
+
+    var all = buildRows();
+
+    var comms = Array.from(new Set(all.map(function(r){ return r.community; }))).sort(function(a,b){ return a.localeCompare(b); });
+    var commSel = document.getElementById('fComm');
+    if(commSel.dataset.built !== String(comms.length)){
+      var cur = commSel.value;
+      commSel.innerHTML = '<option value="">All communities</option>' +
+        comms.map(function(c){ return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join('');
+      commSel.value = cur;
+      commSel.dataset.built = String(comms.length);
+    }
+
+    var rows = all.filter(function(r){
+      if(!showReconciled && r.reconciled) return false;
+      if(fType && r.w.code !== fType) return false;
+      if(fComm && r.community !== fComm) return false;
+      if(q && (r.job + ' ' + r.community + ' ' + r.address).toLowerCase().indexOf(q) < 0) return false;
+      return true;
+    });
+
+    rows.sort(function(a,b){
+      return (a.reconciled === b.reconciled ? 0 : a.reconciled ? 1 : -1)
+        || a.community.localeCompare(b.community) || a.job.localeCompare(b.job);
+    });
+
+    var openCount = all.filter(function(r){ return !r.reconciled; }).length;
+    document.getElementById('countNote').textContent =
+      openCount + (openCount === 1 ? ' unreconciled miss' : ' unreconciled misses') +
+      (showReconciled ? ' \u00b7 showing ' + rows.length + ' of ' + all.length + ' total' : '');
+
+    var tbody = document.getElementById('rows');
+    tbody.innerHTML = '';
+    document.getElementById('emptyNote').style.display = rows.length ? 'none' : 'block';
+    document.getElementById('emptyNote').textContent = all.length
+      ? 'No missed walks match these filters.'
+      : 'No missed walks on record. This page only lists walks marked missed on the QA Management page.';
+
+    rows.forEach(function(row){
+      var st = statusOf(row);
+      var tr = document.createElement('tr');
+      var jobHref = jobLink(row.job);
+      tr.innerHTML =
+        '<td><span style="display:inline-flex;align-items:center;justify-content:center;min-width:44px;height:20px;padding:0 8px;border-radius:999px;background:' + row.w.accent + ';color:#fff;font-size:10px;font-weight:700;letter-spacing:.05em">' + row.w.code + '</span></td>' +
+        '<td>' + (jobHref ? '<a href="' + jobHref + '">' + esc(row.job || '(no job #)') + '</a>' : esc(row.job || '\u2014')) + '</td>' +
+        '<td>' + esc(row.community) + '</td>' +
+        '<td>' + esc(row.address || '\u2014') + '</td>' +
+        '<td>' + fmtD(row.currentDate) + '</td>' +
+        '<td style="color:' + st.color + ';font-weight:600">' + esc(st.label) + '</td>' +
+        '<td>' + esc(row.reason) + '</td>' +
+        '<td style="max-width:220px;white-space:normal">' + esc(row.note || '\u2014') + '</td>' +
+        '<td>' + esc(row.mgr || 'Unassigned') + '</td>' +
+        '<td>' + (row.flagged ? '<span style="height:18px;padding:0 8px;border-radius:999px;background:#FBF1DC;color:#83553C;font-size:9px;font-weight:700;line-height:18px;letter-spacing:.09em;display:inline-block">BUYER UPDATE NEEDED</span>' : '\u2014') + '</td>' +
+        '<td></td>';
+      var td = tr.lastElementChild;
+      if(row.reconciled){
+        td.innerHTML = '<span style="color:#016738;font-weight:600;font-size:11.5px">\u2713 Reconciled</span>';
+      } else {
+        var btn = document.createElement('button');
+        btn.textContent = 'Mark Reconciled';
+        btn.disabled = !canEdit();
+        btn.style.cssText = 'height:28px;padding:0 12px;border:0;border-radius:4px;background:' +
+          (canEdit() ? '#005DAA' : '#BFB8AB') + ';color:#fff;font-size:12px;font-weight:600;cursor:' + (canEdit() ? 'pointer' : 'not-allowed');
+        btn.onclick = function(){ reconcile(row, btn); };
+        td.appendChild(btn);
+      }
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function loadLive(){
+    try{
+      var res = await fetch(API + '/jobs', {headers: authHeaders()});
+      var data = await res.json().catch(function(){ return null; });
+      if(!res.ok || !data || !Array.isArray(data.jobs)) throw new Error((data && data.error) || ('Request failed (' + res.status + ')'));
+      jobs = data.jobs; managers = data.managers || []; mgrById = null;
+      render();
+    }catch(err){
+      toast('err', 'Could Not Load Homesite Data', (err && err.message) || String(err));
+    }
+  }
+
+  function updateReadOnlyBar(){
+    var user = window.OLHAuth && window.OLHAuth.user ? window.OLHAuth.user() : null;
+    var bar = document.getElementById('readOnlyBar');
+    var canView = !window.OLHAuth || window.OLHAuth.can('page.missedwalks');
+    if(user && !canView){
+      bar.style.display = 'flex';
+      document.getElementById('readOnlyNote').textContent =
+        'Signed in as ' + window.OLHAuth.roleLabel(user.role) + ' \u2014 your role does not have access to Missed Walks.';
+      document.getElementById('rows').innerHTML = '';
+      document.querySelector('main').style.display = 'none';
+      return;
+    }
+    document.querySelector('main').style.display = '';
+    if(user && !canEdit()){
+      bar.style.display = 'flex';
+      document.getElementById('readOnlyNote').textContent =
+        'Signed in as ' + window.OLHAuth.roleLabel(user.role) + ' \u2014 view only. ' + window.OLHAuth.denyReason('tracker.edit');
+    } else {
+      bar.style.display = 'none';
+    }
+    render();
+  }
+
+  function wireAuth(tries){
+    if(!window.OLHAuth){
+      if(tries < 120){ setTimeout(function(){ wireAuth(tries + 1); }, 50); return; }
+      toast('err', 'Could Not Load Homesite Data', 'The sign-in module did not load. Reload the page.');
+      return;
+    }
+    window.OLHAuth.configure(API);
+    window.OLHAuth.onChange(updateReadOnlyBar);
+    window.OLHAuth.restore().then(function(){ updateReadOnlyBar(); loadLive(); });
+  }
+
+  document.getElementById('q').addEventListener('input', function(){
+    clearTimeout(window.__mwQt); window.__mwQt = setTimeout(render, 220);
+  });
+  document.getElementById('fType').addEventListener('change', render);
+  document.getElementById('fComm').addEventListener('change', render);
+  document.getElementById('fReconciled').addEventListener('change', render);
+  document.getElementById('btnRefresh').addEventListener('click', loadLive);
+
+  wireAuth(0);
+})();
+</script>
+</body>
+</html>
