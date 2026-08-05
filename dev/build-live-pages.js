@@ -387,6 +387,154 @@ const PAGES = {
       // every tile the same way, so the patch has nothing left to fix. It is
       // deleted rather than re-anchored -- re-adding isAdmin beside canAdmin
       // would leave two answers to one question.
+
+      /* Found 2026-08-05, auditing the page. can(key) defaulted to `true`
+       * whenever OLHAuth hadn't loaded or hadn't resolved a user yet -- which
+       * meant every tile, including User Administration, rendered as
+       * accessible to anyone during that window, and stayed that way forever
+       * if OLHAuth never resolved a user (e.g. the auth script failed to
+       * load, or restore() never settled). The API enforces every permission
+       * server-side regardless (see netlify/lib/olh-auth.js requirePerm), so
+       * this was never a data leak -- but the landing page dressed itself as
+       * if any visitor had full access, which is its own bug and confusing
+       * on its own. Fails closed now: can() returns false until auth has
+       * definitively resolved, noPages waits for the same signal so it
+       * doesn't flash "no access" during the load window, and two banners
+       * (authLoading / authError) tell the person what's actually happening
+       * instead of silently doing nothing. */
+      ['fail closed on auth: can() defaults to false, add authReady/authFailed state',
+       'class Component extends DCLogic {\n' +
+       '  state = { user: null, narrow: window.OLHViewport ? window.OLHViewport.narrow() : false };\n' +
+       '\n' +
+       '  /* The helmet scripts can still be loading when this mounts (in the bundled\n' +
+       '     build every script is a blob URL), so wait for them instead of throwing. */\n' +
+       '  componentDidMount() {\n' +
+       '    const bump = () => this.forceUpdate();\n' +
+       '    window.addEventListener("olh-data", this._od = bump);\n' +
+       '    let tries = 0;\n' +
+       '    this._poll = setInterval(() => {\n' +
+       '      if(window.OLH_DATA || ++tries > 60){ clearInterval(this._poll); this._poll = null; bump(); }\n' +
+       '    }, 50); this._boot(0); }\n' +
+       '  _boot(tries) {\n' +
+       '    if ((!window.OLHViewport || !window.OLHAuth) && tries < 120) {\n' +
+       '      this._bootT = setTimeout(() => this._boot(tries + 1), 50);\n' +
+       '      return;\n' +
+       '    }\n' +
+       '    this._mounted();\n' +
+       '  }\n' +
+       '  _mounted() {\n' +
+       '    if (window.OLHViewport) this._offVp = window.OLHViewport.watch(n => this.setState({ narrow: n }));\n' +
+       '    if (!window.OLHAuth) return;\n' +
+       '    this._off = window.OLHAuth.onChange(u => this.setState({ user: u }));\n' +
+       '    window.OLHAuth.restore().then(u => this.setState({ user: u }));\n' +
+       '  }\n' +
+       '  componentWillUnmount() {\n' +
+       '    window.removeEventListener("olh-data", this._od);\n' +
+       '    if(this._poll) clearInterval(this._poll); if (this._bootT) clearTimeout(this._bootT); if (this._off) this._off(); if (this._offVp) this._offVp(); }\n' +
+       '\n' +
+       '  /* Tiles follow the role\'s page access — a page you cannot open is not\n' +
+       '     advertised here. Admin-only links stay admin-only. */\n' +
+       '  can(key) {\n' +
+       '    const a = window.OLHAuth;\n' +
+       '    if (!a || !this.state.user) return true;\n' +
+       '    return a.can(key);\n' +
+       '  }',
+       'class Component extends DCLogic {\n' +
+       '  state = { user: null, narrow: window.OLHViewport ? window.OLHViewport.narrow() : false, authReady: false, authFailed: false };\n' +
+       '\n' +
+       '  /* The helmet scripts can still be loading when this mounts (in the bundled\n' +
+       '     build every script is a blob URL), so wait for them instead of throwing. */\n' +
+       '  componentDidMount() {\n' +
+       '    const bump = () => this.forceUpdate();\n' +
+       '    window.addEventListener("olh-data", this._od = bump);\n' +
+       '    let tries = 0;\n' +
+       '    this._poll = setInterval(() => {\n' +
+       '      if(window.OLH_DATA || ++tries > 60){ clearInterval(this._poll); this._poll = null; bump(); }\n' +
+       '    }, 50); this._boot(0); }\n' +
+       '  _boot(tries) {\n' +
+       '    if ((!window.OLHViewport || !window.OLHAuth) && tries < 120) {\n' +
+       '      this._bootT = setTimeout(() => this._boot(tries + 1), 50);\n' +
+       '      return;\n' +
+       '    }\n' +
+       '    if (!window.OLHAuth) {\n' +
+       '      // Auth script never showed up after ~6s of polling. Fail closed instead\n' +
+       '      // of leaving every tile at can()\'s default -- see can() for why the\n' +
+       '      // default matters.\n' +
+       '      this.setState({ authReady: true, authFailed: true });\n' +
+       '      return;\n' +
+       '    }\n' +
+       '    this._mounted();\n' +
+       '  }\n' +
+       '  _mounted() {\n' +
+       '    if (window.OLHViewport) this._offVp = window.OLHViewport.watch(n => this.setState({ narrow: n }));\n' +
+       '    this._off = window.OLHAuth.onChange(u => this.setState({ user: u }));\n' +
+       '    window.OLHAuth.restore()\n' +
+       '      .then(u => this.setState({ user: u, authReady: true }))\n' +
+       '      .catch(() => this.setState({ authFailed: true, authReady: true }));\n' +
+       '  }\n' +
+       '  componentWillUnmount() {\n' +
+       '    window.removeEventListener("olh-data", this._od);\n' +
+       '    if(this._poll) clearInterval(this._poll); if (this._bootT) clearTimeout(this._bootT); if (this._off) this._off(); if (this._offVp) this._offVp(); }\n' +
+       '\n' +
+       '  /* Tiles follow the role\'s page access — a page you cannot open is not\n' +
+       '     advertised here. Admin-only links stay admin-only.\n' +
+       '     Fails CLOSED: until auth has definitively resolved (successfully or\n' +
+       '     not), every tile is hidden. The API enforces every permission\n' +
+       '     server-side regardless, so the old default was never a data leak --\n' +
+       '     but it dressed the landing page as if any visitor had full access. */\n' +
+       '  can(key) {\n' +
+       '    if (!this.state.authReady || !window.OLHAuth || !this.state.user) return false;\n' +
+       '    return window.OLHAuth.can(key);\n' +
+       '  }'],
+
+      ['renderVals: expose authLoading/authError, gate noPages on authReady',
+       '  renderVals() {\n' +
+       '    const n = this.state.narrow;\n' +
+       '    const tiles = ["page.tracker", "page.completion", "page.walks", "page.qamgmt", "page.admin", "page.scheduler"].filter(k => this.can(k));\n' +
+       '    const extras = this.can("page.workload");\n' +
+       '    return {\n' +
+       '      canTracker: this.can("page.tracker"),\n' +
+       '      canCompletion: this.can("page.completion"),\n' +
+       '      canWalks: this.can("page.walks"),\n' +
+       '      canScheduler: this.can("page.scheduler"),\n' +
+       '      canQaMgmt: this.can("page.qamgmt"),\n' +
+       '      canWorkload: this.can("page.workload"),\n' +
+       '      canAdmin: this.can("page.admin"),\n' +
+       '      updatedLabel: this.updatedLabel(),\n' +
+       '      noPages: !tiles.length && !extras,\n' +
+       '      noPagesNote: "Your role does not have access to any pages yet. Ask an admin to grant page access under Roles & Permissions.",',
+       '  renderVals() {\n' +
+       '    const n = this.state.narrow;\n' +
+       '    const ready = this.state.authReady;\n' +
+       '    const failed = this.state.authFailed;\n' +
+       '    const tiles = ["page.tracker", "page.completion", "page.walks", "page.qamgmt", "page.admin", "page.scheduler"].filter(k => this.can(k));\n' +
+       '    const extras = this.can("page.workload");\n' +
+       '    return {\n' +
+       '      canTracker: this.can("page.tracker"),\n' +
+       '      canCompletion: this.can("page.completion"),\n' +
+       '      canWalks: this.can("page.walks"),\n' +
+       '      canScheduler: this.can("page.scheduler"),\n' +
+       '      canQaMgmt: this.can("page.qamgmt"),\n' +
+       '      canWorkload: this.can("page.workload"),\n' +
+       '      canAdmin: this.can("page.admin"),\n' +
+       '      updatedLabel: this.updatedLabel(),\n' +
+       '      authLoading: !ready,\n' +
+       '      authError: ready && failed,\n' +
+       '      // Only claims "no access" once auth has actually resolved -- otherwise\n' +
+       '      // this flashed for every user during the load window before authReady.\n' +
+       '      noPages: ready && !failed && !tiles.length && !extras,\n' +
+       '      noPagesNote: "Your role does not have access to any pages yet. Ask an admin to grant page access under Roles & Permissions.",'],
+
+      ['add authLoading/authError banners under the hero heading',
+       '<h1 style="margin:10px 0 0;max-width:24ch;font-family:\'Reckless\',\'Times New Roman\',serif;font-weight:300;font-size:{{ heroSize }};line-height:1.04;letter-spacing:-.035em;color:#1B2A58;text-wrap:pretty">Where Would You Like to Start?</h1>\n    ',
+       '<h1 style="margin:10px 0 0;max-width:24ch;font-family:\'Reckless\',\'Times New Roman\',serif;font-weight:300;font-size:{{ heroSize }};line-height:1.04;letter-spacing:-.035em;color:#1B2A58;text-wrap:pretty">Where Would You Like to Start?</h1>\n\n' +
+       '    <sc-if value="{{ authLoading }}" hint-placeholder-val="{{ false }}">\n' +
+       '      <p style="margin:16px 0 0;font-size:13.5px;color:#908A82">Checking your access…</p>\n' +
+       '    </sc-if>\n' +
+       '\n' +
+       '    <sc-if value="{{ authError }}" hint-placeholder-val="{{ false }}">\n' +
+       '      <p style="margin:16px 0 0;padding:12px 14px;border-radius:8px;background:#FBEAEA;border:1px solid #E8C7C7;font-size:13.5px;color:#8A3A3A">Couldn\'t verify your sign-in. Refresh the page, and if this keeps happening, ask an admin to check your account.</p>\n' +
+       '    </sc-if>\n    '],
     ]
   },
 
