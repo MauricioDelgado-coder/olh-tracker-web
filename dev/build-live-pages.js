@@ -596,6 +596,24 @@ const PAGES = {
        * data-quality question for the tracker rather than rows to schedule
        * against. Scope total: 1,013.
        */
+      /* 08/05: reverted the field-name half of this patch. The 08/04 version
+       * (see git history) swapped Actual Completion Date / Projected
+       * Completion Date for the no-"Date"-suffix fields, on the theory that
+       * the suffixed pair were frozen Dynamics-era leftovers. That theory was
+       * wrong: dev/sync_coe_to_airtable.py's COLUMN_MAP maps the live
+       * Homesite__c Actual_Completion_Date__c / Projected_Completion_Date__c
+       * pull (via the homesites-no-actual-coe skill's run_report.py SOQL)
+       * straight into the Airtable fields NAMED "Actual Completion Date" and
+       * "Projected Completion Date" -- despite the suffix looking legacy,
+       * those are exactly what gets refreshed daily. Nothing currently
+       * writes the no-suffix "Actual Completion" / "Projected Completion"
+       * fields at all. Confirmed 08/05 against live data: 6 homesites that
+       * completed and synced same-day, plus 1 brand-new job created same-day,
+       * were mis-scoped (1002 vs the correct 997) because the no-suffix pair
+       * hadn't been (and never gets) populated for them.
+       *
+       * The Active/no-COE additions from the 08/04 patch are correct and
+       * stay. */
       ['scope the report to live, unclosed homesites',
        'const LOTS = { B: 1, S: 1, W: 1, M: 1 };\n' +
        '    // Report scope: started, not yet complete, projected to finish 7/1/26 or later, lot status B/S/W/M\n' +
@@ -606,20 +624,17 @@ const PAGES = {
        'const LOTS = { B: 1, S: 1, W: 1, M: 1 };\n' +
        '    // Report scope: still in the Salesforce pull, started, not yet complete,\n' +
        '    // no Actual COE, projected to finish 7/1/26 or later, lot status B/S/W/M.\n' +
-       '    // Reads "Actual Completion"/"Projected Completion" (no "Date" suffix) --\n' +
-       '    // those are the fields the COE-mode sync refreshes daily. The "...Date"\n' +
-       '    // variants are frozen leftovers from the old Dynamics Export source and\n' +
-       '    // are no longer written, so scoping off them silently drifts stale.\n' +
+       '    // Reads Actual Completion Date / Projected Completion Date -- despite\n' +
+       '    // the "Date" suffix, these are the fields dev/sync_coe_to_airtable.py\n' +
+       '    // actually writes daily from the live Homesite__c SOQL pull. The\n' +
+       '    // no-suffix "Actual Completion"/"Projected Completion" fields are the\n' +
+       '    // ones nothing currently writes -- do not scope off them.\n' +
        '    const inScope = f => (f["Record Status"] || "") === "Active"\n' +
        '      && !!iso(f["Actual Start Date"])\n' +
-       '      && !iso(f["Actual Completion"])\n' +
+       '      && !iso(f["Actual Completion Date"])\n' +
        '      && !iso(f["Actual COE Date"])\n' +
-       '      && iso(f["Projected Completion"]) >= "2026-07-01"\n' +
+       '      && iso(f["Projected Completion Date"]) >= "2026-07-01"\n' +
        '      && LOTS[(f["Lot Status"] || "").trim().toUpperCase()] === 1;'],
-
-      ['use the fresh Projected Completion field for the EDD column/calendar/chart (not the frozen legacy "...Date" field)',
-       'edd: iso(f["Projected Completion Date"]),',
-       'edd: iso(f["Projected Completion"]),'],
 
       ['drop the plan/elevation body cells (no Airtable source)',
        '            <sc-raw-td style="padding:7px 10px;border-bottom:1px solid #F1EBE1;' +
@@ -1558,6 +1573,28 @@ const PAGES = {
        "      || s.rs || s.cm || s.ac || s.lot || s.q);",
        "    const anyFilter = !!(s.bkl || s.nq || s.lt || s.rk || s.qa || s.cr || s.lr\n" +
        "      || s.rs || s.cm || s.ac || s.lot || s.q);"],
+
+      /* Actual Completion Date is the field the current no-COE sync actually
+       * writes (dev/sync_coe_to_airtable.py maps the live Homesite__c
+       * Actual_Completion_Date__c pull straight into this field), but the
+       * tracker never surfaced it as a column -- there was no way to see
+       * completion status without opening the homesite detail page. Added
+       * to the Salesforce read-only group right after Projected Completion,
+       * so the header group width and the outer grid width both grow by
+       * this column's 92px (1058->1150, 4158->4250), and the loading-hint
+       * placeholder count moves from 39 to 40 columns. */
+      ['add an Actual Completion Date column next to Projected Completion',
+       "{k:'Projected Completion Date',h:'Proj Compl',t:'d',g:'sf',ro:1,w:92},\n  {k:'Estimated COE Date'",
+       "{k:'Projected Completion Date',h:'Proj Compl',t:'d',g:'sf',ro:1,w:92},\n  {k:'Actual Completion Date',h:'Actual Compl',t:'d',g:'sf',ro:1,w:92},\n  {k:'Estimated COE Date'"],
+
+      ['widen the Salesforce read-only header group for the new column',
+       'flex:0 0 1058px', 'flex:0 0 1150px'],
+
+      ['widen the outer grid scroll container for the new column',
+       'width:4158px', 'width:4250px'],
+
+      ['bump the column-count loading hint for the new column',
+       'hint-placeholder-count="39"', 'hint-placeholder-count="40"'],
     ]
   },
 
