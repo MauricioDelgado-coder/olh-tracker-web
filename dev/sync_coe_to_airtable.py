@@ -98,6 +98,18 @@ def find_skill_script():
 #   rows -- often by weeks, not days. The tracker resolves urgency as
 #   `Scheduled Closing Date || Estimated COE Date`, so feeding it an ECOE would
 #   silently move the close date it sorts and flags on.
+#
+#   Homesite__c.CCC_Date__c is NOT where CCC gets recorded for OLH -- checked
+#   2026-08-05 against live data (org sf-prod-observability-observer-claude):
+#   0 of ~2,097 homesites in the OLH no-Actual-COE scope have it set, while
+#   Opportunity.CCC_Date__c (same label, same type, verified to exist via
+#   `sf sobject describe -s Opportunity`) is set on 431 of the 893 that have a
+#   linked Opportunity at all. So CCC Date moved out of COLUMN_MAP (workbook,
+#   Homesite-sourced, always null) and into EXTRA_FIELDS below, pulled via
+#   Primary_Opportunity_ID__r the same way Scheduled Closing Date already is.
+#   The remaining ~58% with no linked Opportunity (mostly unsold homesites)
+#   will still show blank -- correctly, since there is no sale to hold a CCC
+#   date yet.
 # ---------------------------------------------------------------------------
 COLUMN_MAP = {
     'Lot': 'Lot',
@@ -114,7 +126,6 @@ COLUMN_MAP = {
     'Constr Stage (JDE)': 'Construction Stage (JDE)',
     'Projected Completion': 'Projected Completion Date',
     'Actual Completion': 'Actual Completion Date',
-    'CCC Date': 'CCC Date',
     'Cert of Occupancy': 'Certificate of Occupancy Date',
     'Estimated COE Date': 'Estimated COE Date',
     'Construction Manager': 'Construction Manager',
@@ -123,28 +134,33 @@ COLUMN_MAP = {
     'Address Dup Check': 'Address Dup Check',
 }
 
-# Deliberately not synced:
+# Deliberately not synced from the workbook:
 #   State                   constant 'FL' on all 1400 rows -- a column of noise.
 #   Actual COE Date         null by definition; the pull is rows WITHOUT one.
 #   JDE Sched Close (ECOE)  identical to Estimated COE in all 1378 rows where
 #                           both are set, so it is a duplicate column.
 #   Construction Stage      populated on 3 of 1400 rows in OLH.
+#   CCC Date                always null on Homesite__c for OLH -- see above;
+#                           now sourced from Opportunity via EXTRA_FIELDS.
 
 DATE_COLUMNS = {
     'Sale Date', 'Actual Start Date', 'Projected Completion', 'Actual Completion',
-    'CCC Date', 'Cert of Occupancy', 'Estimated COE Date',
+    'Cert of Occupancy', 'Estimated COE Date',
 }
 
-# Fields the supplementary SOQL supplies, because the workbook does not carry them.
+# Fields the supplementary SOQL supplies, because the workbook does not carry them
+# (or, for CCC Date, carries the wrong object's copy of them -- see the note above
+# COLUMN_MAP).
 #
 # The kind is load bearing. "Construction Stage 7 (JDE) Date" is a dateTime in
 # Airtable and Salesforce returns a full timestamp
 # (2023-08-29T06:06:56.000+0000); truncating it to a date would silently drop the
 # time on every row it wrote, and a date-only comparison would not even report the
-# change. "Scheduled Closing Date" really is date-only.
+# change. "Scheduled Closing Date" and "CCC Date" really are date-only.
 EXTRA_FIELDS = {
     'Construction Stage 7 (JDE) Date': ('Construction_Stage_7_JDE_Date__c', 'datetime'),
     'Scheduled Closing Date': ('Primary_Opportunity_ID__r.Scheduled_Closing_Date__c', 'date'),
+    'CCC Date': ('Primary_Opportunity_ID__r.CCC_Date__c', 'date'),
 }
 
 # ---------------------------------------------------------------------------

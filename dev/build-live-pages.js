@@ -751,13 +751,377 @@ const PAGES = {
 
       ['draw the month bars as a share of the slicer height',
        '<span style="width:100%;height:{{ m.h }}px;border-radius:2px 2px 0 0;',
-       '<span style="width:100%;height:{{ m.h }}%;border-radius:2px 2px 0 0;']
+       '<span style="width:100%;height:{{ m.h }}%;border-radius:2px 2px 0 0;'],
 
       // REMOVED in the 08-03 (evening) release: 'give the header a path back to
       // the homepage'. See the note where HOME_LINK used to be defined. This one
       // is the more instructive of the two: its anchor still matched, so the
       // build would have gone green and shipped a header with two "All Views"
       // links. Only the tracker's copy failed loudly.
+
+      /* Added 2026-08-05, by request: Power Meter, Water Meter, NOC Lock Date,
+       * Construction Risk(+Notes) and Land Risk(+Notes) become inline-editable
+       * in the table, the same way the Tracker grid already edits them. All
+       * five are already on update-job.js's whitelist, so nothing changes
+       * server-side.
+       *
+       * This page had NO auth or edit machinery at all before this -- it was
+       * built read-only. The auth wiring below is written fail-closed from
+       * the start (can() returns false until authReady, never true by
+       * default), following the audit that found and fixed the opposite
+       * default on index.html and tracker.html the same day. */
+      ['state adds auth/edit/save/toasts',
+       'state = {\n' +
+       '    narrow: window.OLHViewport ? window.OLHViewport.narrow() : false,\n' +
+       '    lot: "", comm: "", cm: "", acm: "", stage: "",\n' +
+       '    months: [], day: "", q: "",\n' +
+       '    sort: "close", dir: 1, limit: 200, detail: null,\n' +
+       '    landRisk: false, constRisk: false,\n' +
+       '    calY: TODAY.getFullYear(), calM: TODAY.getMonth()\n' +
+       '  };',
+       'state = {\n' +
+       '    narrow: window.OLHViewport ? window.OLHViewport.narrow() : false,\n' +
+       '    lot: "", comm: "", cm: "", acm: "", stage: "",\n' +
+       '    months: [], day: "", q: "",\n' +
+       '    sort: "close", dir: 1, limit: 200, detail: null,\n' +
+       '    landRisk: false, constRisk: false,\n' +
+       '    calY: TODAY.getFullYear(), calM: TODAY.getMonth(),\n' +
+       '    user: null, authReady: false, authFailed: false,\n' +
+       '    edit: null, save: {}, toasts: []\n' +
+       '  };'],
+
+      ['componentDidMount wires auth; add commit/persist/toast/can',
+       'componentDidMount() {\n' +
+       '    if (window.OLHViewport) this._offVp = window.OLHViewport.watch(n => this.setState({ narrow: n }));\n' +
+       '    else this._vpT = setTimeout(() => {\n' +
+       '      if (window.OLHViewport) this._offVp = window.OLHViewport.watch(n => this.setState({ narrow: n }));\n' +
+       '    }, 400);\n' +
+       '    if (window.OLH_DATA && window.OLH_DATA.jobs) return;\n' +
+       '    const ready = () => {\n' +
+       '      if (!(window.OLH_DATA && window.OLH_DATA.jobs)) return false;\n' +
+       '      clearInterval(this._poll);\n' +
+       '      this._rows = null;\n' +
+       '      this.forceUpdate();\n' +
+       '      return true;\n' +
+       '    };\n' +
+       '    window.addEventListener("olh-data", ready);\n' +
+       '    this._poll = setInterval(ready, 120);\n' +
+       '    setTimeout(() => clearInterval(this._poll), 20000);\n' +
+       '    ready();\n' +
+       '  }\n' +
+       '\n' +
+       '  componentWillUnmount() { clearInterval(this._poll); }',
+       'componentDidMount() {\n' +
+       '    if (window.OLHViewport) this._offVp = window.OLHViewport.watch(n => this.setState({ narrow: n }));\n' +
+       '    else this._vpT = setTimeout(() => {\n' +
+       '      if (window.OLHViewport) this._offVp = window.OLHViewport.watch(n => this.setState({ narrow: n }));\n' +
+       '    }, 400);\n' +
+       '    this._wireAuth(0);\n' +
+       '    if (!(window.OLH_DATA && window.OLH_DATA.jobs)) {\n' +
+       '      const ready = () => {\n' +
+       '        if (!(window.OLH_DATA && window.OLH_DATA.jobs)) return false;\n' +
+       '        clearInterval(this._poll);\n' +
+       '        this._rows = null;\n' +
+       '        this.forceUpdate();\n' +
+       '        return true;\n' +
+       '      };\n' +
+       '      window.addEventListener("olh-data", ready);\n' +
+       '      this._poll = setInterval(ready, 120);\n' +
+       '      setTimeout(() => clearInterval(this._poll), 20000);\n' +
+       '      ready();\n' +
+       '    }\n' +
+       '  }\n' +
+       '\n' +
+       '  _wireAuth(tries) {\n' +
+       '    if (!window.OLHAuth) {\n' +
+       '      if (tries < 120) { this._authT = setTimeout(() => this._wireAuth(tries + 1), 50); return; }\n' +
+       '      this.setState({ authReady: true, authFailed: true });\n' +
+       '      return;\n' +
+       '    }\n' +
+       '    window.OLHAuth.configure(\'/api\');\n' +
+       '    this._offAuth = window.OLHAuth.onChange(u => this.setState({ user: u }));\n' +
+       '    window.OLHAuth.restore()\n' +
+       '      .then(u => this.setState({ user: u, authReady: true }))\n' +
+       '      .catch(() => this.setState({ authFailed: true, authReady: true }));\n' +
+       '  }\n' +
+       '\n' +
+       '  _authHeaders(extra) {\n' +
+       '    if (!window.OLHAuth || typeof window.OLHAuth.authHeaders !== "function") {\n' +
+       '      throw new Error("The sign-in module has not loaded, so this page cannot authenticate. Reload the page.");\n' +
+       '    }\n' +
+       '    return window.OLHAuth.authHeaders(extra);\n' +
+       '  }\n' +
+       '\n' +
+       '  can(p) { return this.state.authReady && !!window.OLHAuth && window.OLHAuth.can(p); }\n' +
+       '\n' +
+       '  toast(kind, title, body) {\n' +
+       '    const id = "t" + Date.now() + Math.random();\n' +
+       '    this.setState(s => ({ toasts: s.toasts.concat([{ id, kind, title, body }]) }));\n' +
+       '    setTimeout(() => this.setState(s => ({ toasts: s.toasts.filter(t => t.id !== id) })), kind === "err" ? 9000 : 2600);\n' +
+       '  }\n' +
+       '\n' +
+       '  commit(id, field, value) {\n' +
+       '    if (!this.can("tracker.edit")) {\n' +
+       '      this.setState({ edit: null });\n' +
+       '      this.toast("err", "Read-Only Access", window.OLHAuth.denyReason("tracker.edit"));\n' +
+       '      return;\n' +
+       '    }\n' +
+       '    const rec = ((window.OLH_DATA && window.OLH_DATA.jobs) || []).find(r => r.id === id);\n' +
+       '    if (!rec) return;\n' +
+       '    const prev = rec.fields[field];\n' +
+       '    if (prev === value || (prev == null && value == null)) { this.setState({ edit: null }); return; }\n' +
+       '    rec.fields[field] = value;\n' +
+       '    this._rows = null;\n' +
+       '    this.setState(s => ({ edit: null, save: Object.assign({}, s.save, { [id]: "saving\\u2026" }) }));\n' +
+       '    this.persist(rec, id, field, value, prev);\n' +
+       '  }\n' +
+       '\n' +
+       '  async persist(rec, id, field, value, prev) {\n' +
+       '    try {\n' +
+       '      const res = await fetch("/api/update-job", {\n' +
+       '        method: "POST",\n' +
+       '        headers: this._authHeaders({ "Content-Type": "application/json" }),\n' +
+       '        body: JSON.stringify({ recordId: id, fields: { [field]: value } })\n' +
+       '      });\n' +
+       '      const data = await res.json().catch(() => null);\n' +
+       '      if (!res.ok) throw new Error((data && data.error) || ("Save failed (" + res.status + ")"));\n' +
+       '      if (data && data.fields && Object.prototype.hasOwnProperty.call(data.fields, field)) {\n' +
+       '        rec.fields[field] = data.fields[field];\n' +
+       '      }\n' +
+       '      this._rows = null;\n' +
+       '      this.setState(s => ({ save: Object.assign({}, s.save, { [id]: "saved" }) }));\n' +
+       '      setTimeout(() => this.setState(s => { const n = Object.assign({}, s.save); delete n[id]; return { save: n }; }), 2100);\n' +
+       '    } catch (err) {\n' +
+       '      rec.fields[field] = prev;\n' +
+       '      this._rows = null;\n' +
+       '      this.setState(s => ({ save: Object.assign({}, s.save, { [id]: "not saved" }) }));\n' +
+       '      this.toast("err", "Job " + (rec.fields["Job #"] || id) + " \\u2014 \\u201c" + field + "\\u201d not saved",\n' +
+       '        (err.message || String(err)) + " The change was reverted.");\n' +
+       '    }\n' +
+       '  }\n' +
+       '\n' +
+       '  componentWillUnmount() {\n' +
+       '    clearInterval(this._poll);\n' +
+       '    if (this._vpT) clearTimeout(this._vpT);\n' +
+       '    if (this._authT) clearTimeout(this._authT);\n' +
+       '    if (this._offVp) this._offVp();\n' +
+       '    if (this._offAuth) this._offAuth();\n' +
+       '  }'],
+
+      ['data() carries the Airtable record id',
+       'this._rows = src.filter(j => inScope(j.fields || {})).map(j => {\n' +
+       '      const f = j.fields || {};\n' +
+       '      return {\n' +
+       '        job: f["Job #"], community: f["Community"] || "", street: f["Street Address"] || "",',
+       'this._rows = src.filter(j => inScope(j.fields || {})).map(j => {\n' +
+       '      const f = j.fields || {};\n' +
+       '      return {\n' +
+       '        id: j.id, job: f["Job #"], community: f["Community"] || "", street: f["Street Address"] || "",'],
+
+      ['rows: power/water/noc/risk become interactive',
+       'const rows = shown.map((r, i) => {\n' +
+       '      const late = r.close && r.close < TODAY_ISO;\n' +
+       '      const age = r.start ? days(new Date(r.start), TODAY) : null;\n' +
+       '      const w = r;\n' +
+       '      const mile = (iso, done) => iso ? fmt(iso) : done ? "Done" : "\\u2014";\n' +
+       '      return {\n' +
+       '        community: r.community || "\\u2014", job: r.job, jobHref: JOB_LINK(r.job), start: fmt(r.start), edd: fmt(r.edd),\n' +
+       '        ecoe: fmt(r.ecoe), close: fmt(r.close), ccc: fmt(r.ccc), co: fmt(r.co),\n' +
+       '        qai: mile(w.qai, w.qaiDone), qaa: mile(w.qaa, w.qaaDone), cel: mile(w.cel, w.celDone), acc: mile(w.acc, w.accDone),\n' +
+       '        noc: fmt(r.noc),\n' +
+       '        power: r.power ? "\\u2713" : "\\u2014", powerColor: r.power ? "#0D773C" : "#BFB8AB",\n' +
+       '        water: r.water ? "\\u2713" : "\\u2014", waterColor: r.water ? "#0D773C" : "#BFB8AB",\n' +
+       '        risk: r.landRisk && r.constRisk ? "L+C" : r.landRisk ? "L" : r.constRisk ? "C" : "\\u2014",\n' +
+       '        riskColor: r.landRisk || r.constRisk ? "#AA1F23" : "#BFB8AB",\n' +
+       '        riskTitle: [r.landRisk ? "Land risk" + (r.landNote ? ": " + r.landNote : "") : "", r.constRisk ? "Construction risk" + (r.constNote ? ": " + r.constNote : "") : ""].filter(Boolean).join(" \\u00b7 ") || "No risk flagged",\n' +
+       '        areaCm: r.acm || "\\u2014", planName: r.planName || "\\u2014",\n' +
+       '        planNumber: r.planNumber || "\\u2014", elevation: r.elevation || "\\u2014",\n' +
+       '        lot: r.lot || "\\u2014", cm: r.cm || "\\u2014", stage: r.stage || "\\u2014",\n' +
+       '        age: age === null ? "\\u2014" : age, ageColor: age !== null && age > 240 ? "#AA1F23" : "#6F6963",\n' +
+       '        closeColor: late ? "#AA1F23" : "#303030",\n' +
+       '        bg: i % 2 ? "#FCFAF6" : "#fff",\n' +
+       '        onClick: () => this.setState({ detail: r })\n' +
+       '      };\n' +
+       '    });',
+       'const canEdit = this.can("tracker.edit");\n' +
+       '    const ed = this.state.edit;\n' +
+       '    const rows = shown.map((r, i) => {\n' +
+       '      const late = r.close && r.close < TODAY_ISO;\n' +
+       '      const age = r.start ? days(new Date(r.start), TODAY) : null;\n' +
+       '      const w = r;\n' +
+       '      const mile = (iso, done) => iso ? fmt(iso) : done ? "Done" : "\\u2014";\n' +
+       '      const sv = this.state.save[r.id] || "";\n' +
+       '      const stop = e => e.stopPropagation();\n' +
+       '      const nocEditing = !!ed && ed.id === r.id && ed.field === "NOC Lock Date";\n' +
+       '      const constNoteEditing = !!ed && ed.id === r.id && ed.field === "Construction Risk Notes";\n' +
+       '      const landNoteEditing = !!ed && ed.id === r.id && ed.field === "Land Risk Notes";\n' +
+       '      return {\n' +
+       '        id: r.id, stop,\n' +
+       '        community: r.community || "\\u2014", job: r.job, jobHref: JOB_LINK(r.job), start: fmt(r.start), edd: fmt(r.edd),\n' +
+       '        ecoe: fmt(r.ecoe), close: fmt(r.close), ccc: fmt(r.ccc), co: fmt(r.co),\n' +
+       '        qai: mile(w.qai, w.qaiDone), qaa: mile(w.qaa, w.qaaDone), cel: mile(w.cel, w.celDone), acc: mile(w.acc, w.accDone),\n' +
+       '\n' +
+       '        power: r.power,\n' +
+       '        powerCursor: canEdit ? "pointer" : "default",\n' +
+       '        powerBoxStyle: "display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:4px;border:1.5px solid " + (r.power ? "#0D773C" : "#BFB8AB") + ";background:" + (r.power ? "#0D773C" : "#fff"),\n' +
+       '        onPower: e => { stop(e); if (canEdit) this.commit(r.id, "Power Meter", !r.power); },\n' +
+       '\n' +
+       '        water: r.water,\n' +
+       '        waterCursor: canEdit ? "pointer" : "default",\n' +
+       '        waterBoxStyle: "display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:4px;border:1.5px solid " + (r.water ? "#0D773C" : "#BFB8AB") + ";background:" + (r.water ? "#0D773C" : "#fff"),\n' +
+       '        onWater: e => { stop(e); if (canEdit) this.commit(r.id, "Water Meter", !r.water); },\n' +
+       '\n' +
+       '        noc: fmt(r.noc), nocRaw: r.noc || "", nocEditing,\n' +
+       '        nocCursor: canEdit ? "pointer" : "default",\n' +
+       '        onNocOpen: e => { stop(e); if (canEdit) this.setState({ edit: { id: r.id, field: "NOC Lock Date" } }); },\n' +
+       '        onNocChange: e => { this.commit(r.id, "NOC Lock Date", e.target.value || null); },\n' +
+       '        onNocBlur: () => this.setState({ edit: null }),\n' +
+       '\n' +
+       '        constRiskOn: r.constRisk, landRiskOn: r.landRisk,\n' +
+       '        constRiskChipStyle: "display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:4px;border:1px solid " + (r.constRisk ? "#AA1F23" : "#BFB8AB") + ";background:" + (r.constRisk ? "#AA1F23" : "#fff") + ";color:" + (r.constRisk ? "#fff" : "#908A82") + ";font-size:10px;font-weight:700;padding:0;cursor:" + (canEdit ? "pointer" : "default"),\n' +
+       '        landRiskChipStyle: "display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:4px;border:1px solid " + (r.landRisk ? "#AA1F23" : "#BFB8AB") + ";background:" + (r.landRisk ? "#AA1F23" : "#fff") + ";color:" + (r.landRisk ? "#fff" : "#908A82") + ";font-size:10px;font-weight:700;padding:0;cursor:" + (canEdit ? "pointer" : "default"),\n' +
+       '        onConstRisk: e => { stop(e);\n' +
+       '          if (!canEdit) return;\n' +
+       '          const next = !r.constRisk;\n' +
+       '          this.commit(r.id, "Construction Risk", next);\n' +
+       '          if (next && !r.constNote) this.setState({ edit: { id: r.id, field: "Construction Risk Notes" } });\n' +
+       '        },\n' +
+       '        onLandRisk: e => { stop(e);\n' +
+       '          if (!canEdit) return;\n' +
+       '          const next = !r.landRisk;\n' +
+       '          this.commit(r.id, "Land Risk", next);\n' +
+       '          if (next && !r.landNote) this.setState({ edit: { id: r.id, field: "Land Risk Notes" } });\n' +
+       '        },\n' +
+       '        onConstNoteOpen: e => { stop(e); if (canEdit) this.setState({ edit: { id: r.id, field: "Construction Risk Notes" } }); },\n' +
+       '        onLandNoteOpen: e => { stop(e); if (canEdit) this.setState({ edit: { id: r.id, field: "Land Risk Notes" } }); },\n' +
+       '        constNoteEditing, landNoteEditing,\n' +
+       '        constNoteValue: r.constNote || "", landNoteValue: r.landNote || "",\n' +
+       '        onConstNoteBlur: e => this.commit(r.id, "Construction Risk Notes", e.target.value),\n' +
+       '        onLandNoteBlur: e => this.commit(r.id, "Land Risk Notes", e.target.value),\n' +
+       '        riskTitle: [r.landRisk ? "Land risk" + (r.landNote ? ": " + r.landNote : " \\u2014 click the pencil to add a note") : "", r.constRisk ? "Construction risk" + (r.constNote ? ": " + r.constNote : " \\u2014 click the pencil to add a note") : ""].filter(Boolean).join(" \\u00b7 ") || "No risk flagged",\n' +
+       '\n' +
+       '        saveState: sv, saveColor: sv === "saved" ? "#0D773C" : "#908A82",\n' +
+       '\n' +
+       '        areaCm: r.acm || "\\u2014", planName: r.planName || "\\u2014",\n' +
+       '        planNumber: r.planNumber || "\\u2014", elevation: r.elevation || "\\u2014",\n' +
+       '        lot: r.lot || "\\u2014", cm: r.cm || "\\u2014", stage: r.stage || "\\u2014",\n' +
+       '        age: age === null ? "\\u2014" : age, ageColor: age !== null && age > 240 ? "#AA1F23" : "#6F6963",\n' +
+       '        closeColor: late ? "#AA1F23" : "#303030",\n' +
+       '        bg: i % 2 ? "#FCFAF6" : "#fff",\n' +
+       '        onClick: () => this.setState({ detail: r })\n' +
+       '      };\n' +
+       '    });'],
+
+      ['renderVals return adds readOnly/readOnlyNote/toasts',
+       'detail,\n' +
+       '      stop: e => e.stopPropagation(),\n' +
+       '      onCloseDetail: () => this.setState({ detail: null }),\n' +
+       '      chips\n' +
+       '    };\n' +
+       '  }\n' +
+       '}',
+       'detail,\n' +
+       '      stop: e => e.stopPropagation(),\n' +
+       '      onCloseDetail: () => this.setState({ detail: null }),\n' +
+       '      chips,\n' +
+       '\n' +
+       '      readOnly: s.authFailed || (!!s.user && !canEdit),\n' +
+       '      readOnlyNote: s.authFailed\n' +
+       '        ? "Couldn\\u2019t verify your sign-in, so Power/Water/NOC/Risk fields are read-only for now. Refresh the page \\u2014 if this keeps happening, ask an admin to check your account."\n' +
+       '        : (s.user && !canEdit\n' +
+       '          ? "Signed in as " + window.OLHAuth.roleLabel(s.user.role) + " \\u2014 Power/Water/NOC/Risk fields are view only. " + window.OLHAuth.denyReason("tracker.edit")\n' +
+       '          : ""),\n' +
+       '      toasts: s.toasts.map(t => ({\n' +
+       '        title: t.title, body: t.body,\n' +
+       '        style: { display: "flex", gap: "10px", alignItems: "flex-start", padding: "10px 12px", borderRadius: "4px",\n' +
+       '          background: "#fff", border: "1px solid #D8CFBE",\n' +
+       '          borderLeft: "3px solid " + (t.kind === "err" ? "#AA1F23" : "#0D773C"),\n' +
+       '          boxShadow: "0 6px 20px rgba(48,48,48,.12)", fontSize: "12.5px", lineHeight: 1.4 },\n' +
+       '        titleStyle: { fontWeight: 600, display: "block", marginBottom: "1px", color: t.kind === "err" ? "#AA1F23" : "#303030" },\n' +
+       '        onClose: () => this.setState(p => ({ toasts: p.toasts.filter(x => x.id !== t.id) }))\n' +
+       '      }))\n' +
+       '    };\n' +
+       '  }\n' +
+       '}'],
+
+      ['add read-only banner after header',
+       '  </header>\n' +
+       '\n' +
+       '  <div style="display:grid;grid-template-columns:{{ panelCols }};gap:14px;flex:0 0 auto;padding:{{ mainPad }};align-items:stretch">',
+       '  </header>\n' +
+       '\n' +
+       '  <sc-if value="{{ readOnly }}" hint-placeholder-val="{{ false }}">\n' +
+       '    <div style="display:flex;align-items:center;gap:12px;flex:0 0 auto;padding:9px 22px;background:#FBEDED;border-bottom:1px solid #EFCFCF">\n' +
+       '      <span style="height:19px;padding:0 9px;border-radius:999px;background:#fff;color:#AA1F23;font-size:9.5px;font-weight:700;line-height:19px;letter-spacing:.09em;flex:0 0 auto">READ ONLY</span>\n' +
+       '      <span style="font-size:12.5px;font-weight:500;color:#AA1F23;text-wrap:pretty">{{ readOnlyNote }}</span>\n' +
+       '    </div>\n' +
+       '  </sc-if>\n' +
+       '\n' +
+       '  <div style="display:grid;grid-template-columns:{{ panelCols }};gap:14px;flex:0 0 auto;padding:{{ mainPad }};align-items:stretch">'],
+
+      ['job cell shows save-state marker',
+       '            <sc-raw-td style="padding:7px 10px;border-bottom:1px solid #F1EBE1;font-variant-numeric:tabular-nums;white-space:nowrap"><a href="{{ r.jobHref }}" title="Open homesite detail" style="color:inherit;text-decoration:none" style-hover="color:#005DAA;text-decoration:underline">{{ r.job }}</a></sc-raw-td>',
+       '            <sc-raw-td style="padding:7px 10px;border-bottom:1px solid #F1EBE1;font-variant-numeric:tabular-nums;white-space:nowrap"><a href="{{ r.jobHref }}" title="Open homesite detail" style="color:inherit;text-decoration:none" style-hover="color:#005DAA;text-decoration:underline">{{ r.job }}</a> <sc-if value="{{ r.saveState }}" hint-placeholder-val="{{ false }}"><span style="margin-left:5px;font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:{{ r.saveColor }}">{{ r.saveState }}</span></sc-if></sc-raw-td>'],
+
+      ['power/water cells become checkboxes',
+       '            <sc-raw-td style="padding:7px 10px;border-bottom:1px solid #F1EBE1;text-align:center;font-weight:600;color:{{ r.powerColor }}">{{ r.power }}</sc-raw-td>\n' +
+       '            <sc-raw-td style="padding:7px 10px;border-bottom:1px solid #F1EBE1;text-align:center;font-weight:600;color:{{ r.waterColor }}">{{ r.water }}</sc-raw-td>',
+       '            <sc-raw-td sc-camel-on-click="{{ r.onPower }}" title="Click to toggle" style="padding:7px 10px;border-bottom:1px solid #F1EBE1;text-align:center;cursor:{{ r.powerCursor }}">\n' +
+       '              <span style="{{ r.powerBoxStyle }}"><sc-if value="{{ r.power }}" hint-placeholder-val="{{ false }}"><span style="display:inline-block;width:5px;height:9px;border-right:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(40deg);margin-top:-2px"></span></sc-if></span>\n' +
+       '            </sc-raw-td>\n' +
+       '            <sc-raw-td sc-camel-on-click="{{ r.onWater }}" title="Click to toggle" style="padding:7px 10px;border-bottom:1px solid #F1EBE1;text-align:center;cursor:{{ r.waterCursor }}">\n' +
+       '              <span style="{{ r.waterBoxStyle }}"><sc-if value="{{ r.water }}" hint-placeholder-val="{{ false }}"><span style="display:inline-block;width:5px;height:9px;border-right:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(40deg);margin-top:-2px"></span></sc-if></span>\n' +
+       '            </sc-raw-td>'],
+
+      ['risk cell becomes editable chips + notes',
+       '            <sc-raw-td title="{{ r.riskTitle }}" style="padding:7px 10px;border-bottom:1px solid #F1EBE1;text-align:center;font-size:11px;font-weight:700;letter-spacing:.04em;color:{{ r.riskColor }}">{{ r.risk }}</sc-raw-td>',
+       '            <sc-raw-td title="{{ r.riskTitle }}" style="padding:6px 8px;border-bottom:1px solid #F1EBE1;text-align:center;position:relative">\n' +
+       '              <span style="display:inline-flex;align-items:center;gap:4px">\n' +
+       '                <button sc-camel-on-click="{{ r.onConstRisk }}" style="{{ r.constRiskChipStyle }}">C</button>\n' +
+       '                <button sc-camel-on-click="{{ r.onLandRisk }}" style="{{ r.landRiskChipStyle }}">L</button>\n' +
+       '                <sc-if value="{{ r.constRiskOn }}" hint-placeholder-val="{{ false }}">\n' +
+       '                  <button sc-camel-on-click="{{ r.onConstNoteOpen }}" title="Edit construction risk note" style="width:16px;height:16px;padding:0;border:0;background:transparent;color:#AA1F23;font-size:11px;cursor:pointer">&#9998;</button>\n' +
+       '                </sc-if>\n' +
+       '                <sc-if value="{{ r.landRiskOn }}" hint-placeholder-val="{{ false }}">\n' +
+       '                  <button sc-camel-on-click="{{ r.onLandNoteOpen }}" title="Edit land risk note" style="width:16px;height:16px;padding:0;border:0;background:transparent;color:#AA1F23;font-size:11px;cursor:pointer">&#9998;</button>\n' +
+       '                </sc-if>\n' +
+       '              </span>\n' +
+       '              <sc-if value="{{ r.constNoteEditing }}" hint-placeholder-val="{{ false }}">\n' +
+       '                <textarea sc-camel-default-value="{{ r.constNoteValue }}" sc-camel-on-blur="{{ r.onConstNoteBlur }}" sc-camel-on-click="{{ r.stop }}" placeholder="Construction risk note\\u2026" style="position:absolute;left:0;top:100%;z-index:20;width:240px;height:80px;margin-top:2px;padding:7px 8px;background:#fff;border:1px solid #AA1F23;border-radius:4px;box-shadow:0 8px 24px rgba(48,48,48,.14);resize:vertical;line-height:1.4;font-size:12px;outline:none;text-align:left;white-space:pre-wrap"></textarea>\n' +
+       '              </sc-if>\n' +
+       '              <sc-if value="{{ r.landNoteEditing }}" hint-placeholder-val="{{ false }}">\n' +
+       '                <textarea sc-camel-default-value="{{ r.landNoteValue }}" sc-camel-on-blur="{{ r.onLandNoteBlur }}" sc-camel-on-click="{{ r.stop }}" placeholder="Land risk note\\u2026" style="position:absolute;left:0;top:100%;z-index:20;width:240px;height:80px;margin-top:2px;padding:7px 8px;background:#fff;border:1px solid #AA1F23;border-radius:4px;box-shadow:0 8px 24px rgba(48,48,48,.14);resize:vertical;line-height:1.4;font-size:12px;outline:none;text-align:left;white-space:pre-wrap"></textarea>\n' +
+       '              </sc-if>\n' +
+       '            </sc-raw-td>'],
+
+      ['noc cell becomes click-to-edit date',
+       '            <sc-raw-td style="padding:7px 10px;border-bottom:1px solid #F1EBE1;color:#6F6963;white-space:nowrap">{{ r.noc }}</sc-raw-td>',
+       '            <sc-raw-td sc-camel-on-click="{{ r.onNocOpen }}" style="padding:7px 10px;border-bottom:1px solid #F1EBE1;color:#6F6963;white-space:nowrap;cursor:{{ r.nocCursor }};position:relative">\n' +
+       '              {{ r.noc }}\n' +
+       '              <sc-if value="{{ r.nocEditing }}" hint-placeholder-val="{{ false }}">\n' +
+       '                <input type="date" sc-camel-default-value="{{ r.nocRaw }}" sc-camel-on-change="{{ r.onNocChange }}" sc-camel-on-blur="{{ r.onNocBlur }}" sc-camel-on-click="{{ r.stop }}" style="position:absolute;left:0;top:100%;z-index:20;margin-top:2px;height:28px;padding:0 6px;background:#fff;border:1px solid #005DAA;border-radius:4px;box-shadow:0 8px 24px rgba(48,48,48,.14);font-size:12px;outline:none">\n' +
+       '              </sc-if>\n' +
+       '            </sc-raw-td>'],
+
+      ['add toast container',
+       '  </sc-if>\n' +
+       '</div>\n' +
+       '\n' +
+       '\n' +
+       '</x-dc>',
+       '  </sc-if>\n' +
+       '</div>\n' +
+       '\n' +
+       '<div style="position:fixed;right:18px;bottom:18px;z-index:60;display:flex;flex-direction:column;gap:8px;max-width:400px" aria-live="polite">\n' +
+       '  <sc-for list="{{ toasts }}" as="t" hint-placeholder-count="0">\n' +
+       '    <div style="{{ t.style }}">\n' +
+       '      <div><span style="{{ t.titleStyle }}">{{ t.title }}</span><span style="color:#6F6963">{{ t.body }}</span></div>\n' +
+       '      <button sc-camel-on-click="{{ t.onClose }}" style="margin-left:auto;border:0;background:transparent;color:#908A82;cursor:pointer;font-size:15px;line-height:1;padding:0 2px">×</button>\n' +
+       '    </div>\n' +
+       '  </sc-for>\n' +
+       '</div>\n' +
+       '\n' +
+       '</x-dc>'],
     ]
   },
 
@@ -1098,12 +1462,102 @@ const PAGES = {
 
       ['authenticate the tracker write',
        "        headers:{'Content-Type':'application/json', Accept:'application/json'},",
-       "        headers: this._authHeaders({'Content-Type':'application/json'}),"]
+       "        headers: this._authHeaders({'Content-Type':'application/json'}),"],
 
       // REMOVED in the 08-03 (evening) release: 'give the header a path back to
       // the homepage'. See the note where HOME_LINK used to be defined -- the
       // design now ships the link on all nine inner pages, so this patch was
       // adding a second one.
+
+      /* Found 2026-08-05, auditing the page. can(p) returned true whenever
+       * window.OLHAuth was not yet loaded, so every cell rendered and
+       * behaved as editable before sign-in was confirmed -- and forever, if
+       * OLHAuth failed to load at all. The API enforces tracker.edit
+       * server-side regardless (see netlify/functions/update-job.js), so
+       * this was never a way to actually save an unauthorized change -- it
+       * just let the grid look editable when it silently wasn't, and every
+       * attempted edit would revert with a "not saved" toast. Mirrors the
+       * authReady/authFailed fix already applied to index.html. */
+      ['state adds authReady/authFailed',
+       'edit: null, save: {}, toasts: [], live: false, loading: false,\n' +
+       '    user: null, history: null, hEntries: null, hLoading: false, conflict: null\n' +
+       '  };',
+       'edit: null, save: {}, toasts: [], live: false, loading: false,\n' +
+       '    user: null, history: null, hEntries: null, hLoading: false, conflict: null,\n' +
+       '    authReady: false, authFailed: false\n' +
+       '  };'],
+
+      ['_wireAuth sets authReady/authFailed, fails closed on timeout',
+       '  _wireAuth(tries) {\n' +
+       '    if (!window.OLHAuth) {\n' +
+       '      if (tries < 120) this._authT = setTimeout(() => this._wireAuth(tries + 1), 50);\n' +
+       '      return;\n' +
+       '    }\n' +
+       '    window.OLHAuth.configure(this.apiBase());\n' +
+       '    this._offAuth = window.OLHAuth.onChange(u => this.setState({ user: u }));\n' +
+       '    window.OLHAuth.restore().then(u => this.setState({ user: u }));\n' +
+       '  }',
+       '  _wireAuth(tries) {\n' +
+       '    if (!window.OLHAuth) {\n' +
+       '      if (tries < 120) { this._authT = setTimeout(() => this._wireAuth(tries + 1), 50); return; }\n' +
+       '      this.setState({ authReady: true, authFailed: true });\n' +
+       '      return;\n' +
+       '    }\n' +
+       '    window.OLHAuth.configure(this.apiBase());\n' +
+       '    this._offAuth = window.OLHAuth.onChange(u => this.setState({ user: u }));\n' +
+       '    window.OLHAuth.restore()\n' +
+       '      .then(u => this.setState({ user: u, authReady: true }))\n' +
+       '      .catch(() => this.setState({ authFailed: true, authReady: true }));\n' +
+       '  }'],
+
+      ['can() fails closed instead of defaulting to true',
+       "  can(p){ return !window.OLHAuth || window.OLHAuth.can(p); }",
+       "  can(p){ return this.state.authReady && !!window.OLHAuth && window.OLHAuth.can(p); }"],
+
+      ['readOnly/readOnlyNote surface a real authFailed message',
+       "      readOnly: !!s.user && !canEdit,\n" +
+       "      readOnlyNote: s.user && !canEdit\n" +
+       "        ? 'Signed in as ' + window.OLHAuth.roleLabel(s.user.role) + ' \\u2014 view only. ' + window.OLHAuth.denyReason('tracker.edit')\n" +
+       "        : '',",
+       "      readOnly: s.authFailed || (!!s.user && !canEdit),\n" +
+       "      readOnlyNote: s.authFailed\n" +
+       "        ? 'Couldn\\u2019t verify your sign-in, so this view is read-only for now. Refresh the page \\u2014 if this keeps happening, ask an admin to check your account.'\n" +
+       "        : (s.user && !canEdit\n" +
+       "          ? 'Signed in as ' + window.OLHAuth.roleLabel(s.user.role) + ' \\u2014 view only. ' + window.OLHAuth.denyReason('tracker.edit')\n" +
+       "          : ''),"],
+
+      /* Found 2026-08-05, auditing the page. The "Homes in Progress" tile
+       * carried its own `act` boolean, ANDed against Record Status ===
+       * 'Active' in view(), completely independent of the Status dropdown's
+       * `rs` filter -- which defaults to 'Active' on every page load. Two
+       * consequences: with the default filters, clicking the tile was a
+       * silent no-op (rs already restricts to Active, so `act` added
+       * nothing); with the dropdown set to anything else (e.g. 'Closed'),
+       * clicking the tile ANDed 'Active' with the dropdown's value and
+       * produced a contradiction that matches zero rows -- the table went
+       * silently blank with no explanation. Folding the tile into `rs`
+       * directly removes the second, uncoordinated source of truth so the
+       * two controls can never disagree. */
+      ['remove the redundant act filter clause from view()',
+       "      if(s.act && x['Record Status'] !== 'Active') return false;\n" +
+       "      if(s.bkl && String(x['Lot Status']||'').trim().toUpperCase() !== 'B') return false;",
+       "      if(s.bkl && String(x['Lot Status']||'').trim().toUpperCase() !== 'B') return false;"],
+
+      ['bind the Homes in Progress tile to rs instead of a separate act flag',
+       "      tileProgress: this.tile(s.act), onTileProgress: () => this.set({act:!s.act}),",
+       "      tileProgress: this.tile(s.rs === 'Active'), onTileProgress: () => this.set({rs: s.rs === 'Active' ? '' : 'Active'}),"],
+
+      ['onTileClear drops the now-removed act flag',
+       "        this.set({act:false, bkl:false, nq:false, lt:false, rk:false,\n" +
+       "          qa:false, cr:false, lr:false, rs:'', cm:'', ac:'', lot:'', q:''});",
+       "        this.set({bkl:false, nq:false, lt:false, rk:false,\n" +
+       "          qa:false, cr:false, lr:false, rs:'', cm:'', ac:'', lot:'', q:''});"],
+
+      ['anyFilter drops the now-removed act flag',
+       "    const anyFilter = !!(s.act || s.bkl || s.nq || s.lt || s.rk || s.qa || s.cr || s.lr\n" +
+       "      || s.rs || s.cm || s.ac || s.lot || s.q);",
+       "    const anyFilter = !!(s.bkl || s.nq || s.lt || s.rk || s.qa || s.cr || s.lr\n" +
+       "      || s.rs || s.cm || s.ac || s.lot || s.q);"],
     ]
   },
 
