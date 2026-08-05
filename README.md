@@ -1,12 +1,17 @@
 # OLH QA & Closing Tracker — Web Front End
 
-> **Azure:** the site can also be deployed to Azure Static Web Apps. Nothing in
-> `netlify/` changed — `api/src/netlify-adapter.js` wraps the same eight handlers
-> — so both hosts run from this tree and the cutover is reversible. Resource
-> creation, app settings, the four ways Azure does not behave like Netlify, and
-> the cutover checklist are in **[AZURE-DEPLOY.md](AZURE-DEPLOY.md)**. The rest of
-> this file is host-agnostic apart from the Netlify-specific deploy sections
-> below.
+> **Hosting (updated 2026-08-05): Azure is the only live host.** The Netlify →
+> Azure cutover described throughout this file is complete. `dynamics2olh.netlify.app`
+> is decommissioned as an application host — it now serves a single static
+> redirect page (deployed manually, outside git) to
+> **https://jolly-mud-0ff2f8910.7.azurestaticapps.net**, the real production
+> site. `netlify.toml` has been removed from the repo (commit `26ac9ed`).
+> `netlify/functions/` and `netlify/lib/` are **kept** — they are the actual API
+> handler source code, wrapped unmodified by `api/src/netlify-adapter.js` for
+> Azure Functions. Everywhere below that says "Netlify" as the deploy target,
+> read it as historical: it describes how this app worked before the cutover,
+> and is kept for context on *why* the code is shaped the way it is. For the
+> current setup, see **[AZURE-DEPLOY.md](AZURE-DEPLOY.md)**.
 
 An internal tool for viewing and editing QA / closing milestones on ~930 live
 job records held in Airtable. No npm dependencies for the front end and no build
@@ -19,15 +24,14 @@ olh-tracker-web/
 │   ├── index.html …               # the eight generated pages (see below)
 │   ├── 404.html                   # hand-written; the one page that is not a bundle
 │   ├── version.json               # {gitSha, exportDate, builtAt} — written by release.sh
-│   ├── staticwebapp.config.json   # Azure routing/redirects (mirrors netlify.toml)
+│   ├── staticwebapp.config.json   # Azure routing/redirects — the only routing config now (netlify.toml removed)
 │   ├── assets/                    # only lennar-logo-blue.png is referenced
 │   ├── fonts/  vendor/            # currently referenced by nothing — see below
 │   └── robots.txt                 # disallow all
-├── netlify.toml                   # publish = "public" (an ALLOW-LIST), functions, redirects
-├── netlify/
+├── netlify/                       # KEPT — source for the API handlers, not deploy config
 │   ├── functions/                 # the eight handlers — jobs, update-job, auth, users, …
 │   └── lib/olh-auth.js            # the shared auth boundary
-├── api/                           # Azure Static Web Apps wrapper (see AZURE-DEPLOY.md)
+├── api/                           # Azure Static Web Apps wrapper (see AZURE-DEPLOY.md) — THE deploy target
 │   └── src/netlify-adapter.js     # runs the same handlers unmodified
 ├── dev/                           # build + verify tooling. never served (forced 404).
 │   ├── release.sh                 # ← the only way public/ changes
@@ -38,8 +42,11 @@ olh-tracker-web/
 │   └── verify-auth.sh             # the auth-boundary test suite
 ├── exports/                       # staged design exports. gitignored except…
 │   └── manifest.json              # …this: hashes of the export prod was built from
-└── .github/workflows/             # Azure deploy; mirrors the Netlify git deploy
+└── .github/workflows/             # Azure deploy — the only deploy on push to main
 ```
+
+> `netlify.toml` was removed on 2026-08-05 (commit `26ac9ed`). It is no longer
+> present in this tree; the block above reflects the current layout.
 
 The generated pages are **self-contained bundles** produced by the design tool: a
 manifest of gzip+base64 assets (the dc-runtime, React, ReactDOM, five brand
@@ -83,10 +90,12 @@ hand-edited. `public/` is build output.
 `public/` that is not a design bundle.
 
 > **`/tracker-new` is gone.** The read-only "New Views" prototype was deleted in
-> 2026-08; `netlify.toml` and `public/staticwebapp.config.json` both 301 that path
-> to `/tracker`. `dev/build-new-views.js` is kept for history and is **not** part
-> of the release path — `dev/export-map.json` lists the page under `ignore` with
-> that reason, so `dev/release.sh` will not rebuild it.
+> 2026-08; `public/staticwebapp.config.json` 301s that path to `/tracker` (this
+> used to also be enforced by `netlify.toml`, before it was removed — see the
+> hosting note at the top of this file). `dev/build-new-views.js` is kept for
+> history and is **not** part of the release path — `dev/export-map.json` lists
+> the page under `ignore` with that reason, so `dev/release.sh` will not rebuild
+> it.
 
 > Note: Airtable has no `Community` or `Street Address` field (0 of 932
 > records), so those two columns read blank on the tracker.
@@ -192,22 +201,29 @@ cleaning a token out of git history is not.
 
 ## Deploy
 
-**`git push` is the deploy.** Both hosts publish from `main`:
+**`git push` is the deploy.** As of 2026-08-05, Azure is the only host that
+publishes from `main`:
 
 | Host | URL | Triggered by |
 |---|---|---|
-| Netlify (`dynamics2olh`) | <https://dynamics2olh.netlify.app> | git-connected; every push to `main` |
 | Azure Static Web Apps | <https://jolly-mud-0ff2f8910.7.azurestaticapps.net> | `.github/workflows/azure-static-web-apps.yml` on push to `main` |
+| ~~Netlify (`dynamics2olh`)~~ *(decommissioned)* | <https://dynamics2olh.netlify.app> | Not git-connected. Manually deployed as a static redirect to the Azure URL above — pushes to `main` no longer touch it. |
 
 There is nothing else to run. `dev/release.sh` produces the commit; the push
-publishes it to both. Confirm with `bash dev/whats-live.sh`.
+publishes it to Azure. `bash dev/whats-live.sh` originally compared both hosts —
+now that Netlify no longer builds from git, only the Azure side of that check is
+meaningful; expect it to report Netlify as stale/disconnected rather than
+missing a deploy.
 
 ### The setup, for reference
+
+**Historical — this is how the site used to be deployed, kept for context.**
+For the current (Azure) setup steps, see **[AZURE-DEPLOY.md](AZURE-DEPLOY.md)**.
 
 1. This is a **private** repo. Keep it that way — `README.md` names the Airtable
    base id and the pages hold real homesite data.
 2. Netlify → **Add new site → Import an existing project** → pick the repo.
-3. Build settings — all three are read from `netlify.toml`, so leave the UI alone:
+3. Build settings — all three were read from `netlify.toml` (since removed):
    - Build command: *(empty)*
    - Publish directory: **`public`**
    - Functions directory: `netlify/functions`
@@ -215,7 +231,6 @@ publishes it to both. Confirm with `bash dev/whats-live.sh`.
    - Key: `AIRTABLE_PAT`
    - Value: the token
    - Scopes: Functions (and Builds); all deploy contexts
-5. Azure app settings are configured separately — see **[AZURE-DEPLOY.md](AZURE-DEPLOY.md)**.
 
 > **Publish directory is `public`, never `.`** — and it is worth knowing why,
 > because the UI will happily accept the wrong answer. `publish` is an allow-list:
@@ -226,10 +241,13 @@ publishes it to both. Confirm with `bash dev/whats-live.sh`.
 > default. The same trap exists on Azure: the SWA workflow's `app_location` must
 > stay `public`, which is why the job name in that file must not be renamed.
 
-> After changing `AIRTABLE_PAT` you must **redeploy** (Deploys → Trigger deploy
-> → Clear cache and deploy site). Functions pick up env vars at deploy time.
+> After changing `AIRTABLE_PAT` you must **redeploy**. On the old Netlify setup
+> that was Deploys → Trigger deploy → Clear cache and deploy site. **On Azure
+> (current)**, see the app-settings redeploy steps in
+> **[AZURE-DEPLOY.md](AZURE-DEPLOY.md)** — functions pick up env vars at deploy
+> time there too.
 
-### Netlify CLI — emergency only
+### Netlify CLI — emergency only, and now historical
 
 ```bash
 netlify deploy --prod
@@ -258,6 +276,10 @@ netlify dev        # serves index.html + functions at http://localhost:8888
 
 `netlify dev` loads `.env` automatically. Confirm `git status` never lists
 `.env` before you commit.
+
+> This is still a fine way to run the functions locally even after the Azure
+> cutover — `netlify dev` just simulates the handlers on your machine and never
+> touches the decommissioned `dynamics2olh` site or the Azure deploy.
 
 ---
 
@@ -295,15 +317,19 @@ That was the user's explicit choice, so the write endpoint is hardened instead:
    > Status` option is renamed or added in Airtable, update `SELECT_OPTIONS`
    > *and* the `KEY_STATUS` array in `index.html` in the same commit.
 4. **No indexing.** `robots.txt` disallows everything and
-   `X-Robots-Tag: noindex, nofollow, noarchive` is set by `netlify.toml` on every
-   path and by both functions on every response.
+   `X-Robots-Tag: noindex, nofollow, noarchive` was set by `netlify.toml` on
+   every path; on Azure (current), the equivalent header/routing rules live in
+   `public/staticwebapp.config.json`, and both functions still set the header
+   on every response regardless of host.
 5. **No secrets client-side.** No token, base id secret, or credential is in any
-   page. (The base/table ids live only in the functions.) This is now structural
-   rather than enforced: `publish = "public"` is an **allow-list**, so a file is
-   private unless someone copies it into `public/`. `netlify.toml` still
-   force-404s `/netlify/*`, `/dev/*`, `/README.md` and friends, but those
-   redirects are now belt-and-braces for the CLI path — on a git deploy those
-   files are not in the published directory at all.
+   page. (The base/table ids live only in the functions.) This is structural
+   rather than enforced: `public/` is populated by the build as an **allow-list**
+   (historically `publish = "public"` in `netlify.toml`; now just "whatever
+   `dev/release.sh` copies in"), so a file is private unless someone copies it
+   into `public/`. The `/netlify/*`, `/dev/*`, `/README.md` force-404 redirects
+   used to live in `netlify.toml`; check `public/staticwebapp.config.json` for
+   the Azure equivalent — on a git deploy those files are not in the published
+   directory at all regardless.
 
    > This used to be the other way round. With `publish = "."` the redirects were
    > the *only* protection, and every new private file needed a new rule — which
@@ -413,7 +439,7 @@ Pick one, in rough order of effort:
 | "Server is not configured: AIRTABLE_PAT is unset" | Env var missing, or set but not redeployed. |
 | "Airtable rejected the credentials" | Token lacks `data.records:write`, or the base isn't in its access list. |
 | "Rejected: field(s) not permitted for editing" | Working as designed — that column is sync-owned. |
-| Blank page / 404 on `/api/jobs` | `netlify.toml` redirects didn't deploy; check the functions directory. |
+| Blank page / 404 on `/api/jobs` | Check `public/staticwebapp.config.json` routing and the Azure Functions deployment; `netlify.toml` no longer exists and isn't the cause. |
 
 ---
 
@@ -603,8 +629,15 @@ that mints a privileged account without one already existing. Re-running it
 issues a fresh invite rather than duplicating or resetting anything, so a lost
 link is recoverable.
 
-Required Netlify env vars: `AIRTABLE_PAT`, `SESSION_SECRET` (32+ chars,
-`openssl rand -hex 32`), `SITE_URL` (optional; falls back to the request host).
+> `netlify env:get` above still works because the decommissioned `dynamics2olh`
+> Netlify site's env vars haven't been deleted — see the same dangling-dependency
+> note under *The daily schedule*. Pull the token from wherever it's actually
+> current if that changes.
+
+Required env vars (`AIRTABLE_PAT`, `SESSION_SECRET` — 32+ chars,
+`openssl rand -hex 32` — and optional `SITE_URL`) must be set wherever the
+functions actually run today, i.e. **Azure App Settings**, not just the old
+Netlify site — see **[AZURE-DEPLOY.md](AZURE-DEPLOY.md)**.
 
 ## Verifying
 
@@ -655,7 +688,8 @@ in construction".
 
 The additions are mostly **unsold** homesites where construction has started or
 finished. They are open work even though nobody has bought them, which is the
-point of the new scope — but it does mean QA managers now see lots with no buyer
+point of the new sc
+ope — but it does mean QA managers now see lots with no buyer
 attached.
 
 ## The scope lives in the skill, not here
@@ -750,9 +784,17 @@ is not stored in the script or the plist. It needs the Netlify CLI to stay logge
 in and `sf` auth to stay valid; both failures are logged, and neither corrupts the
 table — the tracker simply keeps showing the previous pull.
 
+> **Open follow-up (2026-08-05):** this still calls `netlify env:get`, which
+> reads from the (now-decommissioned) `dynamics2olh` Netlify site's environment
+> variables — that site still exists in Netlify's dashboard even though it no
+> longer serves the app, so this keeps working today, but it's a dangling
+> dependency on a site we're trying to retire. Worth moving `AIRTABLE_PAT` to a
+> local `.env` or a proper secrets store and dropping the Netlify CLI dependency
+> entirely the next time this script is touched.
+
 It only runs while the Mac is awake. This is not a server-side sync and cannot be:
-the Salesforce CLI is authenticated on this machine only, so a Netlify scheduled
-function has no way to run the pull.
+the Salesforce CLI is authenticated on this machine only, and there is no
+Netlify or Azure scheduled function behind it.
 
 ---
 
@@ -884,7 +926,8 @@ permissions (`page.home`, `page.tracker`, `page.completion`, `page.walks`,
 grid, accepted the ticks, `PUT` them, and discarded every `page.*` on the way in.
 A control that looks like it saves and does not is worse than no control.
 
-The server now mirrors the frontend rules exactly:
+The server now mirrors the fronten
+d rules exactly:
 
 - `page.admin` is in `ROLE_LOCKS.admin` and in `ADMIN_ONLY_PAGES`, so only admin
   can hold it — filtered **after** `NEEDS_PAGE`, so `roster.manage` implying
