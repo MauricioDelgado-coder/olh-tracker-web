@@ -36,7 +36,7 @@ const SOURCE = path.join(ROOT, 'netlify');
 const DEST = path.join(ROOT, 'api', '_netlify');
 
 /**
- * The eight endpoints in netlify.toml. Listed rather than globbed so that a new
+ * The nine endpoints this API serves. Listed rather than globbed so that a new
  * handler is a deliberate two-line change here and in api/src/index.js, not a
  * file that ships the moment it exists -- the same reason netlify.toml uses an
  * allow-list publish directory instead of the repo root.
@@ -45,6 +45,7 @@ const FUNCTIONS = [
   'jobs.js',
   'update-job.js',
   'walk-config.js',
+  'time-off.js',
   'auth.js',
   'password.js',
   'users.js',

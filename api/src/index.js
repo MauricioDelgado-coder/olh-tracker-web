@@ -64,6 +64,7 @@ const ROUTES = [
   ['jobs', 'jobs', 'jobs'],
   ['updateJob', 'update-job', 'update-job'],
   ['walkConfig', 'walk-config', 'walk-config'],
+  ['timeOff', 'time-off', 'time-off'],
 
   // ---- Session lifecycle -> auth.js
   ['signIn', 'sign-in', 'auth'],

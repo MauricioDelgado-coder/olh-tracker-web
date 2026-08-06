@@ -284,7 +284,7 @@ function readSession(token) {
  */
 const ALL_PAGES = [
   'page.home', 'page.tracker', 'page.completion', 'page.walks',
-  'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.workload', 'page.admin'
+  'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload', 'page.admin'
 ];
 
 // Mirrors DEFAULT_ROLES in the frontend auth module. Used when the Roles table
@@ -292,15 +292,19 @@ const ALL_PAGES = [
 // page.missedwalks follows page.qamgmt exactly -- reconciling a miss is the same
 // tier of work as recording one, so whoever can mark a walk missed can also
 // clear it once it's been handled.
+// page.timeoff follows page.scheduler exactly -- taking someone off the board
+// for a day is the same tier of scheduling decision as reassigning a walk, so
+// it's granted (and view-only for leadership) alongside it, not alongside
+// page.qamgmt.
 const DEFAULT_ROLES = {
   admin: ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage'].concat(ALL_PAGES),
   qam: ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply',
     'page.home', 'page.tracker', 'page.completion', 'page.walks', 'page.qamgmt', 'page.missedwalks',
-    'page.scheduler', 'page.workload'],
+    'page.scheduler', 'page.timeoff', 'page.workload'],
   cm: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.completion', 'page.walks'],
   ccr: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.walks', 'page.qamgmt', 'page.missedwalks'],
   leadership: ['suite.view', 'page.home', 'page.tracker', 'page.completion',
-    'page.walks', 'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.workload']
+    'page.walks', 'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload']
 };
 const PERMS = ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage']
   .concat(ALL_PAGES);
@@ -530,6 +534,7 @@ const PAGE_LABEL = {
   'page.qamgmt': 'QA Management',
   'page.missedwalks': 'Missed Walks',
   'page.scheduler': 'Schedule Optimizer',
+  'page.timeoff': 'Time Off',
   'page.workload': 'Workload Predictor',
   'page.admin': 'User Administration'
 };
