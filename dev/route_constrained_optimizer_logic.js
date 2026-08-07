@@ -55,19 +55,19 @@ function buildRoute(home, stops, driveFn) {
   const route = [remaining.shift()];
 
   while (remaining.length) {
-    let bestIdx = 0, bestPos = 0, bestDelta = Infinity;
+    let best_idx = 0, bestPos = 0, bestDelta = Infinity;
     for (let i = 0; i < remaining.length; i++) {
       const c = remaining[i];
       for (let pos = 0; pos <= route.length; pos++) {
         const prev = pos === 0 ? home : route[pos - 1];
         const next = pos === route.length ? home : route[pos];
         const delta = cost(prev, c) + cost(c, next) - cost(prev, next);
-        if (delta < bestDelta || (delta === bestDelta && c < remaining[bestIdx])) {
-          bestDelta = delta; bestIdx = i; bestPos = pos;
+        if (delta < bestDelta || (delta === bestDelta && c < remaining[best_idx])) {
+          bestDelta = delta; best_idx = i; bestPos = pos;
         }
       }
     }
-    route.splice(bestPos, 0, remaining.splice(bestIdx, 1)[0]);
+    route.splice(bestPos, 0, remaining.splice(best_idx, 1)[0]);
   }
   return route;
 }
@@ -237,31 +237,31 @@ function rankCandidates(candidates, community, dayStopsByMgr, homeOf, costFn, lo
  * 8/14 reviews iterated by hand. */
 function rebalanceWorkload(qamNames, loadByMgr, stopsByMgr, homeOf, driveFn, dailyCap, hoursByCode) {
   const committed = [];
-  const flaggedByMgr = {}; // one slot per overloaded manager; later, closer-to-threshold candidates overwrite earlier ones
+  const flagged_by_mgr = {}; // one slot per overloaded manager; later, closer-to-threshold candidates overwrite earlier ones
 
   const avg = qamNames.reduce((s, n) => s + (loadByMgr[n] || 0), 0) / (qamNames.length || 1);
   const heavy = qamNames.filter(n => (loadByMgr[n] || 0) > avg + 1)
     .sort((a, b) => (loadByMgr[b] || 0) - (loadByMgr[a] || 0));
 
   for (const giver of heavy) {
-    const giverStops = stopsByMgr[giver] || [];
-    if (!giverStops.length) continue;
+    const giver_stops = stopsByMgr[giver] || [];
+    if (!giver_stops.length) continue;
 
-    let bestMove = null; // { stop, receiver, receiverWorst }
+    let best_move = null; // { stop, receiver, receiverWorst }
 
-    for (const stop of giverStops) {
+    for (const stop of giver_stops) {
       for (const receiver of qamNames) {
         if (receiver === giver) continue;
         const hrs = hoursByCode[stop.code] || 0;
         if ((loadByMgr[receiver] || 0) + hrs > dailyCap) continue;
 
         // Receiving side: would this leave the receiver's day feasible?
-        const receiverHome = homeOf(receiver);
-        if (!receiverHome) continue;
-        const receiverCheck = worstLeg(receiverHome, (stopsByMgr[receiver] || []).concat([stop]), driveFn);
+        const receiver_home = homeOf(receiver);
+        if (!receiver_home) continue;
+        const receiver_check = worstLeg(receiver_home, (stopsByMgr[receiver] || []).concat([stop]), driveFn);
         // Fail-closed: an unverifiable leg is not a candidate, full stop --
         // this mirrors the giving-side check below exactly, on purpose.
-        if (receiverCheck.worst === null || receiverCheck.worst > WORKLOAD_MAX_LEG_MINUTES) continue;
+        if (receiver_check.worst === null || receiver_check.worst > WORKLOAD_MAX_LEG_MINUTES) continue;
 
         // Giving side: after removing this stop, is the giver's remaining
         // day still feasible? Removing a stop can only reduce a route's
@@ -270,53 +270,53 @@ function rebalanceWorkload(qamNames, loadByMgr, stopsByMgr, homeOf, driveFn, dai
         // a real check, not an assumption. Same fail-closed contract as
         // the receiving side: null or over-threshold means "can't confirm
         // this is safe," which blocks the move rather than allowing it.
-        const remaining = giverStops.filter(s => s !== stop);
-        const giverCheck = remaining.length
+        const remaining = giver_stops.filter(s => s !== stop);
+        const giver_check = remaining.length
           ? worstLeg(homeOf(giver), remaining, driveFn)
           : { worst: 0 };
-        if (giverCheck.worst === null || giverCheck.worst > WORKLOAD_MAX_LEG_MINUTES) continue;
+        if (giver_check.worst === null || giver_check.worst > WORKLOAD_MAX_LEG_MINUTES) continue;
 
-        if (!bestMove || receiverCheck.worst < bestMove.receiverWorst) {
-          bestMove = { stop, receiver, receiverWorst: receiverCheck.worst };
+        if (!best_move || receiver_check.worst < best_move.receiverWorst) {
+          best_move = { stop, receiver, receiverWorst: receiver_check.worst };
         }
       }
     }
 
-    if (bestMove && bestMove.receiverWorst <= MAX_LEG_MINUTES) {
+    if (best_move && best_move.receiverWorst <= MAX_LEG_MINUTES) {
       // Tier 1: clean, commit immediately.
-      applyMove(giver, bestMove.receiver, bestMove.stop, loadByMgr, stopsByMgr, hoursByCode);
-      committed.push({ from: giver, to: bestMove.receiver, stop: bestMove.stop, worstLeg: bestMove.receiverWorst, tier: 1 });
-      delete flaggedByMgr[giver]; // a successful commit supersedes any earlier flagged attempt for this manager
-    } else if (bestMove) {
+      applyMove(giver, best_move.receiver, best_move.stop, loadByMgr, stopsByMgr, hoursByCode);
+      committed.push({ from: giver, to: best_move.receiver, stop: best_move.stop, worstLeg: best_move.receiverWorst, tier: 1 });
+      delete flagged_by_mgr[giver]; // a successful commit supersedes any earlier flagged attempt for this manager
+    } else if (best_move) {
       // Tier 2: over 45 but within the 60 rebalancing ceiling -- still commits, but only here.
-      applyMove(giver, bestMove.receiver, bestMove.stop, loadByMgr, stopsByMgr, hoursByCode);
-      committed.push({ from: giver, to: bestMove.receiver, stop: bestMove.stop, worstLeg: bestMove.receiverWorst, tier: 2 });
-      delete flaggedByMgr[giver];
+      applyMove(giver, best_move.receiver, best_move.stop, loadByMgr, stopsByMgr, hoursByCode);
+      committed.push({ from: giver, to: best_move.receiver, stop: best_move.stop, worstLeg: best_move.receiverWorst, tier: 2 });
+      delete flagged_by_mgr[giver];
     } else {
       // Tier 3: nothing within WORKLOAD_MAX_LEG_MINUTES -- look for the
       // closest-to-threshold option among moves that exceed it, so a
       // person has exactly one concrete thing to review, not a wall of
       // near-duplicate options.
       let closest = null;
-      for (const stop of giverStops) {
+      for (const stop of giver_stops) {
         for (const receiver of qamNames) {
           if (receiver === giver) continue;
           const hrs = hoursByCode[stop.code] || 0;
           if ((loadByMgr[receiver] || 0) + hrs > dailyCap) continue;
-          const receiverHome = homeOf(receiver);
-          if (!receiverHome) continue;
-          const check = worstLeg(receiverHome, (stopsByMgr[receiver] || []).concat([stop]), driveFn);
+          const receiver_home = homeOf(receiver);
+          if (!receiver_home) continue;
+          const check = worstLeg(receiver_home, (stopsByMgr[receiver] || []).concat([stop]), driveFn);
           if (check.worst === null) continue; // unverifiable is not a candidate to show either
           if (!closest || check.worst < closest.worst) closest = { stop, receiver, worst: check.worst };
         }
       }
       if (closest) {
-        flaggedByMgr[giver] = { from: giver, to: closest.receiver, stop: closest.stop, worstLeg: closest.worst, tier: 3 };
+        flagged_by_mgr[giver] = { from: giver, to: closest.receiver, stop: closest.stop, worstLeg: closest.worst, tier: 3 };
       }
     }
   }
 
-  return { committed, flagged: Object.values(flaggedByMgr) };
+  return { committed, flagged: Object.values(flagged_by_mgr) };
 }
 
 function applyMove(giver, receiver, stop, loadByMgr, stopsByMgr, hoursByCode) {
@@ -350,18 +350,18 @@ function findSingleCommunityConsolidations(qamNames, stopsByMgr, loadByMgr, home
 
     for (const visitor of visitors) {
       if (visitor === target) continue;
-      const visitorStops = (stopsByMgr[visitor] || []).filter(s => s.community === community);
+      const visitor_stops = (stopsByMgr[visitor] || []).filter(s => s.community === community);
       // Only a LONE visit to this community counts -- if the visitor has
       // other reasons to already be in the area that day, moving this one
       // stop doesn't simplify anything and may not even be worth the churn.
-      if ((stopsByMgr[visitor] || []).length !== visitorStops.length) continue;
+      if ((stopsByMgr[visitor] || []).length !== visitor_stops.length) continue;
 
-      for (const stop of visitorStops) {
+      for (const stop of visitor_stops) {
         const hrs = hoursByCode[stop.code] || 0;
         if ((loadByMgr[target] || 0) + hrs > dailyCap) continue;
-        const targetHome = homeOf(target);
-        if (!targetHome) continue;
-        const check = worstLeg(targetHome, (stopsByMgr[target] || []).concat([stop]), driveFn);
+        const target_home = homeOf(target);
+        if (!target_home) continue;
+        const check = worstLeg(target_home, (stopsByMgr[target] || []).concat([stop]), driveFn);
         if (check.worst === null || check.worst > MAX_LEG_MINUTES) continue;
         if (!betweenOk(check.legs)) continue;
 

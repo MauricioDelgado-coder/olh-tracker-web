@@ -84,6 +84,14 @@ const kb = (n) => (n / 1024).toFixed(0) + ' KB';
 const LOADER = fs.readFileSync(path.join(__dirname, 'live-loader.js'), 'utf8');
 if (!/\/walk-config/.test(LOADER)) die('live-loader.js does not reference /walk-config');
 
+/* Route-constrained optimizer, generated from route_constrained_optimizer_logic.js
+ * by dev/build-route-optimizer-client.js -- see that script before hand-editing
+ * this output. Injected the same way and for the same reason as LOADER above:
+ * pages needing window.OLHRouteOptimizer (workload.html, walk-calendar.html) via
+ * the `optimizer:true` PAGES[] flag. */
+const OPTIMIZER = fs.readFileSync(path.join(__dirname, 'route-optimizer-client.js'), 'utf8');
+if (!/OLHRouteOptimizer/.test(OPTIMIZER)) die('route-optimizer-client.js does not define window.OLHRouteOptimizer');
+
 /* completion-loader.js is GONE (08/01). The Completion Report used to read a
    COMPLETION_DATA global in a flat per-homesite shape and needed its own loader
    to build it; the export now reads window.OLH_DATA.jobs like every other page,
@@ -1195,7 +1203,7 @@ const PAGES = {
    * walks stuck unassigned despite full drive-time coverage. CEL/ACC carry
    * real scheduled times and keep the exact check; only QAI/QAA are loosened. */
   'workload.html': {
-    data: true, inject: true, walkRef: true, caches: ['_walks', '_byLen', '_unattributed'],
+    data: true, inject: true, walkRef: true, optimizer: true, caches: ['_walks', '_byLen', '_unattributed'],
     patches: [
       ['loosen the QAI/QAA slot-conflict check (real times still enforced for CEL/ACC)',
        'const free = (n, r) => !(times[n + "|" + r.sortTime] || []).length;',
@@ -1214,7 +1222,7 @@ const PAGES = {
   // the caches mechanism cannot clear it because that patches "const tick = …"
   // and this page's handler is "this._h = …", hence the explicit patch.
   'walk-calendar.html': {
-    data: true, inject: true, walkRef: true, caches: [],
+    data: true, inject: true, walkRef: true, optimizer: true, caches: [],
     patches: [
       ['invalidate the community index when reference data arrives',
        'this._h = () => this.setState({ ready: true });',
@@ -2067,7 +2075,7 @@ function build(name, spec) {
   //    own async work starts. Splicing shifts every later line, so iManifest
   //    and iTemplate (both used by emit() below) move with it.
   if (spec.inject) {
-    const outerBlock = [
+    const blocks = [
       '<script>',
       'window.__OLH_LIVE = { walkRef: ' + (spec.walkRef ? 'true' : 'false') + ' };',
       '/* live data loader — injected by dev/build-live-pages.js, OUTSIDE the',
@@ -2075,7 +2083,23 @@ function build(name, spec) {
       '   starve it. See the note in dev/build-live-pages.js. */',
       LOADER,
       '</script>'
-    ].join('\n');
+    ];
+    // Same outer-injection reasoning as LOADER above, added as a second
+    // sibling script rather than folded into the same tag: OPTIMIZER has no
+    // async work of its own (pure functions, no fetch), so it has none of
+    // LOADER's stall risk, but keeping it separate means a change to one
+    // script's content never has to touch the other's.
+    if (spec.optimizer) {
+      blocks.push(
+        '<script>',
+        '/* route-constrained optimizer — injected by dev/build-live-pages.js,',
+        '   generated from dev/route_constrained_optimizer_logic.js. See',
+        '   dev/build-route-optimizer-client.js. */',
+        OPTIMIZER,
+        '</script>'
+      );
+    }
+    const outerBlock = blocks.join('\n');
     const insertAt = state.iManifest - 1;
     if (!/^\s*<script type="__bundler\/manifest">\s*$/.test(state.lines[insertAt])) {
       die(name + ': expected the __bundler/manifest opening tag immediately before its content line');
@@ -2084,7 +2108,8 @@ function build(name, spec) {
     state.lines.splice(insertAt, 0, ...added);
     state.iManifest += added.length;
     state.iTemplate += added.length;
-    console.log('  loader injected (outer)  walkRef=' + (spec.walkRef ? 'true' : 'false'));
+    console.log('  loader injected (outer)  walkRef=' + (spec.walkRef ? 'true' : 'false') +
+      (spec.optimizer ? ' optimizer=true' : ''));
   }
 
   // 6. Nothing in any plain inline script may carry a declaration the bundler
