@@ -1187,7 +1187,21 @@ const PAGES = {
   },
 
   'scheduler.html': { data: true, inject: true, walkRef: true, caches: ['_sites', '_byLen', '_unmapped'] },
-  'workload.html': { data: true, inject: true, walkRef: true, caches: ['_walks', '_byLen', '_unattributed'] },
+
+  /* QAI/QAA carry only a date, no time-of-day. _suggestForDay's slot-conflict
+   * check (free()) keyed on r.sortTime, so every same-day QAI/QAA walk parsed
+   * to an identical midnight timestamp -- the moment a QA Manager held one,
+   * they read as double-booked for every subsequent same-day QAI/QAA, leaving
+   * walks stuck unassigned despite full drive-time coverage. CEL/ACC carry
+   * real scheduled times and keep the exact check; only QAI/QAA are loosened. */
+  'workload.html': {
+    data: true, inject: true, walkRef: true, caches: ['_walks', '_byLen', '_unattributed'],
+    patches: [
+      ['loosen the QAI/QAA slot-conflict check (real times still enforced for CEL/ACC)',
+       'const free = (n, r) => !(times[n + "|" + r.sortTime] || []).length;',
+       'const free = (n, r) => (r.code === "QAI" || r.code === "QAA") ? true : !(times[n + "|" + r.sortTime] || []).length;']
+    ]
+  },
 
   // A second workload view from the same design export: same three memo caches,
   // same snapshots, same graft. Carries no loadLive() of its own.
