@@ -225,6 +225,16 @@ MANUAL_FIELDS = {
     'Key Status', 'Delivered To', 'Delivery Date', 'Notes', 'CEL Letter Sent',
 }
 
+# Exception to the manual/SF split above: Construction Risk and Land Risk stay
+# hand-editable (a leader can check or clear either at any time), but the sync
+# is allowed to check one -- never clear one -- when Salesforce says the risk
+# is real and the box is not already checked. Airtable returns an unchecked
+# checkbox as absent, the same as one that was never touched, so "blank" and
+# "a leader cleared it" are indistinguishable; that ambiguity is exactly why
+# this can only ever add a checkmark, never remove one. Sourced from
+# Homesite__c.Construction_Risk__c / Land_Risk__c via fetch_risk_flags().
+POPULATE_IF_BLANK = {'Construction Risk', 'Land Risk'}
+
 
 def assert_disjoint():
     """A field cannot be both Salesforce-owned and hand-entered."""
@@ -378,6 +388,39 @@ def supplementary(division, alias):
             continue
         out[job] = {air: (r.get(sf) or '').strip()
                     for air, (sf, _kind) in EXTRA_FIELDS.items()}
+    print('  %d rows' % len(out), flush=True)
+    return out
+
+
+def fetch_risk_flags(division, alias):
+    """Construction_Risk__c / Land_Risk__c from Homesite__c, for POPULATE_IF_BLANK.
+
+    Deliberately not folded into supplementary()/EXTRA_FIELDS: those feed SF_OWNED
+    fields that get overwritten outright, and these two must never be. Kept as a
+    separate query and a separate write path so a bug here can't silently widen
+    into "overwrite" the way a shared code path might invite.
+    """
+    q = ("SELECT Name, Construction_Risk__c, Land_Risk__c FROM Homesite__c "
+         "WHERE DivisionCode__c = '%s' AND Actual_COE_Date_New__c = NULL "
+         "AND (Homesite_Status__c != 'Available' OR Actual_Start_Date__c != NULL "
+         "OR Actual_Completion_Date__c != NULL)" % division)
+    print('Pulling risk flags from Salesforce...', flush=True)
+    p = subprocess.run(['sf', 'data', 'query', '-o', alias, '-r', 'csv', '-q', q],
+                       capture_output=True, text=True)
+    if p.returncode != 0:
+        die('sf data query (risk flags) failed:\n' + (p.stderr or '')[:600])
+    import csv
+    import io
+    rows = list(csv.DictReader(io.StringIO(p.stdout)))
+    out = {}
+    for r in rows:
+        job = (r.get('Name') or '').strip()
+        if not job:
+            continue
+        out[job] = {
+            'Construction Risk': str(r.get('Construction_Risk__c') or '').strip().lower() == 'true',
+            'Land Risk': str(r.get('Land_Risk__c') or '').strip().lower() == 'true',
+        }
     print('  %d rows' % len(out), flush=True)
     return out
 
@@ -572,6 +615,8 @@ def sync(a, div):
         if job in report:
             report[job].update(vals)
 
+    risk = fetch_risk_flags(div, a.alias)
+
     print('\nReading Airtable...', flush=True)
     current, blank, dupes = fetch_jobs()
     print('  %d rows (%d with no Job #, left alone)' % (len(current), len(blank)), flush=True)
@@ -586,17 +631,30 @@ def sync(a, div):
     now = datetime.now(timezone.utc).isoformat()
     today = datetime.now().strftime('%Y-%m-%d')
 
+    risk_populated = {}
+
     for job, desired in report.items():
         rec = current.get(job)
+        risk_flags = risk.get(job) or {}
         if rec is None:
             fields = {k: v for k, v in desired.items() if v not in ('', None)}
             fields['Job #'] = job
             fields['Record Status'] = 'Active'
             fields['Last Synced'] = now
+            for f in POPULATE_IF_BLANK:
+                if risk_flags.get(f):
+                    fields[f] = True
+                    risk_populated[f] = risk_populated.get(f, 0) + 1
             creates.append({'fields': fields})
             continue
 
         have = rec.get('fields') or {}
+
+        # Manually archived by a human -- never touch again, even if the
+        # job is still in (or comes back into) the Salesforce pull.
+        if have.get('Manual Archive - Do Not Resync'):
+            continue
+
         delta = compare(desired, have)
 
         # A homesite back in the pull is open work again.
@@ -604,6 +662,12 @@ def sync(a, div):
             delta['Record Status'] = 'Active'
             delta['Closed Date'] = None
             reactivates.append(job)
+
+        # Populate-if-blank: only ever add a checkmark, never remove one.
+        for f in POPULATE_IF_BLANK:
+            if risk_flags.get(f) and not have.get(f):
+                delta[f] = True
+                risk_populated[f] = risk_populated.get(f, 0) + 1
 
         if delta:
             delta['Last Synced'] = now
@@ -621,13 +685,18 @@ def sync(a, div):
             'Last Synced': now,
         }})
 
-    # Nothing hand-entered may appear in any payload. Checked on the real
-    # payloads, not just the map, because that is what actually gets sent.
+    # Nothing hand-entered may appear in any payload, except the two
+    # populate-if-blank risk flags, which are allowed by design (see
+    # POPULATE_IF_BLANK) and are never overwritten -- only ever set True.
     for batch in (creates, updates, archives):
         for rec in batch:
-            bad = set(rec['fields']) & MANUAL_FIELDS
+            bad = (set(rec['fields']) & MANUAL_FIELDS) - POPULATE_IF_BLANK
             if bad:
                 die('a write payload contains hand-entered field(s): %s' % ', '.join(sorted(bad)))
+            for f in POPULATE_IF_BLANK:
+                if rec['fields'].get(f) is False:
+                    die('a write payload tries to clear %s -- populate-if-blank '
+                        'may only ever set this True' % f)
 
     pad = lambda s, n: str(s).ljust(n)
     print('\n' + '=' * 62)
@@ -647,6 +716,11 @@ def sync(a, div):
                 counts[f] = counts.get(f, 0) + 1
         print('\nfields changing:')
         for f, n in sorted(counts.items(), key=lambda kv: -kv[1]):
+            print('   ' + pad(f, 42) + str(n))
+
+    if risk_populated:
+        print('\nrisk flags populated (blank -> checked; never cleared):')
+        for f, n in sorted(risk_populated.items(), key=lambda kv: -kv[1]):
             print('   ' + pad(f, 42) + str(n))
 
     if a.dry_run:
