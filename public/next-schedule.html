@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Walk Schedule</title>
+<!--
+  Intentionally NOT wired to olh-auth.js / OLHAuth / OLH_DATA. This page never
+  loads Jobs data and never carries a session token -- it only ever calls
+  /api/public-schedule, which takes no session and can only see the
+  Published Schedules table (job #, community, walk type, time, manager;
+  never a street address). That is the whole security model for this page:
+  it has nothing behind it that needs guarding.
+-->
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: #FBF6F3; color: #303030;
+    font: 400 15px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  header {
+    background: #1B2A58; color: #fff;
+    padding: 18px 24px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  }
+  header h1 {
+    margin: 0; font-family: Georgia, "Times New Roman", serif; font-weight: 400;
+    font-size: 22px; letter-spacing: -0.02em;
+  }
+  header .sub { font-size: 12.5px; color: #C7BFB2; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 20px 48px; }
+  .state { padding: 48px 20px; text-align: center; color: #6F6963; font-size: 14px; }
+  .meta {
+    font-size: 12.5px; color: #6F6963; margin-bottom: 18px; padding-bottom: 14px;
+    border-bottom: 1px solid #E4DED2;
+  }
+  .manager {
+    margin-bottom: 20px; border: 1px solid #E4DED2; border-radius: 10px;
+    background: #fff; overflow: hidden;
+  }
+  .manager h2 {
+    margin: 0; padding: 12px 16px; font-size: 15px; font-weight: 600;
+    background: #F6F2EA; border-bottom: 1px solid #E4DED2; color: #1B2A58;
+  }
+  .walk {
+    display: flex; align-items: baseline; gap: 10px; padding: 10px 16px;
+    border-bottom: 1px solid #F1EBE1; font-size: 13.5px;
+  }
+  .walk:last-child { border-bottom: none; }
+  .pill {
+    flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+    min-width: 42px; height: 19px; padding: 0 8px; border-radius: 999px;
+    color: #fff; font-size: 10px; font-weight: 700; letter-spacing: .04em;
+  }
+  .pill-QAI { background: #005DAA; }
+  .pill-QAA { background: #006368; }
+  .pill-CEL { background: #83553C; }
+  .pill-ACC { background: #0D773C; }
+  .walk .time { flex: 0 0 auto; color: #908A82; font-variant-numeric: tabular-nums; min-width: 96px; }
+  .walk .where { flex: 1 1 auto; }
+  .walk .where b { font-weight: 600; }
+  .walk .where span { color: #908A82; }
+  footer { text-align: center; padding: 20px; font-size: 11.5px; color: #908A82; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Walk Schedule</h1>
+  <span class="sub" id="headerSub">Loading&hellip;</span>
+</header>
+<main id="main">
+  <div class="state">Loading the published schedule&hellip;</div>
+</main>
+<footer>Read-only published schedule &middot; updates when the team re-publishes</footer>
+<script>
+(function () {
+  var CODE_NAME = { QAI: 'Quality Assurance Inspection', QAA: 'Quality Assurance Acceptance', CEL: 'Celebration Walk', ACC: 'Acceptance Walk' };
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+
+  function fmtDate(iso) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso))) return String(iso || '');
+    var p = iso.split('-');
+    var d = new Date(+p[0], +p[1] - 1, +p[2]);
+    return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  }
+
+  function fmtStamp(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  }
+
+  function render(data) {
+    var main = document.getElementById('main');
+    var sub = document.getElementById('headerSub');
+    var pub = data && data.published;
+
+    if (!pub) {
+      sub.textContent = '';
+      main.innerHTML = '<div class="state">No schedule has been published yet. Check back soon.</div>';
+      return;
+    }
+
+    sub.textContent = fmtDate(pub.date);
+
+    var html = '<div class="meta">' +
+      (pub.publishedAt ? 'Published ' + esc(fmtStamp(pub.publishedAt)) : 'Published schedule') +
+      '</div>';
+
+    var managers = Array.isArray(pub.managers) ? pub.managers : [];
+    if (!managers.length) {
+      html += '<div class="state">No walks are on this schedule.</div>';
+    } else {
+      managers.forEach(function (m) {
+        html += '<section class="manager"><h2>' + esc(m.manager) + '</h2>';
+        (m.walks || []).forEach(function (w) {
+          var codeClass = 'pill-' + (w.code || '').replace(/[^A-Z]/g, '');
+          html += '<div class="walk">' +
+            '<span class="pill ' + codeClass + '" title="' + esc(CODE_NAME[w.code] || w.walk || '') + '">' + esc(w.code || '') + '</span>' +
+            '<span class="time">' + esc(w.when || '') + '</span>' +
+            '<span class="where"><b>' + esc(w.community || '') + '</b> <span>&middot; Job ' + esc(w.job || '') + '</span></span>' +
+            '</div>';
+        });
+        html += '</section>';
+      });
+    }
+    main.innerHTML = html;
+  }
+
+  fetch('/api/public-schedule', { headers: { Accept: 'application/json' } })
+    .then(function (res) { return res.json().catch(function () { return null; }).then(function (data) { return { ok: res.ok, data: data }; }); })
+    .then(function (r) {
+      if (!r.ok) throw new Error((r.data && r.data.error) || 'Request failed');
+      render(r.data);
+    })
+    .catch(function (err) {
+      document.getElementById('main').innerHTML =
+        '<div class="state">Could not load the schedule right now' +
+        (err && err.message ? ' (' + esc(err.message) + ')' : '') + '. Try reloading.</div>';
+    });
+})();
+</script>
+</body>
+</html>

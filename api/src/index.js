@@ -60,11 +60,20 @@ function loader(name) {
  * what keeps this table from becoming a second, subtly different router.
  */
 const ROUTES = [
-  // ---- Data endpoints. All three require a session before any Airtable read.
+  // ---- Data endpoints. All but publicSchedule require a session before any
+  // Airtable read; see the note on that route below for why it is the
+  // exception rather than a gap.
   ['jobs', 'jobs', 'jobs'],
   ['updateJob', 'update-job', 'update-job'],
   ['walkConfig', 'walk-config', 'walk-config'],
   ['timeOff', 'time-off', 'time-off'],
+  ['publishSchedule', 'publish-schedule', 'publish-schedule'],
+  // The one route with no session check inside its handler -- see the
+  // "takes NO session" note at the top of public-schedule.js. authLevel
+  // stays 'anonymous' here exactly like every other route, because Azure
+  // never was the gate; this is simply the one function that doesn't call
+  // A.requireSession() before it reads Airtable.
+  ['publicSchedule', 'public-schedule', 'public-schedule'],
 
   // ---- Session lifecycle -> auth.js
   ['signIn', 'sign-in', 'auth'],
