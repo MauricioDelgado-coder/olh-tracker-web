@@ -31,9 +31,7 @@
 
 const A = require('../lib/olh-auth');
 
-// TODO: paste the real base id (starts with "app...") once the
-// "Published Schedules" base has been created. Must match public-schedule.js.
-const BASE_ID = 'PASTE_PUBLISHED_SCHEDULES_BASE_ID_HERE';
+const BASE_ID = 'appypFnJwp8DpNuBv';
 const TABLE = 'Published Schedules';
 const AIRTABLE_API = 'https://api.airtable.com/v0';
 
