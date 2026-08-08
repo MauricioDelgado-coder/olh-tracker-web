@@ -1,7 +1,11 @@
 /**
  * GET /api/public-schedule
  *   -> { published: null }
- *   or { published: { date, publishedAt, managers: [{ manager, walks: [...] }] } }
+ *   or { published: {
+ *          date, publishedAt,
+ *          managers: [{ manager, walks: [...] }],
+ *          communities: [{ community, walks: [...] }]
+ *        } }
  *
  * The one endpoint in this app that takes NO session. It reads ONLY the
  * Published Schedules table -- never Jobs -- and only ever returns what
@@ -13,9 +17,10 @@
  * Fetches every Locked=1 record (there are only ever a handful) and picks
  * the soonest Date that is today or later, comparing as plain YYYY-MM-DD
  * strings -- which sort chronologically without needing Airtable's Date
- * type or any formula-side date math. Returns it grouped by manager, sorted
- * by manager name then by walk time; an unassigned walk sorts last under
- * "Unassigned".
+ * type or any formula-side date math. Returns the SAME snapshot grouped two
+ * ways -- by manager and by community -- so the page can offer a sort toggle
+ * without a second round trip; an unassigned walk always sorts last within
+ * whichever grouping.
  */
 
 'use strict';
@@ -99,11 +104,21 @@ exports.handler = async (event) => {
     if (!Array.isArray(rows)) rows = [];
 
     const byManager = new Map();
+    const byCommunity = new Map();
     rows.forEach((r) => {
-      const name = (r && r.manager) || 'Unassigned';
-      if (!byManager.has(name)) byManager.set(name, []);
-      byManager.get(name).push(r);
+      const mgr = (r && r.manager) || 'Unassigned';
+      if (!byManager.has(mgr)) byManager.set(mgr, []);
+      byManager.get(mgr).push(r);
+
+      const comm = (r && r.community) || 'Unassigned';
+      if (!byCommunity.has(comm)) byCommunity.set(comm, []);
+      byCommunity.get(comm).push(r);
     });
+
+    const walkSort = (a, b) =>
+      (CODE_ORDER[a.code] || 9) - (CODE_ORDER[b.code] || 9) ||
+      String(a.when).localeCompare(String(b.when)) ||
+      String(a.community).localeCompare(String(b.community));
 
     const managers = Array.from(byManager.entries())
       .sort((a, b) => {
@@ -113,15 +128,26 @@ exports.handler = async (event) => {
       })
       .map(([manager, walks]) => ({
         manager,
+        walks: walks.slice().sort(walkSort)
+      }));
+
+    const communities = Array.from(byCommunity.entries())
+      .sort((a, b) => {
+        if (a[0] === 'Unassigned') return 1;
+        if (b[0] === 'Unassigned') return -1;
+        return a[0].localeCompare(b[0]);
+      })
+      .map(([community, walks]) => ({
+        community,
         walks: walks.slice().sort((a, b) =>
           (CODE_ORDER[a.code] || 9) - (CODE_ORDER[b.code] || 9) ||
           String(a.when).localeCompare(String(b.when)) ||
-          String(a.community).localeCompare(String(b.community))
+          String(a.manager || 'Unassigned').localeCompare(String(b.manager || 'Unassigned'))
         )
       }));
 
     return reply(200, {
-      published: { date: f.Date || '', publishedAt: f['Published At'] || '', managers }
+      published: { date: f.Date || '', publishedAt: f['Published At'] || '', managers, communities }
     });
   } catch (err) {
     const status = (err && err.statusCode) || 500;

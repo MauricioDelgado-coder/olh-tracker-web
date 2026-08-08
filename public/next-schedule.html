@@ -20,21 +20,19 @@
     font: 400 15px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
-  header {
-    background: #1B2A58; color: #fff;
-    padding: 18px 24px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
-  }
-  header h1 {
-    margin: 0; font-family: Georgia, "Times New Roman", serif; font-weight: 400;
-    font-size: 22px; letter-spacing: -0.02em;
-  }
+  header { background: #1B2A58; color: #fff; padding: 18px 24px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size: 22px; letter-spacing: -0.02em; }
   header .sub { font-size: 12.5px; color: #C7BFB2; }
   main { max-width: 760px; margin: 0 auto; padding: 24px 20px 48px; }
   .state { padding: 48px 20px; text-align: center; color: #6F6963; font-size: 14px; }
-  .meta {
-    font-size: 12.5px; color: #6F6963; margin-bottom: 18px; padding-bottom: 14px;
-    border-bottom: 1px solid #E4DED2;
+  .meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12.5px; color: #6F6963; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid #E4DED2; }
+  .sortToggle { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  .sortToggle button {
+    height: 28px; padding: 0 12px; border: 1px solid #BFB8AB; border-radius: 999px;
+    background: #fff; color: #303030; font-size: 12px; font-weight: 600; cursor: pointer;
+    font-family: inherit;
   }
+  .sortToggle button.active { background: #1B2A58; color: #fff; border-color: #1B2A58; }
   .manager {
     margin-bottom: 20px; border: 1px solid #E4DED2; border-radius: 10px;
     background: #fff; overflow: hidden;
@@ -109,23 +107,44 @@
     }
 
     sub.textContent = fmtDate(pub.date);
+    window.__pub = pub;
+    window.__sortBy = window.__sortBy || 'manager';
+    renderGroups();
+  }
+
+  function renderGroups() {
+    var pub = window.__pub;
+    var main = document.getElementById('main');
+    if (!pub) return;
+
+    var sortBy = window.__sortBy;
+    var groups = sortBy === 'community' ? (pub.communities || []) : (pub.managers || []);
+    var keyName = sortBy === 'community' ? 'community' : 'manager';
+
+    var toggleHtml = '<div class="sortToggle">' +
+      '<button type="button" class="' + (sortBy === 'manager' ? 'active' : '') + '" onclick="setSortBy(\'manager\')">By Manager</button>' +
+      '<button type="button" class="' + (sortBy === 'community' ? 'active' : '') + '" onclick="setSortBy(\'community\')">By Community</button>' +
+      '</div>';
 
     var html = '<div class="meta">' +
       (pub.publishedAt ? 'Published ' + esc(fmtStamp(pub.publishedAt)) : 'Published schedule') +
+      toggleHtml +
       '</div>';
 
-    var managers = Array.isArray(pub.managers) ? pub.managers : [];
-    if (!managers.length) {
+    if (!groups.length) {
       html += '<div class="state">No walks are on this schedule.</div>';
     } else {
-      managers.forEach(function (m) {
-        html += '<section class="manager"><h2>' + esc(m.manager) + '</h2>';
-        (m.walks || []).forEach(function (w) {
+      groups.forEach(function (g) {
+        html += '<section class="manager"><h2>' + esc(g[keyName]) + '</h2>';
+        (g.walks || []).forEach(function (w) {
           var codeClass = 'pill-' + (w.code || '').replace(/[^A-Z]/g, '');
+          var whoLine = sortBy === 'community'
+            ? '<b>' + esc(w.manager || 'Unassigned') + '</b> <span>&middot; Job ' + esc(w.job || '') + '</span>'
+            : '<b>' + esc(w.community || '') + '</b> <span>&middot; Job ' + esc(w.job || '') + '</span>';
           html += '<div class="walk">' +
             '<span class="pill ' + codeClass + '" title="' + esc(CODE_NAME[w.code] || w.walk || '') + '">' + esc(w.code || '') + '</span>' +
             '<span class="time">' + esc(w.when || '') + '</span>' +
-            '<span class="where"><b>' + esc(w.community || '') + '</b> <span>&middot; Job ' + esc(w.job || '') + '</span></span>' +
+            '<span class="where">' + whoLine + '</span>' +
             '</div>';
         });
         html += '</section>';
@@ -133,6 +152,11 @@
     }
     main.innerHTML = html;
   }
+
+  window.setSortBy = function (v) {
+    window.__sortBy = v;
+    renderGroups();
+  };
 
   fetch('/api/public-schedule', { headers: { Accept: 'application/json' } })
     .then(function (res) { return res.json().catch(function () { return null; }).then(function (data) { return { ok: res.ok, data: data }; }); })
