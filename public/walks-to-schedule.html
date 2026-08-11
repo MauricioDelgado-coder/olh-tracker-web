@@ -67,6 +67,7 @@
             <th>CEL Status</th>
             <th>CEL Date</th>
             <th>CEL Manager</th>
+            <th>Letter</th>
           </tr>
         </thead>
         <tbody id="rows"></tbody>
@@ -1030,6 +1031,47 @@
     return window.OLHAuth.authHeaders(extra);
   }
 
+  function can(p){ return !window.OLHAuth || window.OLHAuth.can(p); }
+
+  /* Marking the letter sent is a homesite-record edit (same family as Power
+     Meter / Land Risk on the Completion Report), not a walk-scheduling action,
+     so it's gated on tracker.edit rather than walk.schedule. PATCH first, then
+     drop the row from `jobs` locally and re-render -- buildRows() already
+     excludes CEL Letter Sent=true, so a successful save clears the row the
+     same way completing QAI clears a row from QA Management. */
+  async function markLetterSent(recordId, btn){
+    if(!can('tracker.edit')){
+      toast('err', 'Read-Only Access', window.OLHAuth ? window.OLHAuth.denyReason('tracker.edit') : 'You do not have access to that.');
+      return;
+    }
+    var prevText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Saving\u2026';
+    try{
+      var res = await fetch(API + '/update-job', {
+        method: 'POST', headers: authHeaders({'Content-Type':'application/json'}),
+        body: JSON.stringify({recordId: recordId, fields: {'CEL Letter Sent': true}})
+      });
+      var data = await res.json().catch(function(){ return null; });
+      if(!res.ok) throw new Error((data && data.error) || ('Save failed (' + res.status + ')'));
+      var rec = jobs.find(function(r){ return r.id === recordId; });
+      if(rec) rec.fields['CEL Letter Sent'] = true;
+      if(window.OLHAudit){
+        window.OLHAudit.record({
+          recordId: recordId, job: (rec && rec.fields['Job #']) || recordId,
+          field: 'CEL Letter Sent', label: 'CEL Letter Sent',
+          from: 'No', to: 'Yes', action: 'edit', page: 'Walks To Schedule'
+        }).catch(function(){});
+      }
+      toast('ok', 'Letter Marked Sent', (rec && rec.fields['Job #'] ? 'Job ' + rec.fields['Job #'] : 'Homesite') + ' is off this list.');
+      render();
+    }catch(err){
+      btn.disabled = false;
+      btn.textContent = prevText;
+      toast('err', 'Could Not Save', (err && err.message) || String(err));
+    }
+  }
+
   /* Every open homesite where QAI is complete but the CEL letter has not
      gone out yet. This is the working queue for "who is ready for their
      Celebration walk" -- QAI Complete is the gate (there is no point
@@ -1211,7 +1253,19 @@
           ? '<span style="color:#83553C;font-weight:600">Scheduled \u2014 letter pending</span>'
           : '<span style="color:#AA1F23;font-weight:600">Not yet scheduled</span>') + '</td>' +
         '<td>' + fmtD(row.celDate) + '</td>' +
-        '<td>' + esc(row.celMgr || '\u2014') + '</td>';
+        '<td>' + esc(row.celMgr || '\u2014') + '</td>' +
+        '<td></td>';
+      var actionCell = tr.lastElementChild;
+      var canEdit = can('tracker.edit');
+      var btn = document.createElement('button');
+      btn.textContent = 'Mark Sent';
+      btn.title = canEdit ? 'Mark the Celebration letter sent for this homesite' : (window.OLHAuth ? window.OLHAuth.denyReason('tracker.edit') : '');
+      btn.disabled = !canEdit;
+      btn.style.cssText = 'height:26px;padding:0 10px;border:1px solid ' + (canEdit ? '#005DAA' : '#D8CFBE') +
+        ';border-radius:4px;background:#fff;color:' + (canEdit ? '#005DAA' : '#908A82') +
+        ';font-size:11.5px;font-weight:600;cursor:' + (canEdit ? 'pointer' : 'not-allowed') + ';white-space:nowrap';
+      btn.addEventListener('click', function(){ markLetterSent(row.recordId, btn); });
+      actionCell.appendChild(btn);
       tbody.appendChild(tr);
     });
   }
