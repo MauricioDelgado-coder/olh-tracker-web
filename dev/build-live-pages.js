@@ -245,7 +245,20 @@ const MANGLE_SAFE_RENAMES = [
  * captured by AUTH_PATCHES below because admin.html's PAGES array already
  * differs from the other nine (it also carries page.missedwalks/page.timeoff,
  * which nobody backfilled into the other nine or into missed-walks.html's own
- * nav either -- that gap predates this fix and is unresolved). */
+ * nav either -- that gap predates this fix and is unresolved).
+ *
+ * 2026-08-11 (later same day): the frontend-only half of that hand-patch was
+ * never enough. netlify/lib/olh-auth.js's ALL_PAGES/PERMS allow-list still
+ * didn't include page.walkstoschedule, so normalizeMatrix() silently
+ * stripped the permission out of every save -- admin.html could render the
+ * checkbox and PUT it, but the backend dropped it before it ever reached
+ * Airtable, and the very next loadMatrix() re-normalized it back out. Ticking
+ * the box looked like it worked and didn't. Fixed by adding
+ * 'page.walkstoschedule' to ALL_PAGES, DEFAULT_ROLES (qam/ccr/leadership;
+ * admin already gets it via ALL_PAGES), and PAGE_LABEL in olh-auth.js. The
+ * frontend-only gaps described above (missing nav link on the other pages,
+ * missing PAGES grid entry on admin.html/missed-walks.html/time-off.html)
+ * are still open -- this fix only unblocks the save itself. */
 const AUTH_PATCHES = [
   // NOTE for anyone adding a patch here: do NOT introduce a `var`/`let`/`const`
   // whose name is lowerCamelCase. See MANGLED_DECL below -- the bundler rewrites

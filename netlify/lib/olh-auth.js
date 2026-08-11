@@ -284,7 +284,8 @@ function readSession(token) {
  */
 const ALL_PAGES = [
   'page.home', 'page.tracker', 'page.completion', 'page.walks',
-  'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload', 'page.admin'
+  'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload',
+  'page.walkstoschedule', 'page.admin'
 ];
 
 // Mirrors DEFAULT_ROLES in the frontend auth module. Used when the Roles table
@@ -300,11 +301,13 @@ const DEFAULT_ROLES = {
   admin: ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage'].concat(ALL_PAGES),
   qam: ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply',
     'page.home', 'page.tracker', 'page.completion', 'page.walks', 'page.qamgmt', 'page.missedwalks',
-    'page.scheduler', 'page.timeoff', 'page.workload'],
+    'page.scheduler', 'page.timeoff', 'page.workload', 'page.walkstoschedule'],
   cm: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.completion', 'page.walks'],
-  ccr: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.walks', 'page.qamgmt', 'page.missedwalks'],
+  ccr: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.walks', 'page.qamgmt', 'page.missedwalks',
+    'page.walkstoschedule'],
   leadership: ['suite.view', 'page.home', 'page.tracker', 'page.completion',
-    'page.walks', 'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload']
+    'page.walks', 'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload',
+    'page.walkstoschedule']
 };
 const PERMS = ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage']
   .concat(ALL_PAGES);
@@ -536,6 +539,7 @@ const PAGE_LABEL = {
   'page.scheduler': 'Schedule Optimizer',
   'page.timeoff': 'Time Off',
   'page.workload': 'Workload Predictor',
+  'page.walkstoschedule': 'Walks To Schedule',
   'page.admin': 'User Administration'
 };
 const DENY = {
