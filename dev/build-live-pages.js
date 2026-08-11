@@ -317,6 +317,49 @@ const AUTH_PATCHES = [
    '          return { entry: entry, conflict: null };\n' +
    '        });'],
 
+  /* 2026-08-11: saveMatrix applied a permissions-grid change to the local
+   * matrix and localStorage BEFORE the PUT to /api/roles, then swallowed any
+   * failure of that PUT and resolved anyway -- so a rejected save (expired
+   * session, lost network, a 403) still showed "Saved -- in effect across the
+   * suite" on admin.html, with the real Airtable Roles table left unchanged.
+   * Found via a report that Division Leadership couldn't edit the tracker
+   * despite the grid showing tracker.edit checked for that role -- Airtable's
+   * copy had never actually received it. Fixed by snapshotting the matrix
+   * before the optimistic apply and, on a rejected PUT, reverting to that
+   * snapshot and re-throwing so the caller (admin.html's onSave) can tell the
+   * admin it did not take instead of reporting success either way. */
+  ['saveMatrix: a rejected PUT must not read as a save',
+   '    saveMatrix: function (next) {\n' +
+   '      applyMatrix(next);\n' +
+   '      writeStore(ROLES_KEY, matrixOf());\n' +
+   '      emit();\n' +
+   '      if (state.demo) return Promise.resolve(matrixOf());\n' +
+   '      return api("/roles", { method: "PUT", body: { roles: matrixOf() } })\n' +
+   '        .then(function () { return matrixOf(); })\n' +
+   '        .catch(function () { return matrixOf(); });\n' +
+   '    },',
+   '    saveMatrix: function (next) {\n' +
+   '      var prev = matrixOf();\n' +
+   '      applyMatrix(next);\n' +
+   '      writeStore(ROLES_KEY, matrixOf());\n' +
+   '      emit();\n' +
+   '      if (state.demo) return Promise.resolve(matrixOf());\n' +
+   '      return api("/roles", { method: "PUT", body: { roles: matrixOf() } })\n' +
+   '        .then(function () { return matrixOf(); })\n' +
+   '        .catch(function (err) {\n' +
+   '          // A save that never reached Airtable must not read as a save.\n' +
+   '          // Revert the optimistic local apply so this browser reflects the\n' +
+   '          // same matrix everyone else is still enforcing, and re-throw so\n' +
+   '          // the caller can tell the admin it did not take -- silently\n' +
+   '          // resolving here is what let "Saved" show on screen while\n' +
+   '          // Airtable kept the old permissions.\n' +
+   '          applyMatrix(prev);\n' +
+   '          writeStore(ROLES_KEY, matrixOf());\n' +
+   '          emit();\n' +
+   '          throw err;\n' +
+   '        });\n' +
+   '    },'],
+
   /* Every data endpoint authenticates with Authorization: Bearer <token> and
      nothing else -- bearer() in netlify/lib/olh-auth.js reads that header and
      there is no cookie fallback. OLHAuth.api() sends it, which is why sign-in,
@@ -1777,7 +1820,48 @@ const PAGES = {
        'resendLabel: s.sent[u.id] ? "Invite Sent" : "Resend Invite",',
        'resendLabel: s.sent[u.id] === 2 ? "Link Copied \\u2014 Paste Into an Email"\n' +
        '            : s.sent[u.id] === 3 ? "Could Not Create Link \\u2014 Try Again"\n' +
-       '            : s.sent[u.id] ? "Invite Created" : "Resend Invite",']
+       '            : s.sent[u.id] ? "Invite Created" : "Resend Invite",'],
+
+      /* 2026-08-11: paired with the saveMatrix AUTH_PATCH above. Even once
+       * saveMatrix rejects on a failed PUT, admin.html's own onSave had no
+       * .catch -- the rejection would have surfaced as nothing more than an
+       * unhandled promise rejection in the console, with the grid left
+       * showing the unsaved draft and no explanation. This makes a failed
+       * save visible in the same note/button that already reports "Unsaved
+       * changes" and "Saved". */
+      ['track an in-flight and failed permissions save',
+       'tab: "users", draft: null, saved: false, sent: {},',
+       'tab: "users", draft: null, saved: false, saving: false, saveError: null, sent: {},'],
+
+      ['surface a failed permissions save instead of assuming success',
+       'note: dirty ? "Unsaved changes" : this.state.saved ? "Saved \\u2014 in effect across the suite" : "",\n' +
+       '      noteColor: dirty ? "#83553C" : "#0D773C",\n' +
+       '      saveLabel: dirty ? "Save Permissions" : "Saved",\n' +
+       '      saveBg: dirty ? "#005DAA" : "#F1EBE1",\n' +
+       '      saveColor: dirty ? "#fff" : "#908A82",\n' +
+       '      saveCursor: dirty ? "pointer" : "not-allowed",\n' +
+       '      footnote: "Anyone signed in picks up a change the next time their page loads. Page access hides a page and blocks it on load \\u2014 your API should still check the caller\'s role on every request.",\n' +
+       '      onSave: () => { if (!this.dirty()) return;\n' +
+       '        window.OLHAuth.saveMatrix(this.state.draft).then(() => this.setState({ draft: null, saved: true })); },\n' +
+       '      onReset: () => { window.OLHAuth.resetMatrix(); this.setState({ draft: null, saved: true }); }',
+       'note: this.state.saveError ? this.state.saveError\n' +
+       '        : this.state.saving ? "Saving\\u2026"\n' +
+       '        : dirty ? "Unsaved changes" : this.state.saved ? "Saved \\u2014 in effect across the suite" : "",\n' +
+       '      noteColor: this.state.saveError ? "#AA1F23" : dirty ? "#83553C" : "#0D773C",\n' +
+       '      saveLabel: this.state.saving ? "Saving\\u2026" : dirty ? "Save Permissions" : "Saved",\n' +
+       '      saveBg: dirty && !this.state.saving ? "#005DAA" : "#F1EBE1",\n' +
+       '      saveColor: dirty && !this.state.saving ? "#fff" : "#908A82",\n' +
+       '      saveCursor: dirty && !this.state.saving ? "pointer" : "not-allowed",\n' +
+       '      footnote: "Anyone signed in picks up a change the next time their page loads. Page access hides a page and blocks it on load \\u2014 your API should still check the caller\'s role on every request.",\n' +
+       '      onSave: () => { if (!this.dirty() || this.state.saving) return;\n' +
+       '        const draft = this.state.draft;\n' +
+       '        this.setState({ saving: true, saveError: null });\n' +
+       '        window.OLHAuth.saveMatrix(draft)\n' +
+       '          .then(() => this.setState({ draft: null, saved: true, saving: false }))\n' +
+       '          .catch((err) => this.setState({ saving: false,\n' +
+       '            saveError: "Not saved \\u2014 " + ((err && err.message) || "the server rejected the change") +\n' +
+       '              ". Your edits are still shown below; try Save again." })); },\n' +
+       '      onReset: () => { window.OLHAuth.resetMatrix(); this.setState({ draft: null, saved: true, saveError: null }); }']
     ]
   }
 };

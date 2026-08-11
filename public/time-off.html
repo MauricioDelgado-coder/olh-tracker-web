@@ -460,13 +460,23 @@
     },
 
     saveMatrix: function (next) {
+      var prev = matrixOf();
       applyMatrix(next);
       writeStore(ROLES_KEY, matrixOf());
       emit();
       if (state.demo) return Promise.resolve(matrixOf());
       return api("/roles", { method: "PUT", body: { roles: matrixOf() } })
         .then(function () { return matrixOf(); })
-        .catch(function () { return matrixOf(); });
+        .catch(function (err) {
+          // A save that never reached Airtable must not read as a save. Revert
+          // the optimistic local apply and let the caller's own .catch decide
+          // how to tell the admin, instead of quietly keeping a change here
+          // that every other signed-in person's session never received.
+          applyMatrix(prev);
+          writeStore(ROLES_KEY, matrixOf());
+          emit();
+          throw err;
+        });
     },
 
     resetMatrix: function () {
