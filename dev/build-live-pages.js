@@ -1220,7 +1220,29 @@ const PAGES = {
        '      this._vpSeed();\n' +
        '      this._mgr = null;\n' +
        '      this.setState(s => ({tick: s.tick + 1}));\n' +
-       '    };']
+       '    };'],
+
+      /* CEL Letter Sent (see the matching tracker.html patch for the field's
+       * full background) had no page anywhere in the suite that let anyone
+       * check it. Added as an ordinary checkRow() entry in the readiness
+       * section (Meters, NOC & Keys), right after Water Meter -- it is the
+       * same toggle/commit/audit-log path Power Meter and Water Meter already
+       * use, so this is data only, no new logic. LABEL gets an entry too, so
+       * the change-history panel prints "CEL Letter Sent" instead of falling
+       * back to the raw field name. */
+      ['add CEL Letter Sent to the change-log label map',
+       "'QA Ready':'QA Ready', 'Power Meter':'Power', 'Water Meter':'Water',\n" +
+       "  'NOC Lock Date':'NOC Lock',",
+       "'QA Ready':'QA Ready', 'Power Meter':'Power', 'Water Meter':'Water',\n" +
+       "  'CEL Letter Sent':'CEL Letter Sent',\n" +
+       "  'NOC Lock Date':'NOC Lock',"],
+
+      ['add a CEL Letter Sent checkRow to the readiness section',
+       "checkRow('Water Meter Set', 'Water Meter'),\n" +
+       "        dateRow('NOC Lock Date', 'NOC Lock Date'),",
+       "checkRow('Water Meter Set', 'Water Meter'),\n" +
+       "        checkRow('CEL Letter Sent', 'CEL Letter Sent'),\n" +
+       "        dateRow('NOC Lock Date', 'NOC Lock Date'),"]
     ]
   },
 
@@ -1237,7 +1259,28 @@ const PAGES = {
     patches: [
       ['loosen the QAI/QAA slot-conflict check (real times still enforced for CEL/ACC)',
        'const free = (n, r) => !(times[n + "|" + r.sortTime] || []).length;',
-       'const free = (n, r) => (r.code === "QAI" || r.code === "QAA") ? true : !(times[n + "|" + r.sortTime] || []).length;']
+       'const free = (n, r) => (r.code === "QAI" || r.code === "QAA") ? true : !(times[n + "|" + r.sortTime] || []).length;'],
+
+      /* This page already gates CEL/ACC walks entirely behind CEL Letter Sent
+       * (optimizableWalks()'s `gated` flag) -- a CEL/ACC row can only appear
+       * here once the letter is checked, so there is nothing to mark. What
+       * was missing was any indication of WHY a CEL/ACC pill is schedulable
+       * at all. Adds a title attribute to both pill spans (Walk Detail's wide
+       * table and its narrow-card fallback) and a pillTitle field that reads
+       * "<code> — Celebration letter sent" for CEL/ACC and just the plain
+       * code for QAI/QAA, so hovering the pill explains the gating instead of
+       * showing nothing. */
+      ['add a title attribute to the Walk Detail wide-table pill',
+       '<span style="display:inline-flex;align-items:center;justify-content:center;min-width:46px;height:20px;padding:0 9px;border-radius:999px;background:{{ r.pillBg }};color:{{ r.pillColor }};font-size:10px;font-weight:700;letter-spacing:.06em">{{ r.code }}</span>\n                </sc-raw-td>',
+       '<span title="{{ r.pillTitle }}" style="display:inline-flex;align-items:center;justify-content:center;min-width:46px;height:20px;padding:0 9px;border-radius:999px;background:{{ r.pillBg }};color:{{ r.pillColor }};font-size:10px;font-weight:700;letter-spacing:.06em">{{ r.code }}</span>\n                </sc-raw-td>'],
+
+      ['add a title attribute to the Walk Detail narrow-card pill',
+       '<span style="display:inline-flex;align-items:center;justify-content:center;min-width:46px;height:20px;padding:0 9px;border-radius:999px;background:{{ r.pillBg }};color:{{ r.pillColor }};font-size:10px;font-weight:700;letter-spacing:.06em;flex:0 0 auto">{{ r.code }}</span>',
+       '<span title="{{ r.pillTitle }}" style="display:inline-flex;align-items:center;justify-content:center;min-width:46px;height:20px;padding:0 9px;border-radius:999px;background:{{ r.pillBg }};color:{{ r.pillColor }};font-size:10px;font-weight:700;letter-spacing:.06em;flex:0 0 auto">{{ r.code }}</span>'],
+
+      ['compute pillTitle for the Walk Detail rows',
+       'code: w.code, pillBg: COLOR[w.code], pillColor: "#fff",',
+       'code: w.code, pillBg: COLOR[w.code], pillColor: "#fff",\n            pillTitle: (w.code === "CEL" || w.code === "ACC") ? w.code + " \\u2014 Celebration letter sent (that gates this walk)" : w.code,']
     ]
   },
 
@@ -1256,7 +1299,17 @@ const PAGES = {
     patches: [
       ['invalidate the community index when reference data arrives',
        'this._h = () => this.setState({ ready: true });',
-       'this._h = () => { this._byLen = null; this.setState({ ready: true }); };']
+       'this._h = () => { this._byLen = null; this.setState({ ready: true }); };'],
+
+      /* This page already gates CEL/ACC walks entirely behind CEL Letter Sent
+       * (build()'s `gated` flag on the WALKS array) -- a CEL/ACC row can only
+       * appear here once the letter is checked, so there is nothing to mark.
+       * Appends a note to the existing pillTitle field explaining why, so
+       * hovering a CEL/ACC pill says so instead of just repeating the walk
+       * name. Mirrors the matching workload.html patch. */
+      ['note the letter-sent gating in the CEL/ACC pill tooltip',
+       'pillBg: r.accent, pillColor: "#fff", pillBorder: r.accent, pillTitle: r.walk,',
+       'pillBg: r.accent, pillColor: "#fff", pillBorder: r.accent, pillTitle: r.walk + (r.code === "CEL" || r.code === "ACC" ? " \\u2014 Celebration letter sent (this is why it can be scheduled)" : ""),']
     ]
   },
 
@@ -1647,6 +1700,33 @@ const PAGES = {
 
       ['bump the column-count loading hint for the new column',
        'hint-placeholder-count="39"', 'hint-placeholder-count="40"'],
+
+      /* CEL Letter Sent is a manual checkbox field (see MANUAL_FIELDS in
+       * dev/sync_coe_to_airtable.py -- Salesforce never touches it) that gates
+       * whether a homesite's Celebration/Acceptance walks are even schedulable
+       * on walk-calendar.html and workload.html. There was previously no page
+       * anywhere in the suite that let anyone check the box, other than
+       * editing Airtable directly. Added as an ordinary editable checkbox
+       * column between CEL Manager and CEL Completed, in the existing 'cel'
+       * family, so it inherits the same click-to-toggle/commit/audit-log path
+       * every other 'cb' column already has -- no new code, just a new COLS
+       * entry. Widens the CEL header band (388->470px) and the outer grid
+       * scroll container (4250->4332px, stacking on top of the 4158->4250
+       * widening two patches up) to match, and bumps the column-count loading
+       * hint again (40->41). */
+      ['add a CEL Letter Sent column between CEL Manager and CEL Completed',
+       "{k:'CEL Manager',h:'CEL Mgr',t:'link',g:'cel',w:118},\n  {k:'CEL Completed'",
+       "{k:'CEL Manager',h:'CEL Mgr',t:'link',g:'cel',w:118},\n  {k:'CEL Letter Sent',h:'CEL Letter',t:'cb',g:'cel',ctr:1,good:1,w:82},\n  {k:'CEL Completed'"],
+
+      ['widen the CEL header band for the new column',
+       'flex:0 0 388px;box-sizing:border-box;display:flex;align-items:center;padding:0 8px;background:#EAF1F9;color:#203F7C;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;border-bottom:1px solid #D8CFBE;border-left:1px solid #CFDDEB;white-space:nowrap">CEL',
+       'flex:0 0 470px;box-sizing:border-box;display:flex;align-items:center;padding:0 8px;background:#EAF1F9;color:#203F7C;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;border-bottom:1px solid #D8CFBE;border-left:1px solid #CFDDEB;white-space:nowrap">CEL'],
+
+      ['widen the outer grid scroll container for the CEL Letter Sent column',
+       'width:4250px', 'width:4332px'],
+
+      ['bump the column-count loading hint for the CEL Letter Sent column',
+       'hint-placeholder-count="40"', 'hint-placeholder-count="41"'],
     ]
   },
 
