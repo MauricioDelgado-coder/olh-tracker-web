@@ -145,6 +145,7 @@
     { key: "page.completion", label: "Completion Report", href: "completion.html", note: "Homesites under construction with their projected completion and closing dates." },
     { key: "page.walks", label: "Walk Schedule", href: "walk-calendar.html", note: "The published walk calendar and its export." },
     { key: "page.qamgmt", label: "QA Management", href: "qa-management.html", note: "Today's walks by community \u2014 mark each one completed or missed." },
+    { key: "page.walkstoschedule", label: "Walks To Schedule", href: "walks-to-schedule.html", note: "Homesites where QAI is complete but the CEL letter has not been sent yet." },
     { key: "page.scheduler", label: "Schedule Optimizer", href: "scheduler.html", note: "Proposed walk moves and the workload balance behind them." },
     { key: "page.workload", label: "Workload Predictor", href: "workload.html", note: "Forecast walk volume per QA Manager." },
     { key: "page.admin", label: "User Administration", href: "admin.html", note: "This console \u2014 the roster and this grid." }
@@ -164,10 +165,10 @@
   // console reachable no matter what the grid is set to.
   var DEFAULT_ROLES = {
     admin: { label: "Admin", can: ["suite.view", "tracker.edit", "walk.schedule", "optimizer.apply", "roster.manage"].concat(ALL_PAGES) },
-    qam: { label: "QA Manager", can: ["suite.view", "tracker.edit", "walk.schedule", "optimizer.apply", "page.home", "page.tracker", "page.completion", "page.walks", "page.qamgmt", "page.scheduler", "page.workload"] },
+    qam: { label: "QA Manager", can: ["suite.view", "tracker.edit", "walk.schedule", "optimizer.apply", "page.home", "page.tracker", "page.completion", "page.walks", "page.qamgmt", "page.walkstoschedule", "page.scheduler", "page.workload"] },
     cm: { label: "Construction Manager", can: ["suite.view", "tracker.edit", "page.home", "page.tracker", "page.completion", "page.walks"] },
-    ccr: { label: "Customer Care", can: ["suite.view", "tracker.edit", "page.home", "page.tracker", "page.walks", "page.qamgmt"] },
-    leadership: { label: "Division Leadership", can: ["suite.view", "page.home", "page.tracker", "page.completion", "page.walks", "page.qamgmt", "page.scheduler", "page.workload"] }
+    ccr: { label: "Customer Care", can: ["suite.view", "tracker.edit", "page.home", "page.tracker", "page.walks", "page.qamgmt", "page.walkstoschedule"] },
+    leadership: { label: "Division Leadership", can: ["suite.view", "page.home", "page.tracker", "page.completion", "page.walks", "page.qamgmt", "page.walkstoschedule", "page.scheduler", "page.workload"] }
   };
   var ROLE_LOCKS = { admin: ["suite.view", "roster.manage", "page.admin"] };
   /* Only admins run the console, so page.admin is never handed to anyone else. */

@@ -229,6 +229,23 @@ const MANGLE_SAFE_RENAMES = [
  * including a refusal -- is authoritative. Demo mode is reserved for a genuine
  * network failure or the 3.5s timeout.
  */
+/* 2026-08-11: page.walkstoschedule was added to walks-to-schedule.html's own
+ * (standalone) copy of this module, but never to the shared copy these nine
+ * pages carry, nor to admin.html's copy, nor to missed-walks.html/time-off.html's
+ * copies. Result: no nav link to Walks To Schedule anywhere else in the suite,
+ * and -- because admin.html's Roles & Permissions grid renders from its own
+ * PAGES array -- no way to grant or revoke the permission there either. The
+ * live public/*.html files were hand-patched to add a
+ * { key: "page.walkstoschedule", ... } PAGES entry (right after page.qamgmt)
+ * and a matching "page.walkstoschedule" addition to DEFAULT_ROLES for
+ * qam/ccr/leadership (admin gets it for free via ALL_PAGES), plus the Airtable
+ * Roles table was updated to actually grant it. If the next export overwrites
+ * these nine pages and admin.html from a fresh design-tool copy, reapply the
+ * same two edits to production/*.html before running this build -- neither is
+ * captured by AUTH_PATCHES below because admin.html's PAGES array already
+ * differs from the other nine (it also carries page.missedwalks/page.timeoff,
+ * which nobody backfilled into the other nine or into missed-walks.html's own
+ * nav either -- that gap predates this fix and is unresolved). */
 const AUTH_PATCHES = [
   // NOTE for anyone adding a patch here: do NOT introduce a `var`/`let`/`const`
   // whose name is lowerCamelCase. See MANGLED_DECL below -- the bundler rewrites
