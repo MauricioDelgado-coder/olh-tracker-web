@@ -275,7 +275,25 @@ const MANGLE_SAFE_RENAMES = [
  * a fresh design-tool copy, reapply the concierge DEFAULT_ROLES entry to
  * each one before running this build -- not captured by AUTH_PATCHES below
  * for the same reason page.walkstoschedule wasn't: this is a per-page
- * DEFAULT_ROLES literal, not a shared find/replace target. */
+ * DEFAULT_ROLES literal, not a shared find/replace target.
+ *
+ * 2026-08-12 (later same day): the DEFAULT_ROLES fix above still left the
+ * Users list unable to show or set the role. admin.html's Role <select> for
+ * each user row (and the matching one in the Add User form) is a THIRD,
+ * independent copy of the role list -- hardcoded <option> tags baked into
+ * admin.html's own __bundler/template markup, not read from DEFAULT_ROLES or
+ * anything else this file touches. Its five options (admin/qam/cm/ccr/
+ * leadership) had no "concierge" entry, so a concierge user's <select>
+ * bound to a value matching no <option> and rendered wrong (as leadership --
+ * the specific mechanism wasn't tracked down further since the fix is the
+ * same regardless), and there was no way to pick "Concierge" for anyone
+ * through the UI at all. Added <option value="concierge">Concierge</option>
+ * right after the leadership option in all three occurrences of that select
+ * in admin.html's template. Editing the template requires re-escaping "</"
+ * as "<\u002F" before writing it back (see emit() below) -- plain
+ * JSON.stringify corrupts the file by letting an embedded "</script>"
+ * terminate the host tag early. If the next export overwrites admin.html,
+ * reapply this option to its Role select(s) before running this build. */
 const AUTH_PATCHES = [
   // NOTE for anyone adding a patch here: do NOT introduce a `var`/`let`/`const`
   // whose name is lowerCamelCase. See MANGLED_DECL below -- the bundler rewrites
