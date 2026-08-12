@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Runs dev/run-background-rebalance.js every 15 minutes via StartInterval.
+  The script itself gates on weekday + 7am-7pm local time (withinRunWindow in
+  run-background-rebalance.js), so this can stay a flat interval instead of a
+  calendar rule that has to be kept in sync with business hours by hand.
+
+  SETUP (mirrors the existing 6:15am COE sync job):
+    1. Edit the two REPLACE_ME paths below to match where the repo lives on
+       this Mac (same base path as dev/run-daily-sync.sh).
+    2. cp this file to ~/Library/LaunchAgents/com.olh.background-rebalance.plist
+    3. launchctl load ~/Library/LaunchAgents/com.olh.background-rebalance.plist
+    4. Watch the first few runs in the log path below before trusting it
+       unattended -- and see the runbook note in run-background-rebalance.js's
+       header about running with no flags (dry run) for at least a day first.
+
+  To stop: launchctl unload ~/Library/LaunchAgents/com.olh.background-rebalance.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.olh.background-rebalance</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/env</string>
+    <string>bash</string>
+    <string>-lc</string>
+    <!-- -lc loads the login shell profile so `security find-generic-password`
+         and any PATH additions (nvm, etc.) behave the same as an interactive
+         terminal, matching how run-daily-sync.sh retrieves the Airtable PAT. -->
+    <string>export AIRTABLE_PAT=$(security find-generic-password -s olh-tracker-airtable-pat -w); node REPLACE_ME/olh-tracker-web/dev/run-background-rebalance.js --apply</string>
+  </array>
+
+  <key>StartInterval</key>
+  <integer>900</integer>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>REPLACE_ME/olh-tracker-web/dev/logs/background-rebalance.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>REPLACE_ME/olh-tracker-web/dev/logs/background-rebalance.log</string>
+</dict>
+</plist>

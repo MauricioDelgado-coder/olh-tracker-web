@@ -250,6 +250,10 @@ function rebalanceWorkload(qamNames, loadByMgr, stopsByMgr, homeOf, driveFn, dai
     let best_move = null; // { stop, receiver, receiverWorst }
 
     for (const stop of giver_stops) {
+      // A locked stop is not a candidate to give away -- see LOCK_FIELD_BY_CODE
+      // header comment. It still occupies its slot in giver_stops for load/
+      // route-feasibility math elsewhere; it just can never be the thing moved.
+      if (isLocked(stop)) continue;
       for (const receiver of qamNames) {
         if (receiver === giver) continue;
         const hrs = hoursByCode[stop.code] || 0;
@@ -299,6 +303,9 @@ function rebalanceWorkload(qamNames, loadByMgr, stopsByMgr, homeOf, driveFn, dai
       // near-duplicate options.
       let closest = null;
       for (const stop of giver_stops) {
+        // Same lock contract as the main search above: a locked walk is
+        // invisible to this pass, including the flagged-for-review queue.
+        if (isLocked(stop)) continue;
         for (const receiver of qamNames) {
           if (receiver === giver) continue;
           const hrs = hoursByCode[stop.code] || 0;
@@ -357,6 +364,9 @@ function findSingleCommunityConsolidations(qamNames, stopsByMgr, loadByMgr, home
       if ((stopsByMgr[visitor] || []).length !== visitor_stops.length) continue;
 
       for (const stop of visitor_stops) {
+        // Same lock contract as rebalanceWorkload -- a locked stop is never a
+        // candidate to move, even for a no-tradeoff consolidation.
+        if (isLocked(stop)) continue;
         const hrs = hoursByCode[stop.code] || 0;
         if ((loadByMgr[target] || 0) + hrs > dailyCap) continue;
         const target_home = homeOf(target);
