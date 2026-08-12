@@ -41,6 +41,7 @@
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 16px;border:1px solid #E4DED2;border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(27,42,88,.05);margin-bottom:14px">
       <span id="summaryNote" style="font-size:13px;color:#6F6963">Loading…</span>
       <span style="flex:1 1 auto"></span>
+      <button id="btnClearNoDiff" style="display:none;height:36px;padding:0 14px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;color:#6F6963;font-size:12.5px;font-weight:600;cursor:pointer"></button>
       <button id="btnRefresh" style="height:36px;padding:0 12px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;color:#6F6963;font-size:12.5px;font-weight:500;cursor:pointer">Refresh</button>
     </div>
 
@@ -1030,47 +1031,93 @@
           recordId: j.id,
           job: f['Job #'] || '',
           address: [f['Street Address'], f['City']].filter(Boolean).join(', '),
-          field: m[1], kept: m[2], salesforce: m[3]
+          field: m[1], kept: m[2], salesforce: m[3],
+          // Flagged before Sync Baseline had a value for this field to compare
+          // against, not because the leader's edit and Salesforce actually
+          // disagree. Nothing to decide -- just needs the flag cleared.
+          noDiff: m[2].trim() === m[3].trim()
         });
       });
     });
-    rows.sort(function(a,b){ return String(a.job).localeCompare(String(b.job)) || a.field.localeCompare(b.field); });
+    rows.sort(function(a,b){
+      return (a.noDiff === b.noDiff ? 0 : a.noDiff ? 1 : -1) ||
+        String(a.job).localeCompare(String(b.job)) || a.field.localeCompare(b.field);
+    });
   }
 
   function render(){
     var tbody = document.getElementById('rows');
     tbody.innerHTML = '';
-    document.getElementById('summaryNote').textContent = rows.length
-      ? rows.length + ' field' + (rows.length === 1 ? '' : 's') + ' flagged across ' +
-        new Set(rows.map(function(r){ return r.recordId; })).size + ' job' + (new Set(rows.map(function(r){ return r.recordId; })).size === 1 ? '' : 's') + '.'
-      : 'Nothing flagged.';
+    var real = rows.filter(function(r){ return !r.noDiff; });
+    var noDiff = rows.filter(function(r){ return r.noDiff; });
+
+    var parts = [];
+    if(real.length) parts.push(real.length + ' actually disagree' + (real.length === 1 ? 's' : '') + ', need a decision');
+    if(noDiff.length) parts.push(noDiff.length + ' show the same value on both sides — nothing to decide, just flagged before the sync had a baseline to compare against');
+    document.getElementById('summaryNote').textContent = rows.length ? parts.join('. ') + '.' : 'Nothing flagged.';
     document.getElementById('emptyNote').style.display = rows.length ? 'none' : 'block';
     document.getElementById('emptyNote').textContent = 'No sync conflicts right now — every leader edit and Salesforce value agree.';
+
+    var clearAllBtn = document.getElementById('btnClearNoDiff');
+    if(canResolve() && noDiff.length){
+      clearAllBtn.style.display = '';
+      clearAllBtn.textContent = 'Clear ' + noDiff.length + ' with no actual difference';
+      clearAllBtn.disabled = false;
+      clearAllBtn.onclick = function(){ clearNoDiff(noDiff, clearAllBtn); };
+    } else {
+      clearAllBtn.style.display = 'none';
+    }
 
     var editable = canResolve();
     rows.forEach(function(r){
       var tr = document.createElement('tr');
+      if(r.noDiff) tr.style.opacity = '.65';
       tr.innerHTML =
         '<td style="font-weight:600">' + esc(r.job) + '</td>' +
         '<td style="color:#6F6963">' + esc(r.address || '—') + '</td>' +
         '<td>' + esc(r.field) + '</td>' +
         '<td>' + esc(r.kept) + '</td>' +
-        '<td style="color:#6F6963">' + esc(r.salesforce) + '</td>' +
+        '<td style="color:#6F6963">' + esc(r.salesforce) + (r.noDiff ? ' <span style="font-size:10px;color:#908A82">(same value)</span>' : '') + '</td>' +
         '<td></td>';
       var td = tr.lastElementChild;
       if(editable){
-        var keepBtn = document.createElement('button');
-        keepBtn.textContent = 'Keep mine';
-        keepBtn.style.cssText = 'height:26px;padding:0 10px;margin-right:6px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;color:#303030;font-size:11.5px;font-weight:600;cursor:pointer';
-        keepBtn.onclick = function(){ resolve(r, 'keep', keepBtn); };
-        var acceptBtn = document.createElement('button');
-        acceptBtn.textContent = 'Accept Salesforce';
-        acceptBtn.style.cssText = 'height:26px;padding:0 10px;border:1px solid #005DAA;border-radius:4px;background:#fff;color:#005DAA;font-size:11.5px;font-weight:600;cursor:pointer';
-        acceptBtn.onclick = function(){ resolve(r, 'accept', acceptBtn); };
-        td.appendChild(keepBtn); td.appendChild(acceptBtn);
+        if(r.noDiff){
+          var clearBtn = document.createElement('button');
+          clearBtn.textContent = 'Clear';
+          clearBtn.style.cssText = 'height:26px;padding:0 10px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;color:#6F6963;font-size:11.5px;font-weight:600;cursor:pointer';
+          clearBtn.onclick = function(){ resolve(r, 'keep', clearBtn); };
+          td.appendChild(clearBtn);
+        } else {
+          var keepBtn = document.createElement('button');
+          keepBtn.textContent = 'Keep mine';
+          keepBtn.style.cssText = 'height:26px;padding:0 10px;margin-right:6px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;color:#303030;font-size:11.5px;font-weight:600;cursor:pointer';
+          keepBtn.onclick = function(){ resolve(r, 'keep', keepBtn); };
+          var acceptBtn = document.createElement('button');
+          acceptBtn.textContent = 'Accept Salesforce';
+          acceptBtn.style.cssText = 'height:26px;padding:0 10px;border:1px solid #005DAA;border-radius:4px;background:#fff;color:#005DAA;font-size:11.5px;font-weight:600;cursor:pointer';
+          acceptBtn.onclick = function(){ resolve(r, 'accept', acceptBtn); };
+          td.appendChild(keepBtn); td.appendChild(acceptBtn);
+        }
       }
       tbody.appendChild(tr);
     });
+  }
+
+  async function clearNoDiff(list, btn){
+    btn.disabled = true;
+    var done = 0, failed = 0;
+    for(var i = 0; i < list.length; i++){
+      btn.textContent = 'Clearing… (' + (i + 1) + '/' + list.length + ')';
+      try{
+        var res = await fetch(API + '/resolve-conflict', {
+          method: 'POST', headers: authHeaders({'Content-Type':'application/json'}),
+          body: JSON.stringify({recordId: list[i].recordId, field: list[i].field, action: 'keep'})
+        });
+        if(res.ok) done++; else failed++;
+      }catch(e){ failed++; }
+    }
+    toast(failed ? 'err' : 'ok', 'Cleared ' + done + ' of ' + list.length, failed ? failed + ' could not be cleared — reload and retry those.' : 'No real disagreement on any of them.');
+    await loadLive();
   }
 
   async function loadLive(){
