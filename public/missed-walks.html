@@ -1107,6 +1107,14 @@
           page: 'Missed Walks'
         }).catch(function(){});
       }
+      // Best-effort: keeps the Walk Miss Log entry in sync with the Jobs-level
+      // checkbox this page has always driven. If this call fails the queue
+      // entry above (the fields that actually gate it) is already saved, so
+      // nothing here is retried or surfaced as an error.
+      fetch(API + '/walk-miss-log', {
+        method: 'PATCH', headers: authHeaders({'Content-Type':'application/json'}),
+        body: JSON.stringify({recordId: row.recordId, walkType: row.w.code})
+      }).catch(function(){});
       row.reconciled = true;
       toast('ok', 'Reconciled', row.job + ' \u00b7 ' + row.w.code + ' cleared from the queue.');
       render();

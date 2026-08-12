@@ -99,7 +99,10 @@ const ROUTES = [
   ['roles', 'roles', 'roles'],
 
   // ---- Append-only change log -> audit.js
-  ['audit', 'audit', 'audit']
+  ['audit', 'audit', 'audit'],
+
+  // ---- Append-only walk miss history -> walk-miss-log.js
+  ['walkMissLog', 'walk-miss-log', 'walk-miss-log']
 ];
 
 for (const [name, route, netlifyFunction] of ROUTES) {

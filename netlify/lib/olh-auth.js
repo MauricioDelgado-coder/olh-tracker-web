@@ -27,7 +27,8 @@ const TABLES = {
   walkProduct: 'tblvkWF5QULxhqFiX',
   users: 'tblTesJj3P7BSiErH',
   audit: 'tblgiEqKXRbBHLg1i',
-  roles: 'tblIhpTZyCupEaASH'
+  roles: 'tblIhpTZyCupEaASH',
+  walkMissLog: 'tblLA3n0SRgUA9A0z'
 };
 
 /* ---- HTTP plumbing (shape matches the existing jobs.js) ------------------- */

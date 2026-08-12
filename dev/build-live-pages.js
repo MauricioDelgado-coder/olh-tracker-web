@@ -1411,6 +1411,21 @@ const PAGES = {
        "          to:'Yes \\u2014 ' + reason + (note ? ' \\u00b7 ' + note : ''), action:'edit',\n" +
        "          patch:miss});"],
 
+      /* Walk Miss Log (tblLA3n0SRgUA9A0z, added 2026-08-12) is the append-only
+       * history the Jobs-level Missed/Miss Reason/Miss Note fields never were --
+       * those three get overwritten by the next miss on the same walk type, so a
+       * home missed twice in a row shows only the second one. missLog rides on
+       * the same writes.push() this constructs, carried as a sibling of `patch`
+       * rather than folded into it, because it targets a different table
+       * (/api/walk-miss-log, not /api/update-job) and _commit has to know which
+       * calls go where. w.raw is the walk's own scheduled date/time, captured
+       * before this miss (unlike a reschedule) ever changes it -- see the
+       * `from:fmtD(w.raw)` a few lines up, same value, same reason. */
+      ['carry the Walk Miss Log payload beside the same write',
+       "          patch:miss});",
+       "          patch:miss,\n" +
+       "          missLog:{walkType:w.spec.code, missedDate:w.raw || null, reason:reason, note:note || ''}});"],
+
       /* The rescheduled value has to be captured before it is formatted: the
        * audit entry carries fmtD(d.resched) for a human, and Airtable needs the
        * ISO value with the original time component preserved. */
@@ -1495,6 +1510,20 @@ const PAGES = {
        "          const entry = Object.assign({page:'QA Management'}, x);\n" +
        "          delete entry.patch;\n" +
        "          await window.OLHAudit.record(entry).catch(() => {});\n" +
+       "        }\n" +
+       "        if(x.missLog){\n" +
+       "          /* Best-effort and after the Jobs write, not before: the Jobs\n" +
+       "             fields are the record of truth for today's queues (Missed\n" +
+       "             Walks, workload) and must land even if this history table is\n" +
+       "             unreachable. A failed log call is swallowed rather than added\n" +
+       "             to `failed`, so it never turns a saved miss into a reported\n" +
+       "             failure the QA Manager would otherwise have to re-save. */\n" +
+       "          try{\n" +
+       "            await fetch('/api/walk-miss-log', {\n" +
+       "              method:'POST', headers:this._authHeaders(),\n" +
+       "              body: JSON.stringify(Object.assign({recordId:x.recordId, job:x.job, page:'QA Management'}, x.missLog))\n" +
+       "            });\n" +
+       "          }catch(_e){ /* Jobs fields already saved; nothing to roll back. */ }\n" +
        "        }\n" +
        "      }catch(err){\n" +
        "        failed.push((x.job || x.recordId) + ' \\u00b7 ' + x.label + ': ' + ((err && err.message) || err));\n" +
