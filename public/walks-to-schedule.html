@@ -63,7 +63,11 @@
             <th>Days Since QAI</th>
             <th>CEL Status</th>
             <th>CEL Date</th>
+            <th>CEL Time</th>
             <th>CEL Manager</th>
+            <th>ACC Date</th>
+            <th>ACC Time</th>
+            <th>ACC Manager</th>
             <th>Letter</th>
           </tr>
           <tr class="filterRow">
@@ -79,7 +83,11 @@
                 <option value="scheduled">Scheduled, letter pending</option>
               </select></th>
             <th><input id="fCelDate" class="colf" type="search" placeholder="Filter…" autocomplete="off"></th>
+            <th><input id="fCelTime" class="colf" type="search" placeholder="Filter…" autocomplete="off"></th>
             <th><input id="fCelMgr" class="colf" type="search" placeholder="Filter…" autocomplete="off"></th>
+            <th><input id="fAccDate" class="colf" type="search" placeholder="Filter…" autocomplete="off"></th>
+            <th><input id="fAccTime" class="colf" type="search" placeholder="Filter…" autocomplete="off"></th>
+            <th><input id="fAccMgr" class="colf" type="search" placeholder="Filter…" autocomplete="off"></th>
             <th></th>
           </tr>
         </thead>
@@ -1023,6 +1031,14 @@
     return isNaN(d.getTime()) ? null : d; }
   function fmtD(v){ var d = pd(v); if(!d) return '\u2014';
     return (d.getMonth()+1)+'/'+d.getDate()+'/'+String(d.getFullYear()).slice(2); }
+  /* CEL and ACC dates are stored as a fixed 9am/12pm/3pm ET slot on the same
+     field as the date itself (a full timestamp, not a separate Time field) --
+     same convention QA Management's clockOf() reads. A date-only value (no
+     "T" time component) means no slot has been booked yet. */
+  function clockOf(v){ if(!v || !/T\d/.test(String(v))) return '\u2014';
+    var d = pd(v); if(!d) return '\u2014';
+    var h = d.getHours(), m = d.getMinutes(), ap = h >= 12 ? 'pm' : 'am'; h = h % 12 || 12;
+    return h + (m ? ':' + String(m).padStart(2,'0') : '') + ' ' + ap; }
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
   function mgrNames(ids){
@@ -1111,6 +1127,7 @@
       if(!f['QAI Complete']) return;
       if(f['CEL Letter Sent']) return;
       var celDate = f['CEL Date'] || null;
+      var accDate = f['ACC Date'] || null;
       out.push({
         recordId: r.id,
         job: f['Job #'] || '',
@@ -1120,7 +1137,9 @@
         qaiMgr: mgrNames(Array.isArray(f['QAI Manager']) ? f['QAI Manager'] : []),
         celDate: celDate,
         celScheduled: !!celDate,
-        celMgr: mgrNames(Array.isArray(f['CEL Manager']) ? f['CEL Manager'] : [])
+        celMgr: mgrNames(Array.isArray(f['CEL Manager']) ? f['CEL Manager'] : []),
+        accDate: accDate,
+        accMgr: mgrNames(Array.isArray(f['ACC Manager']) ? f['ACC Manager'] : [])
       });
     });
     return out;
@@ -1169,7 +1188,11 @@
     var fQaiMgr = document.getElementById('fQaiMgr').value;
     var fDaysSince = document.getElementById('fDaysSince').value;
     var fCelDate = document.getElementById('fCelDate').value;
+    var fCelTime = document.getElementById('fCelTime').value;
     var fCelMgr = document.getElementById('fCelMgr').value;
+    var fAccDate = document.getElementById('fAccDate').value;
+    var fAccTime = document.getElementById('fAccTime').value;
+    var fAccMgr = document.getElementById('fAccMgr').value;
 
     var all = buildRows();
 
@@ -1194,7 +1217,11 @@
       if(!colMatch(fQaiMgr, r.qaiMgr)) return false;
       if(!daysSinceFilterMatch(fDaysSince, daysSince(r.qaiDate))) return false;
       if(!colMatch(fCelDate, fmtD(r.celDate))) return false;
+      if(!colMatch(fCelTime, clockOf(r.celDate))) return false;
       if(!colMatch(fCelMgr, r.celMgr)) return false;
+      if(!colMatch(fAccDate, fmtD(r.accDate))) return false;
+      if(!colMatch(fAccTime, clockOf(r.accDate))) return false;
+      if(!colMatch(fAccMgr, r.accMgr)) return false;
       return true;
     });
 
@@ -1238,7 +1265,11 @@
         { header: 'Days Since QAI', key: 'daysSince', width: 15 },
         { header: 'CEL Status', key: 'celStatus', width: 24 },
         { header: 'CEL Date', key: 'celDate', width: 12 },
-        { header: 'CEL Manager', key: 'celMgr', width: 22 }
+        { header: 'CEL Time', key: 'celTime', width: 10 },
+        { header: 'CEL Manager', key: 'celMgr', width: 22 },
+        { header: 'ACC Date', key: 'accDate', width: 12 },
+        { header: 'ACC Time', key: 'accTime', width: 10 },
+        { header: 'ACC Manager', key: 'accMgr', width: 22 }
       ];
       rows.forEach(function(r){
         var ds = daysSince(r.qaiDate);
@@ -1251,7 +1282,11 @@
           daysSince: ds === null ? '' : ds,
           celStatus: r.celScheduled ? 'Scheduled \u2014 letter pending' : 'Not yet scheduled',
           celDate: fmtD(r.celDate),
-          celMgr: r.celMgr || ''
+          celTime: clockOf(r.celDate),
+          celMgr: r.celMgr || '',
+          accDate: fmtD(r.accDate),
+          accTime: clockOf(r.accDate),
+          accMgr: r.accMgr || ''
         });
       });
       var headerRow = ws.getRow(1);
@@ -1312,7 +1347,11 @@
           ? '<span style="color:#83553C;font-weight:600">Scheduled \u2014 letter pending</span>'
           : '<span style="color:#AA1F23;font-weight:600">Not yet scheduled</span>') + '</td>' +
         '<td>' + fmtD(row.celDate) + '</td>' +
+        '<td>' + clockOf(row.celDate) + '</td>' +
         '<td>' + esc(row.celMgr || '\u2014') + '</td>' +
+        '<td>' + fmtD(row.accDate) + '</td>' +
+        '<td>' + clockOf(row.accDate) + '</td>' +
+        '<td>' + esc(row.accMgr || '\u2014') + '</td>' +
         '<td></td>';
       var actionCell = tr.lastElementChild;
       var canEdit = can('tracker.edit');
@@ -1372,7 +1411,7 @@
   /* Every column filter (the header-row inputs plus the top search box)
      shares one debounce timer so fast typing across fields only re-renders
      once things settle, not on every keystroke. */
-  var TEXT_FILTER_IDS = ['q', 'fJob', 'fAddress', 'fQaiDate', 'fQaiMgr', 'fDaysSince', 'fCelDate', 'fCelMgr'];
+  var TEXT_FILTER_IDS = ['q', 'fJob', 'fAddress', 'fQaiDate', 'fQaiMgr', 'fDaysSince', 'fCelDate', 'fCelTime', 'fCelMgr', 'fAccDate', 'fAccTime', 'fAccMgr'];
   var SELECT_FILTER_IDS = ['fComm', 'fCelStatus'];
   TEXT_FILTER_IDS.forEach(function(id){
     document.getElementById(id).addEventListener('input', function(){
