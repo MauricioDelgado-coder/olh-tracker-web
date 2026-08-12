@@ -168,7 +168,8 @@
     qam: { label: "QA Manager", can: ["suite.view", "tracker.edit", "walk.schedule", "optimizer.apply", "page.home", "page.tracker", "page.completion", "page.walks", "page.qamgmt", "page.walkstoschedule", "page.scheduler", "page.workload"] },
     cm: { label: "Construction Manager", can: ["suite.view", "tracker.edit", "page.home", "page.tracker", "page.completion", "page.walks"] },
     ccr: { label: "Customer Care", can: ["suite.view", "tracker.edit", "page.home", "page.tracker", "page.walks", "page.qamgmt", "page.walkstoschedule"] },
-    leadership: { label: "Division Leadership", can: ["suite.view", "page.home", "page.tracker", "page.completion", "page.walks", "page.qamgmt", "page.walkstoschedule", "page.scheduler", "page.workload"] }
+    leadership: { label: "Division Leadership", can: ["suite.view", "page.home", "page.tracker", "page.completion", "page.walks", "page.qamgmt", "page.walkstoschedule", "page.scheduler", "page.workload"] },
+    concierge: { label: "Concierge", can: ["suite.view", "page.home", "page.tracker", "page.scheduler"] }
   };
   var ROLE_LOCKS = { admin: ["suite.view", "roster.manage", "page.admin"] };
   /* Only admins run the console, so page.admin is never handed to anyone else. */

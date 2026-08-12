@@ -25,7 +25,8 @@ const eq = (label, got, want) => {
 };
 
 const PAGES = ['page.home', 'page.tracker', 'page.completion', 'page.walks',
-  'page.scheduler', 'page.workload', 'page.admin'];
+  'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload',
+  'page.walkstoschedule', 'page.admin'];
 
 console.log('\n=== the catalog ===');
 for (const p of PAGES) {
@@ -48,6 +49,15 @@ eq('qam has no page.admin', A.DEFAULT_ROLES.qam.includes('page.admin'), false);
 eq('leadership is view-only but sees pages',
   A.DEFAULT_ROLES.leadership.includes('page.completion'), true);
 eq('leadership cannot edit', A.DEFAULT_ROLES.leadership.includes('tracker.edit'), false);
+eq('concierge sees the tracker and scheduler', 
+  ['page.tracker', 'page.scheduler'].filter((p) => A.DEFAULT_ROLES.concierge.includes(p)),
+  ['page.tracker', 'page.scheduler']);
+eq('concierge cannot edit anything',
+  ['tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage']
+    .some((c) => A.DEFAULT_ROLES.concierge.includes(c)), false);
+eq('concierge has no page.admin', A.DEFAULT_ROLES.concierge.includes('page.admin'), false);
+eq('roleSlug recognizes concierge', A.roleSlug('Concierge'), 'concierge');
+eq('roleLabel for concierge', A.roleLabel('concierge'), 'Concierge');
 
 console.log('\n=== normalizeMatrix ===');
 const norm = A.normalizeMatrix;

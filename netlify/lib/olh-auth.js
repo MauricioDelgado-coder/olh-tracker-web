@@ -308,7 +308,13 @@ const DEFAULT_ROLES = {
     'page.walkstoschedule'],
   leadership: ['suite.view', 'page.home', 'page.tracker', 'page.completion',
     'page.walks', 'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload',
-    'page.walkstoschedule']
+    'page.walkstoschedule'],
+  // View-only: the tracker grid, the schedule optimizer, and homesite.html
+  // (which has no permission of its own -- it checks only suite.view and is
+  // reached by drilling into a record from the tracker). No tracker.edit,
+  // walk.schedule, or optimizer.apply: a concierge can see dates and
+  // proposed moves but not change them.
+  concierge: ['suite.view', 'page.home', 'page.tracker', 'page.scheduler']
 };
 const PERMS = ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage']
   .concat(ALL_PAGES);
@@ -336,11 +342,12 @@ const ROLE_ALIAS = {
   'qa manager': 'qam', 'qam': 'qam',
   'construction manager': 'cm', 'cm': 'cm',
   'customer care': 'ccr', 'customer care rep': 'ccr', 'ccr': 'ccr',
-  'leadership': 'leadership', 'division leadership': 'leadership'
+  'leadership': 'leadership', 'division leadership': 'leadership',
+  'concierge': 'concierge', 'homebuyer concierge': 'concierge'
 };
 const ROLE_LABEL = {
   admin: 'Admin', qam: 'QA Manager', cm: 'Construction Manager',
-  ccr: 'Customer Care', leadership: 'Division Leadership'
+  ccr: 'Customer Care', leadership: 'Division Leadership', concierge: 'Concierge'
 };
 
 /** Unknown roles collapse to the least-privileged role, never to admin. */
