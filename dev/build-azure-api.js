@@ -53,7 +53,8 @@ const FUNCTIONS = [
   'users.js',
   'roles.js',
   'audit.js',
-  'walk-miss-log.js'
+  'walk-miss-log.js',
+  'resolve-conflict.js'
 ];
 
 /** Shared helpers. Kept outside functions/ on Netlify so it is never itself an

@@ -102,7 +102,10 @@ const ROUTES = [
   ['audit', 'audit', 'audit'],
 
   // ---- Append-only walk miss history -> walk-miss-log.js
-  ['walkMissLog', 'walk-miss-log', 'walk-miss-log']
+  ['walkMissLog', 'walk-miss-log', 'walk-miss-log'],
+
+  // ---- Sync Conflicts resolution -> resolve-conflict.js (roster.manage only)
+  ['resolveConflict', 'resolve-conflict', 'resolve-conflict']
 ];
 
 for (const [name, route, netlifyFunction] of ROUTES) {
