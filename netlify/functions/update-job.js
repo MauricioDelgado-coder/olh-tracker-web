@@ -71,7 +71,7 @@ const SELECT_OPTIONS = Object.freeze({
 });
 
 /**
- * THE WHITELIST. Exactly 44 entries. Anything else is rejected.
+ * THE WHITELIST. Exactly 45 entries. Anything else is rejected.
  * Keys are the literal Airtable field names; values are the expected type.
  *   checkbox -> boolean
  *   date     -> 'YYYY-MM-DD'
@@ -125,7 +125,8 @@ const EDITABLE = Object.freeze({
   'Key Status': 'select',
   'Delivered To': 'line',
   'Delivery Date': 'date',
-  'Notes': 'text'
+  'Notes': 'text',
+  'CEL Letter Sent': 'checkbox'
 });
 
 const EDITABLE_KEYS = Object.keys(EDITABLE);
