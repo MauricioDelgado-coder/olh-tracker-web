@@ -258,7 +258,24 @@ const MANGLE_SAFE_RENAMES = [
  * admin already gets it via ALL_PAGES), and PAGE_LABEL in olh-auth.js. The
  * frontend-only gaps described above (missing nav link on the other pages,
  * missing PAGES grid entry on admin.html/missed-walks.html/time-off.html)
- * are still open -- this fix only unblocks the save itself. */
+ * are still open -- this fix only unblocks the save itself.
+ *
+ * 2026-08-12: added a new role, "concierge" (view-only: page.home,
+ * page.tracker, page.scheduler -- homesite.html carries no permission of its
+ * own, it only checks suite.view and is reached by drilling into a record
+ * from the tracker, so it needed no separate grant). Added to ROLE_ALIAS,
+ * ROLE_LABEL and DEFAULT_ROLES in netlify/lib/olh-auth.js, to the Airtable
+ * Roles table, and hand-patched into every one of the thirteen pages'
+ * DEFAULT_ROLES copies (all ten bundled pages plus missed-walks.html,
+ * time-off.html, walks-to-schedule.html's standalone copies) with the
+ * identical { label: "Concierge", can: [...] } entry, inserted right after
+ * the leadership entry. Same class of gap as the walkstoschedule fixes
+ * above: a role that only exists in some copies is a role the admin console
+ * cannot fully see or grant. If the next export overwrites these pages from
+ * a fresh design-tool copy, reapply the concierge DEFAULT_ROLES entry to
+ * each one before running this build -- not captured by AUTH_PATCHES below
+ * for the same reason page.walkstoschedule wasn't: this is a per-page
+ * DEFAULT_ROLES literal, not a shared find/replace target. */
 const AUTH_PATCHES = [
   // NOTE for anyone adding a patch here: do NOT introduce a `var`/`let`/`const`
   // whose name is lowerCamelCase. See MANGLED_DECL below -- the bundler rewrites
