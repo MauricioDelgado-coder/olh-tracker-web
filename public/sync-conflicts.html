@@ -1016,6 +1016,27 @@
 
   function canResolve(){ return window.OLHAuth ? window.OLHAuth.can('roster.manage') : false; }
 
+  /* "Kept" is Airtable's raw echo of the field (datetimes come back with
+     milliseconds, e.g. "…13:00:00.000Z"); "Salesforce says" is the Python
+     sync's own formatter (no milliseconds, e.g. "…13:00:00Z"). Same instant,
+     different string -- an exact-string compare misses it and shows a
+     conflict that isn't one. Parse both as dates and compare the instant;
+     fall back to a trimmed string compare for names and plain dates, where
+     Date() parsing either agrees anyway or isn't meaningful. */
+  var ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}/;
+  function valuesEqual(a, b){
+    a = String(a == null ? '' : a).trim();
+    b = String(b == null ? '' : b).trim();
+    if(a === b) return true;
+    // Only try parsing as a date when both look like our date/datetime
+    // strings (YYYY-MM-DD...) -- a manager name should never fall into
+    // JS's lenient Date() parsing by accident.
+    if(!ISO_DATE_RE.test(a) || !ISO_DATE_RE.test(b)) return false;
+    var da = new Date(a), db = new Date(b);
+    if(!isNaN(da.getTime()) && !isNaN(db.getTime())) return da.getTime() === db.getTime();
+    return false;
+  }
+
   function buildRows(){
     rows = [];
     jobs.forEach(function(j){
@@ -1035,7 +1056,7 @@
           // Flagged before Sync Baseline had a value for this field to compare
           // against, not because the leader's edit and Salesforce actually
           // disagree. Nothing to decide -- just needs the flag cleared.
-          noDiff: m[2].trim() === m[3].trim()
+          noDiff: valuesEqual(m[2], m[3])
         });
       });
     });
