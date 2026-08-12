@@ -1118,12 +1118,17 @@
      this page exists to clear. A homesite can already have a CEL Date/
      Manager assigned and still show up here if the letter itself has not
      gone out -- that split (unscheduled vs. scheduled-but-not-yet-lettered)
-     is why the CEL Status column exists. */
+     is why the CEL Status column exists.
+
+     Lot Status must be 'B' (Built): CEL and ACC walks are only flagged for
+     homes that have actually reached Built status. Any other Lot Status
+     (S, W, M, etc.) is excluded even if QAI is complete. */
   function buildRows(){
     var out = [];
     jobs.forEach(function(r){
       var f = r.fields;
       if(f['Record Status'] === 'Closed') return;
+      if(f['Lot Status'] !== 'B') return;
       if(!f['QAI Complete']) return;
       if(f['CEL Letter Sent']) return;
       var celDate = f['CEL Date'] || null;
