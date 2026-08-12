@@ -1324,7 +1324,28 @@ const PAGES = {
     ]
   },
 
-  'scheduler.html': { data: true, inject: true, walkRef: true, caches: ['_sites', '_byLen', '_unmapped'] },
+  'scheduler.html': {
+    data: true, inject: true, walkRef: true, caches: ['_sites', '_byLen', '_unmapped'],
+    patches: [
+      ['add celLetterSent to the homesite record',
+       'celTime: f["CEL Date"] || null, accTime: f["ACC Date"] || null,\n',
+       'celTime: f["CEL Date"] || null, accTime: f["ACC Date"] || null,\n' +
+       '        celLetterSent: !!f["CEL Letter Sent"],\n'],
+
+      /* Reset used to wipe both CEL and ACC unconditionally, even after the
+       * physical CEL letter had already gone out to the buyer with a specific
+       * date/time on it. Once that letter is on record, locking Reset stops
+       * someone from clearing the walk and re-saving a different date the
+       * homeowner was never told about. */
+      ['gate the Reset button on CEL Letter Sent',
+       'saveCursor: unsaved && !s.saving ? "pointer" : "not-allowed",\n      onReset: () => {\n        const committed = Object.assign({}, s.assignments);\n        const drafts = Object.assign({}, s.draft);\n        if (sel) { delete committed[sel.job]; delete drafts[sel.job]; }\n        this.setState({ assignments: committed, draft: drafts, step: null, mWarn: "" });\n      },\n',
+       'saveCursor: unsaved && !s.saving ? "pointer" : "not-allowed",\n      resetOff: !!(sel && sel.celLetterSent),\n      resetCursor: (sel && sel.celLetterSent) ? "not-allowed" : "pointer",\n      resetOpacity: (sel && sel.celLetterSent) ? ".5" : "1",\n      resetTitle: (sel && sel.celLetterSent) ? "CEL letter already sent for this homesite \\u2014 walks can not be reset." : "",\n      onReset: () => {\n        if (sel && sel.celLetterSent) return;\n        const committed = Object.assign({}, s.assignments);\n        const drafts = Object.assign({}, s.draft);\n        if (sel) { delete committed[sel.job]; delete drafts[sel.job]; }\n        this.setState({ assignments: committed, draft: drafts, step: null, mWarn: "" });\n      },\n'],
+
+      ['disable and grey out the Reset button when locked',
+       '<button sc-camel-on-click="{{ onReset }}" style="height:30px;padding:0 12px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;color:#303030;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap" style-hover="background:#F1EBE1">Reset</button>',
+       '<button sc-camel-on-click="{{ onReset }}" disabled="{{ resetOff }}" title="{{ resetTitle }}" style="height:30px;padding:0 12px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;color:#303030;font-size:12px;font-weight:600;cursor:{{ resetCursor }};opacity:{{ resetOpacity }};white-space:nowrap" style-hover="background:#F1EBE1">Reset</button>']
+    ]
+  },
 
   /* QAI/QAA carry only a date, no time-of-day. _suggestForDay's slot-conflict
    * check (free()) keyed on r.sortTime, so every same-day QAI/QAA walk parsed
