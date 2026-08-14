@@ -13,7 +13,8 @@
   a{color:#005DAA;text-decoration:none}
   a:hover{color:#203F7C;text-decoration:underline}
   table{border-collapse:collapse;width:100%}
-  th,td{text-align:left;padding:8px 10px;font-size:12.5px;vertical-align:top}
+  th,td{text-align:left;padding:8px 10px;font-size:12.5px;vertical-align:top;white-space:nowrap}
+  td.wrap{white-space:normal}
   th{position:sticky;top:0;background:#F6F2EA;color:#6F6963;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;border-bottom:1px solid #D8CFBE;white-space:nowrap}
   td{border-bottom:1px solid #F1EBE1}
   tr:nth-child(even) td{background:#FCFAF6}
@@ -36,7 +37,7 @@
     <span id="readOnlyNote" style="font-size:12.5px;font-weight:500;color:#AA1F23"></span>
   </div>
 
-  <main style="flex:1 1 auto;max-width:1100px;width:100%;margin:0 auto;padding:20px 32px 40px">
+  <main style="flex:1 1 auto;max-width:1700px;width:100%;margin:0 auto;padding:20px 32px 40px">
 
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 16px;border:1px solid #E4DED2;border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(27,42,88,.05);margin-bottom:14px">
       <span id="summaryNote" style="font-size:13px;color:#6F6963">Loading…</span>
@@ -48,13 +49,14 @@
     <div style="border:1px solid #E4DED2;border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(27,42,88,.05);overflow:auto;max-height:70vh">
       <table>
         <thead>
-          <tr>
+          <tr id="headRow">
+            <th style="position:sticky;left:0;z-index:2;background:#F6F2EA;box-shadow:2px 0 4px rgba(27,42,88,.06)">Decision</th>
             <th>Job #</th>
             <th>Address</th>
+            <th>In Current Pull?</th>
             <th>Field</th>
             <th>Kept (current)</th>
             <th>Salesforce says</th>
-            <th></th>
           </tr>
         </thead>
         <tbody id="rows"></tbody>
@@ -989,7 +991,92 @@
   'use strict';
   var API = '/api';
   var jobs = [];   // full /api/jobs payload, filtered client-side
-  var rows = [];   // one row per flagged field: {job, field, kept, salesforce}
+  var rows = [];   // one row per flagged field: {job, field, kept, salesforce, fields}
+  var managersById = {};  // built from /api/jobs' managers list, for link-field display
+
+  /* Every other Jobs-table column, shown to the right of the core conflict
+     columns so this page carries the same data as tracker.html without
+     forcing a second trip to look something up. Excludes: Job #/Street
+     Address/City (already shown as Job #/Address), Sync Baseline/Sync
+     Conflicts (sync mechanics, not job data), and the six "ZZ DELETE ME"
+     shadow duplicates (superseded, safe-to-delete leftovers -- see their own
+     field descriptions in Airtable). Record Status is deliberately included
+     even though every visible row is Active (archived jobs are filtered out
+     below) -- it is the direct answer to "is this in the current pull". */
+  function fmtBool(v){ return v ? 'Yes' : ''; }
+  function fmtDate(v){
+    if(!v) return '';
+    var s = String(v);
+    return s.length > 10 ? s.replace('T00:00:00.000Z','').replace(/\.000Z$/,'Z') : s;
+  }
+  function fmtManagers(v){
+    if(!v) return '';
+    var ids = Array.isArray(v) ? v : [v];
+    return ids.map(function(id){ return managersById[id] || id; }).join(', ');
+  }
+  function fmtText(v){ return v == null ? '' : String(v); }
+
+  var EXTRA_COLS = [
+    { label: 'Homesite Status', key: 'Homesite Status', fmt: fmtText },
+    { label: 'Lot Status', key: 'Lot Status', fmt: fmtText },
+    { label: 'Bucket', key: 'Bucket', fmt: fmtText },
+    { label: 'Construction State', key: 'Construction State', fmt: fmtText },
+    { label: 'Community', key: 'Community', fmt: fmtText },
+    { label: 'Lot', key: 'Lot', fmt: fmtText },
+    { label: 'Zip', key: 'Zip', fmt: fmtText },
+    { label: 'Area Construction Manager', key: 'Area Construction Manager', fmt: fmtText },
+    { label: 'Construction Manager', key: 'Construction Manager', fmt: fmtText },
+    { label: 'Assigned Concierge', key: 'Assigned Concierge', fmt: fmtText },
+    { label: 'Sale Date', key: 'Sale Date', fmt: fmtDate },
+    { label: 'Actual Start Date', key: 'Actual Start Date', fmt: fmtDate },
+    { label: 'Projected Completion Date', key: 'Projected Completion Date', fmt: fmtDate },
+    { label: 'Estimated COE Date', key: 'Estimated COE Date', fmt: fmtDate },
+    { label: 'Scheduled Closing Date', key: 'Scheduled Closing Date', fmt: fmtDate },
+    { label: 'Actual Completion Date', key: 'Actual Completion Date', fmt: fmtDate },
+    { label: 'Certificate of Occupancy Date', key: 'Certificate of Occupancy Date', fmt: fmtDate },
+    { label: 'CCC Date', key: 'CCC Date', fmt: fmtDate },
+    { label: 'QA Ready', key: 'QA Ready', fmt: fmtBool },
+    { label: 'QAI Date', key: 'QAI Date', fmt: fmtDate },
+    { label: 'QAI Manager', key: 'QAI Manager', fmt: fmtManagers },
+    { label: 'QAI Complete', key: 'QAI Complete', fmt: fmtBool },
+    { label: 'QAA Date', key: 'QAA Date', fmt: fmtDate },
+    { label: 'QAA Manager', key: 'QAA Manager', fmt: fmtManagers },
+    { label: 'QAA Accepted', key: 'QAA Accepted', fmt: fmtBool },
+    { label: 'CEL Date', key: 'CEL Date', fmt: fmtDate },
+    { label: 'CEL Manager', key: 'CEL Manager', fmt: fmtManagers },
+    { label: 'CEL Completed', key: 'CEL Completed', fmt: fmtBool },
+    { label: 'Buyer Attended CEL', key: 'Buyer Attended CEL', fmt: fmtBool },
+    { label: 'ACC Date', key: 'ACC Date', fmt: fmtDate },
+    { label: 'ACC Manager', key: 'ACC Manager', fmt: fmtManagers },
+    { label: 'ACC Completed', key: 'ACC Completed', fmt: fmtBool },
+    { label: 'Buyer Attended ACC', key: 'Buyer Attended ACC', fmt: fmtBool },
+    { label: 'NOC Lock Date', key: 'NOC Lock Date', fmt: fmtDate },
+    { label: 'Power Meter', key: 'Power Meter', fmt: fmtBool },
+    { label: 'Water Meter', key: 'Water Meter', fmt: fmtBool },
+    { label: 'Key Status', key: 'Key Status', fmt: fmtText },
+    { label: 'Delivered To', key: 'Delivered To', fmt: fmtText },
+    { label: 'Delivery Date', key: 'Delivery Date', fmt: fmtDate },
+    { label: 'CEL Letter Sent', key: 'CEL Letter Sent', fmt: fmtBool },
+    { label: 'Construction Risk', key: 'Construction Risk', fmt: fmtBool },
+    { label: 'Construction Risk Notes', key: 'Construction Risk Notes', fmt: fmtText, wrap: true },
+    { label: 'Land Risk', key: 'Land Risk', fmt: fmtBool },
+    { label: 'Land Risk Notes', key: 'Land Risk Notes', fmt: fmtText, wrap: true },
+    { label: 'Notes', key: 'Notes', fmt: fmtText, wrap: true },
+    { label: 'Salesforce Id', key: 'Salesforce Id', fmt: fmtText },
+    { label: 'Last Synced', key: 'Last Synced', fmt: fmtDate },
+    { label: 'Closed Date', key: 'Closed Date', fmt: fmtDate }
+  ];
+
+  function buildHeader(){
+    var tr = document.getElementById('headRow');
+    // Remove any previously-appended extra headers (Refresh can re-run this).
+    while(tr.children.length > 7) tr.removeChild(tr.lastElementChild);
+    EXTRA_COLS.forEach(function(c){
+      var th = document.createElement('th');
+      th.textContent = c.label;
+      tr.appendChild(th);
+    });
+  }
 
   // Mirrors resolve-conflict.js's LINE_RE: "<Field>: kept <A> / Salesforce says <B>"
   var LINE_RE = /^(.+?): kept (.*) \/ Salesforce says (.*)$/;
@@ -1039,10 +1126,18 @@
 
   function buildRows(){
     rows = [];
+    var skippedArchived = 0;
     jobs.forEach(function(j){
       var f = j.fields || {};
       var note = f['Sync Conflicts'];
       if(!note) return;
+      // A job that has fully closed (left the Salesforce "no Actual COE" pull)
+      // stops getting its Sync Conflicts field touched by the sync at all --
+      // see olh_qa_tracker_sync.py's archive branch -- so a flag raised before
+      // it closed sits there forever with no bearing on anything current.
+      // Exclude archived jobs outright rather than showing a stale decision
+      // nobody can act on meaningfully.
+      if(f['Record Status'] === 'Closed'){ skippedArchived++; return; }
       String(note).split('\n').forEach(function(line){
         line = line.trim();
         if(!line) return;
@@ -1052,7 +1147,9 @@
           recordId: j.id,
           job: f['Job #'] || '',
           address: [f['Street Address'], f['City']].filter(Boolean).join(', '),
+          inPull: f['Record Status'] || 'Active',
           field: m[1], kept: m[2], salesforce: m[3],
+          fields: f,
           // Flagged before Sync Baseline had a value for this field to compare
           // against, not because the leader's edit and Salesforce actually
           // disagree. Nothing to decide -- just needs the flag cleared.
@@ -1060,6 +1157,7 @@
         });
       });
     });
+    rows.skippedArchived = skippedArchived;
     rows.sort(function(a,b){
       return (a.noDiff === b.noDiff ? 0 : a.noDiff ? 1 : -1) ||
         String(a.job).localeCompare(String(b.job)) || a.field.localeCompare(b.field);
@@ -1075,9 +1173,12 @@
     var parts = [];
     if(real.length) parts.push(real.length + ' actually disagree' + (real.length === 1 ? 's' : '') + ', need a decision');
     if(noDiff.length) parts.push(noDiff.length + ' show the same value on both sides — nothing to decide, just flagged before the sync had a baseline to compare against');
-    document.getElementById('summaryNote').textContent = rows.length ? parts.join('. ') + '.' : 'Nothing flagged.';
+    if(rows.skippedArchived) parts.push(rows.skippedArchived + ' archived job' + (rows.skippedArchived === 1 ? '' : 's') + ' hidden (already closed — no longer in the Salesforce pull)');
+    document.getElementById('summaryNote').textContent = rows.length || rows.skippedArchived ? parts.join('. ') + '.' : 'Nothing flagged.';
     document.getElementById('emptyNote').style.display = rows.length ? 'none' : 'block';
     document.getElementById('emptyNote').textContent = 'No sync conflicts right now — every leader edit and Salesforce value agree.';
+
+    buildHeader();
 
     var clearAllBtn = document.getElementById('btnClearNoDiff');
     if(canResolve() && noDiff.length){
@@ -1093,21 +1194,19 @@
     rows.forEach(function(r){
       var tr = document.createElement('tr');
       if(r.noDiff) tr.style.opacity = '.65';
-      tr.innerHTML =
-        '<td style="font-weight:600">' + esc(r.job) + '</td>' +
-        '<td style="color:#6F6963">' + esc(r.address || '—') + '</td>' +
-        '<td>' + esc(r.field) + '</td>' +
-        '<td>' + esc(r.kept) + '</td>' +
-        '<td style="color:#6F6963">' + esc(r.salesforce) + (r.noDiff ? ' <span style="font-size:10px;color:#908A82">(same value)</span>' : '') + '</td>' +
-        '<td></td>';
-      var td = tr.lastElementChild;
+
+      // Decision cell first and sticky, so it stays put while the data
+      // columns to its right scroll — the thing you're deciding never
+      // scrolls out of view while you're looking something up.
+      var decisionTd = document.createElement('td');
+      decisionTd.style.cssText = 'position:sticky;left:0;background:' + (r.noDiff ? '#FCFAF6' : '#fff') + ';box-shadow:2px 0 4px rgba(27,42,88,.06)';
       if(editable){
         if(r.noDiff){
           var clearBtn = document.createElement('button');
           clearBtn.textContent = 'Clear';
           clearBtn.style.cssText = 'height:26px;padding:0 10px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;color:#6F6963;font-size:11.5px;font-weight:600;cursor:pointer';
           clearBtn.onclick = function(){ resolve(r, 'keep', clearBtn); };
-          td.appendChild(clearBtn);
+          decisionTd.appendChild(clearBtn);
         } else {
           var keepBtn = document.createElement('button');
           keepBtn.textContent = 'Keep mine';
@@ -1117,9 +1216,30 @@
           acceptBtn.textContent = 'Accept Salesforce';
           acceptBtn.style.cssText = 'height:26px;padding:0 10px;border:1px solid #005DAA;border-radius:4px;background:#fff;color:#005DAA;font-size:11.5px;font-weight:600;cursor:pointer';
           acceptBtn.onclick = function(){ resolve(r, 'accept', acceptBtn); };
-          td.appendChild(keepBtn); td.appendChild(acceptBtn);
+          decisionTd.appendChild(keepBtn); decisionTd.appendChild(acceptBtn);
         }
       }
+      tr.appendChild(decisionTd);
+
+      // insertAdjacentHTML, not tr.innerHTML += — the decision cell above is a
+      // live node with real onclick listeners attached via JS; += re-serializes
+      // and re-parses the whole row, which would silently drop those listeners.
+      tr.insertAdjacentHTML('beforeend',
+        '<td style="font-weight:600">' + esc(r.job) + '</td>' +
+        '<td style="color:#6F6963">' + esc(r.address || '—') + '</td>' +
+        '<td>' + esc(r.inPull) + '</td>' +
+        '<td>' + esc(r.field) + '</td>' +
+        '<td>' + esc(r.kept) + '</td>' +
+        '<td style="color:#6F6963">' + esc(r.salesforce) + (r.noDiff ? ' <span style="font-size:10px;color:#908A82">(same value)</span>' : '') + '</td>');
+
+      EXTRA_COLS.forEach(function(c){
+        var td = document.createElement('td');
+        td.style.color = '#6F6963';
+        if(c.wrap){ td.className = 'wrap'; td.style.maxWidth = '260px'; }
+        td.textContent = c.fmt(r.fields[c.key]) || '—';
+        tr.appendChild(td);
+      });
+
       tbody.appendChild(tr);
     });
   }
@@ -1147,6 +1267,8 @@
       var data = await res.json().catch(function(){ return null; });
       if(!res.ok || !data || !Array.isArray(data.jobs)) throw new Error((data && data.error) || ('Request failed (' + res.status + ')'));
       jobs = data.jobs;
+      managersById = {};
+      (data.managers || []).forEach(function(m){ managersById[m.id] = m.name; });
       buildRows();
       render();
     }catch(err){
