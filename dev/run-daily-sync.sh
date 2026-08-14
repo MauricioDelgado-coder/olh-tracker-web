@@ -32,7 +32,7 @@
 # and looks fine.
 set -uo pipefail
 
-REPO="$HOME/Documents/Claude/olh-tracker-web"
+REPO="$HOME/olh-tracker-web"
 OUT="$HOME/Downloads/production 2"
 LOG_DIR="$HOME/.homesite_coe_report"
 LOG="$LOG_DIR/sync.log"
