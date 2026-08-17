@@ -696,8 +696,25 @@ const PAGES = {
    * walkRef:false -- the page reads OLH_DATA and nothing WALK_*.
    */
   'completion.html': {
-    data: true, inject: true, walkRef: false, caches: [],
+    data: true, inject: true, walkRef: false, multiselect: true, caches: [],
     patches: [
+      /* 08/17: Lot Type/Stage/Community/Construction Manager/Area
+       * Construction Manager converted from single-value <sc-raw-select> to
+       * <olh-multiselect> (dev/multiselect.js), matching the same-day
+       * conversion already done on tracker.html/qa-management.html. This
+       * was applied directly to public/completion.html via
+       * dev/add-completion-multiselect.js + dev/inject-completion-multiselect-
+       * script.js rather than as inline patch strings here (the change
+       * touches markup, five state defaults, filtered(), opts(), the top-
+       * communities bar-chart toggle, the removable filter chips, the
+       * Reset handler, and adds selRefs/syncSelects/componentDidUpdate --
+       * closer to a rewrite of those sections than a small patch). A
+       * future re-export from the design tool will regenerate
+       * completion.html with the ORIGINAL single-select markup and drop
+       * this; re-run both of those two scripts against the fresh export
+       * to reapply it, in that order. multiselect: true above only
+       * controls re-injecting the MULTISELECT script itself -- it does not
+       * regenerate the markup/JS conversion. */
       /* The export added three columns sourced from uploads/ACM.xlsx rather
        * than from Salesforce: Homesite Plan Name, Homesite Plan Number and
        * Elevation. The Airtable Jobs table has no such fields and the daily
