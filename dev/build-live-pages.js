@@ -84,13 +84,16 @@ const kb = (n) => (n / 1024).toFixed(0) + ' KB';
 const LOADER = fs.readFileSync(path.join(__dirname, 'live-loader.js'), 'utf8');
 if (!/\/walk-config/.test(LOADER)) die('live-loader.js does not reference /walk-config');
 
-/* Route-constrained optimizer, generated from route_constrained_optimizer_logic.js
- * by dev/build-route-optimizer-client.js -- see that script before hand-editing
+/* Three-pass walk scheduler, generated from three_pass_scheduler_logic.js
+ * by dev/build-three-pass-client.js -- see that script before hand-editing
  * this output. Injected the same way and for the same reason as LOADER above:
- * pages needing window.OLHRouteOptimizer (workload.html, walk-calendar.html) via
- * the `optimizer:true` PAGES[] flag. */
-const OPTIMIZER = fs.readFileSync(path.join(__dirname, 'route-optimizer-client.js'), 'utf8');
-if (!/OLHRouteOptimizer/.test(OPTIMIZER)) die('route-optimizer-client.js does not define window.OLHRouteOptimizer');
+ * pages needing window.OLHThreePassScheduler (workload.html, walk-calendar.html)
+ * via the `optimizer:true` PAGES[] flag. (Flag name kept as `optimizer` to
+ * avoid touching every PAGES[] entry; it now points at the three-pass
+ * scheduler, not the old route-constrained optimizer, which has been
+ * removed in full.) */
+const OPTIMIZER = fs.readFileSync(path.join(__dirname, 'three-pass-scheduler-client.js'), 'utf8');
+if (!/OLHThreePassScheduler/.test(OPTIMIZER)) die('three-pass-scheduler-client.js does not define window.OLHThreePassScheduler');
 
 /* completion-loader.js is GONE (08/01). The Completion Report used to read a
    COMPLETION_DATA global in a flat per-homesite shape and needed its own loader
@@ -2371,9 +2374,9 @@ function build(name, spec) {
     if (spec.optimizer) {
       blocks.push(
         '<script>',
-        '/* route-constrained optimizer — injected by dev/build-live-pages.js,',
-        '   generated from dev/route_constrained_optimizer_logic.js. See',
-        '   dev/build-route-optimizer-client.js. */',
+        '/* three-pass walk scheduler — injected by dev/build-live-pages.js,',
+        '   generated from dev/three_pass_scheduler_logic.js. See',
+        '   dev/build-three-pass-client.js. */',
         OPTIMIZER,
         '</script>'
       );
