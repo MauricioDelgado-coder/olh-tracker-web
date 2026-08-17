@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.olh.background-rebalance</string>
+
+  <!-- Runs dev/run-background-rebalance.sh, which reads the Airtable PAT
+       from Keychain and defaults to a DRY RUN (no writes) unless --apply
+       is passed here. Left as a dry run until reviewed against a few
+       live intervals. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/mauricio.delgado/olh-tracker-web/dev/run-background-rebalance.sh</string>
+  </array>
+
+  <!-- Every 15 minutes. The script's own withinRunWindow() check (weekday,
+       7am-7pm) decides whether a given firing actually hits Airtable, so
+       this stays a flat interval rather than an enumerated calendar rule. -->
+  <key>StartInterval</key>
+  <integer>900</integer>
+
+  <!-- Do not run on load -- loading this should not itself trigger a run. -->
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/mauricio.delgado/.homesite_coe_report/launchd.background-rebalance.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/mauricio.delgado/.homesite_coe_report/launchd.background-rebalance.err.log</string>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>
