@@ -15,11 +15,21 @@
     <string>/Users/mauricio.delgado/olh-tracker-web/dev/run-background-rebalance.sh</string>
   </array>
 
-  <!-- Every 15 minutes. The script's own withinRunWindow() check (weekday,
-       7am-7pm) decides whether a given firing actually hits Airtable, so
-       this stays a flat interval rather than an enumerated calendar rule. -->
+  <!-- Every 2 minutes. Tightened down from an initial 15-min interval on
+       2026-08-17 so a walk selected on Walks To Schedule gets picked up
+       by the next tick almost immediately, without needing genuine
+       event-driven infrastructure (Azure Static Web Apps' Free-tier
+       managed functions have no Queue/Durable Functions support here --
+       see api/host.json -- so a real fire-on-selection trigger from
+       update-job.js would need a separate linked Functions app; this
+       interval is the no-new-infrastructure approximation of that). The
+       script's own withinRunWindow() check (weekday, 7am-7pm) decides
+       whether a given firing actually hits Airtable, so this stays a
+       flat interval rather than an enumerated calendar rule. Each idle
+       tick outside that window costs nothing; each tick inside it costs
+       one Airtable read pass even when there's nothing to change. -->
   <key>StartInterval</key>
-  <integer>900</integer>
+  <integer>120</integer>
 
   <!-- Do not run on load -- loading this should not itself trigger a run. -->
   <key>RunAtLoad</key>
