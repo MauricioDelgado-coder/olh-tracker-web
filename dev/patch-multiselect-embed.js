@@ -20,7 +20,7 @@ const NEW = fs.readFileSync(path.join(__dirname, 'multiselect.js'), 'utf8');
 
 if (OLD === NEW) { console.log('no change between HEAD and working tree, nothing to do'); process.exit(0); }
 
-const targets = ['public/tracker.html', 'public/qa-management.html'];
+const targets = ['public/tracker.html', 'public/qa-management.html', 'public/completion.html'];
 for (const rel of targets) {
   const full = path.join(root, rel);
   const html = fs.readFileSync(full, 'utf8');

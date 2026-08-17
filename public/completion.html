@@ -716,6 +716,19 @@ window.__OLH_LIVE = { walkRef: false };
     }
 
     _build() {
+      // Whatever gets this element built twice -- a real second
+      // connectedCallback on the same instance despite the _built guard
+      // above (belt and braces, kept as a cheap skip), or the actual cause
+      // measured on completion.html: the bundler's boot() does an initial
+      // DOMParser-based render, then hands off to a second (React-based)
+      // pass that clones/imports that already-built subtree. cloneNode/
+      // importNode constructs a genuinely NEW custom element instance --
+      // so this._built is undefined again, same as any fresh element -- but
+      // it carries over the light-DOM CHILDREN of the node it cloned
+      // (button + panel from the first build) structurally, since those are
+      // plain DOM nodes, not JS instance state. The guard above can't see
+      // that; this can. Never build on top of whatever is already there.
+      this.innerHTML = '';
       const hostStyle = this.getAttribute('style') || '';
       // The button takes over the visual role the host element used to
       // play as a native <select>; the host itself becomes an inline-block
