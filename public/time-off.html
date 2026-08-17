@@ -20,13 +20,73 @@
 </style>
 </head>
 <body>
+<script>
+/* Shared "Last synced" header stamp.
+ *
+ * Injected as a sibling of the bundler's own bootstrap script (same outer-
+ * injection reasoning as live-loader.js -- see the "WHERE THE LOADER IS
+ * INJECTED" note in dev/build-live-pages.js), so it is defined before any
+ * bundler replay work starts and cannot get stuck behind a slow CDN script.
+ *
+ * Reads the same window.OLH_DATA.jobs global that live-loader.js (or a
+ * page's own inline loader) sets, takes the newest "Last Synced" field
+ * across all rows, and renders it as a small chip next to <olh-user-chip>.
+ * Blank until data exists; blank forever if it never does, rather than
+ * showing a stale or invented time.
+ */
+(function () {
+  'use strict';
+
+  function fmtStamp(ts) {
+    if (!ts) return '';
+    var d = new Date(ts);
+    return 'Last synced ' + (d.getMonth() + 1) + '/' + d.getDate() + '/' + String(d.getFullYear()).slice(2) +
+      ' \u00b7 ' + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+
+  function newestSync() {
+    var jobs = (window.OLH_DATA && window.OLH_DATA.jobs) || [];
+    var best = 0;
+    for (var i = 0; i < jobs.length; i++) {
+      var f = jobs[i] && jobs[i].fields;
+      var t = f && Date.parse(f['Last Synced']);
+      if (!isNaN(t) && t > best) best = t;
+    }
+    return best;
+  }
+
+  class OlhSyncStampEl extends HTMLElement {
+    connectedCallback() {
+      this.style.fontSize = '11px';
+      this.style.color = 'rgba(255,255,255,.55)';
+      this.style.whiteSpace = 'nowrap';
+      this._render();
+      this._onData = this._render.bind(this);
+      window.addEventListener('olh-data', this._onData);
+      this._poll = setInterval(this._render.bind(this), 2000);
+    }
+    disconnectedCallback() {
+      window.removeEventListener('olh-data', this._onData);
+      if (this._poll) { clearInterval(this._poll); this._poll = null; }
+    }
+    _render() {
+      var text = fmtStamp(newestSync());
+      if (text === this._last) return;
+      this._last = text;
+      this.textContent = text;
+    }
+  }
+  if (!customElements.get('olh-sync-stamp')) customElements.define('olh-sync-stamp', OlhSyncStampEl);
+})();
+</script>
+
 <div style="min-height:100vh;display:flex;flex-direction:column;background:#FBF6F3">
 
   <header style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:14px 32px;background:#1B2A58">
     <h1 style="margin:0;font-size:18px;font-weight:600;letter-spacing:.005em;color:#fff;white-space:nowrap">Time Off</h1>
     <span style="font-size:11.5px;color:#C7BFB2;white-space:nowrap">Anyone on time off is excluded from every scheduling task for that day</span>
     <span style="margin-left:auto;display:flex;align-items:center;gap:14px">
-      <olh-user-chip></olh-user-chip>
+      <olh-sync-stamp></olh-sync-stamp><olh-user-chip></olh-user-chip>
     </span>
     <a href="index.html" style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 13px;border:1px solid rgba(255,255,255,.28);border-radius:4px;color:#C7BFB2;font-size:13px;font-weight:500;white-space:nowrap">← All Views</a>
   </header>
@@ -49,6 +109,17 @@
         <span style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:#908A82">Date</span>
         <input id="fDate" type="date" style="height:36px;padding:0 8px;border:1px solid #BFB8AB;border-radius:4px;font-size:13px">
       </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:#6F6963;padding-bottom:9px">
+        <input id="fPartial" type="checkbox"> Specific hours
+      </label>
+      <label id="fStartWrap" style="display:none;flex-direction:column;gap:5px">
+        <span style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:#908A82">From</span>
+        <input id="fStart" type="time" style="height:36px;padding:0 8px;border:1px solid #BFB8AB;border-radius:4px;font-size:13px">
+      </label>
+      <label id="fEndWrap" style="display:none;flex-direction:column;gap:5px">
+        <span style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:#908A82">To</span>
+        <input id="fEnd" type="time" style="height:36px;padding:0 8px;border:1px solid #BFB8AB;border-radius:4px;font-size:13px">
+      </label>
       <label style="display:flex;flex-direction:column;gap:5px;flex:1 1 200px;min-width:160px">
         <span style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:#908A82">Reason (optional)</span>
         <input id="fReason" type="text" placeholder="PTO, sick, training…" maxlength="200" style="height:36px;padding:0 8px;border:1px solid #BFB8AB;border-radius:4px;font-size:13px">
@@ -66,6 +137,7 @@
         <thead>
           <tr>
             <th>Date</th>
+            <th>Hours</th>
             <th>Person</th>
             <th>Reason</th>
             <th>Added By</th>
@@ -1013,6 +1085,10 @@
     return p[1] + '/' + p[2] + '/' + p[0].slice(2); }
   function todayIso(){ var d = new Date();
     return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+  function fmtHour(hhmm){ var p = String(hhmm||'').split(':'); if(p.length !== 2) return hhmm;
+    var h = parseInt(p[0],10), m = p[1]; var ap = h >= 12 ? 'pm' : 'am'; h = h % 12 || 12;
+    return h + (m !== '00' ? ':' + m : '') + ap; }
+  function fmtHours(e){ return (e.startTime && e.endTime) ? (fmtHour(e.startTime) + '\u2013' + fmtHour(e.endTime)) : 'Full day'; }
 
   function toast(kind, title, body){
     var el = document.createElement('div');
@@ -1064,6 +1140,7 @@
       var isPast = e.date < today;
       tr.innerHTML =
         '<td style="' + (isPast ? 'color:#908A82' : 'font-weight:600') + '">' + fmtD(e.date) + (isPast ? ' <span style="font-size:10.5px;color:#908A82">(past)</span>' : '') + '</td>' +
+        '<td style="color:#6F6963">' + esc(fmtHours(e)) + '</td>' +
         '<td>' + esc(e.personName || e.personId) + '</td>' +
         '<td style="color:#6F6963">' + esc(e.reason || '\u2014') + '</td>' +
         '<td style="color:#908A82">' + esc(e.addedBy || '\u2014') + '</td>' +
@@ -1107,21 +1184,31 @@
     var personName = opt ? opt.getAttribute('data-name') : '';
     var date = document.getElementById('fDate').value;
     var reason = document.getElementById('fReason').value.trim();
+    var partial = document.getElementById('fPartial').checked;
+    var startTime = partial ? document.getElementById('fStart').value : '';
+    var endTime = partial ? document.getElementById('fEnd').value : '';
     if(!personId){ toast('err','Nothing to Add','Choose a person first.'); return; }
     if(!date){ toast('err','Nothing to Add','Choose a date first.'); return; }
+    if(partial && (!startTime || !endTime)){ toast('err','Nothing to Add','Set both a start and end time, or uncheck Specific hours for a full day.'); return; }
+    if(partial && startTime >= endTime){ toast('err','Nothing to Add','End time must be later than start time.'); return; }
 
     var btn = document.getElementById('btnAdd');
     btn.disabled = true; btn.textContent = 'Adding\u2026';
     try{
       var res = await fetch(API + '/time-off', {
         method:'POST', headers: authHeaders({'Content-Type':'application/json'}),
-        body: JSON.stringify({personId: personId, personName: personName, date: date, reason: reason})
+        body: JSON.stringify({personId: personId, personName: personName, date: date, reason: reason, startTime: startTime, endTime: endTime})
       });
       var data = await res.json().catch(function(){ return null; });
       if(!res.ok) throw new Error((data && data.error) || ('Save failed (' + res.status + ')'));
       entries.push(data.entry);
       document.getElementById('fReason').value = '';
-      toast('ok', 'Added', personName + ' \u00b7 ' + fmtD(date));
+      document.getElementById('fPartial').checked = false;
+      document.getElementById('fStart').value = '';
+      document.getElementById('fEnd').value = '';
+      document.getElementById('fStartWrap').style.display = 'none';
+      document.getElementById('fEndWrap').style.display = 'none';
+      toast('ok', 'Added', personName + ' \u00b7 ' + fmtD(date) + ' \u00b7 ' + fmtHours(data.entry));
       render();
     }catch(err){
       toast('err', 'Could Not Save', (err && err.message) || String(err));
@@ -1188,6 +1275,11 @@
   document.getElementById('btnAdd').addEventListener('click', addEntry);
   document.getElementById('btnRefresh').addEventListener('click', loadLive);
   document.getElementById('fShowPast').addEventListener('change', render);
+  document.getElementById('fPartial').addEventListener('change', function(){
+    var on = this.checked;
+    document.getElementById('fStartWrap').style.display = on ? 'flex' : 'none';
+    document.getElementById('fEndWrap').style.display = on ? 'flex' : 'none';
+  });
 
   wireAuth(0);
 })();

@@ -84,6 +84,23 @@ const kb = (n) => (n / 1024).toFixed(0) + ' KB';
 const LOADER = fs.readFileSync(path.join(__dirname, 'live-loader.js'), 'utf8');
 if (!/\/walk-config/.test(LOADER)) die('live-loader.js does not reference /walk-config');
 
+/* Shared "Last synced" header stamp -- see dev/sync-stamp.js. Injected the
+ * same outer-sibling way as LOADER, on EVERY page in PAGES[] regardless of
+ * inject:true/false: it only reads window.OLH_DATA if some other loader (or
+ * the page's own inline one) has already set it, so it has none of LOADER's
+ * fetch/stall risk and costs nothing on a page with no data of its own -- it
+ * just renders blank. */
+const SYNC_STAMP = fs.readFileSync(path.join(__dirname, 'sync-stamp.js'), 'utf8');
+if (!/olh-sync-stamp/.test(SYNC_STAMP)) die('sync-stamp.js does not define olh-sync-stamp');
+
+/* Shared multi-select filter dropdown (<olh-multiselect>, see
+ * dev/multiselect.js) -- a drop-in replacement for a native <select> used as
+ * a column/list filter. Injected the same outer-sibling way as LOADER, only
+ * on pages whose PAGES[] entry sets `multiselect: true`, since most pages
+ * have no filter dropdowns to convert. */
+const MULTISELECT = fs.readFileSync(path.join(__dirname, 'multiselect.js'), 'utf8');
+if (!/olh-multiselect/.test(MULTISELECT)) die('multiselect.js does not define olh-multiselect');
+
 /* Three-pass walk scheduler, generated from three_pass_scheduler_logic.js
  * by dev/build-three-pass-client.js -- see that script before hand-editing
  * this output. Injected the same way and for the same reason as LOADER above:
@@ -1323,7 +1340,62 @@ const PAGES = {
        "        dateRow('NOC Lock Date', 'NOC Lock Date'),",
        "checkRow('Water Meter Set', 'Water Meter'),\n" +
        "        checkRow('CEL Letter Sent', 'CEL Letter Sent'),\n" +
-       "        dateRow('NOC Lock Date', 'NOC Lock Date'),"]
+       "        dateRow('NOC Lock Date', 'NOC Lock Date'),"],
+
+      /* Read-only milestone view mashed date+time into one string ("Aug 20,
+       * 2026 · 2pm") and only for CEL/ACC, since hasTime was a static flag on
+       * WALKS rather than a check of the actual field. Split into its own
+       * labeled Time field, matching the edit-mode Date/Time layout, and
+       * drive hasTime off whether the raw value actually carries a
+       * time-of-day -- so it shows for QAI/QAA too once the scheduler starts
+       * writing a time onto those fields, with zero further changes needed
+       * here. */
+      ['split milestone date/time in the read-only view',
+       "date: d ? fmtLong(raw) + (time ? ' \\u00b7 ' + time : '') : 'Not scheduled',\n" +
+       "        dateStyle: {fontSize:'13px',fontWeight:500,color: d ? (overdue ? '#AA1F23' : '#303030') : '#908A82'},\n" +
+       "        mgr: mgr || 'Unassigned', mgrColor: mgr ? '#303030' : '#AA1F23',\n" +
+       "        hasBuyer: !!w.buyer, buyer: w.buyer ? (f[w.buyer] ? 'Yes' : 'No') : '',\n" +
+       "\n" +
+       "        dateValue: isoDay(raw),\n" +
+       "        onDate: e => this.commitDate(w.date, e.target.value, raw),\n" +
+       "        hasTime: !!w.hasTime,\n" +
+       "        timeValue: isoTime24(raw),\n" +
+       "        onTime: e => this.commitTime(w.date, e.target.value, raw),\n" +
+       "        gridCols: n ? '1fr' : (w.hasTime ? '150px 110px minmax(0,1fr)' : '170px minmax(0,1fr)'),",
+       "date: d ? fmtLong(raw) : 'Not scheduled',\n" +
+       "        time: time || '',\n" +
+       "        dateStyle: {fontSize:'13px',fontWeight:500,color: d ? (overdue ? '#AA1F23' : '#303030') : '#908A82'},\n" +
+       "        mgr: mgr || 'Unassigned', mgrColor: mgr ? '#303030' : '#AA1F23',\n" +
+       "        hasBuyer: !!w.buyer, buyer: w.buyer ? (f[w.buyer] ? 'Yes' : 'No') : '',\n" +
+       "\n" +
+       "        dateValue: isoDay(raw),\n" +
+       "        onDate: e => this.commitDate(w.date, e.target.value, raw),\n" +
+       "        hasTime: !!w.hasTime || !!time,\n" +
+       "        timeValue: isoTime24(raw),\n" +
+       "        onTime: e => this.commitTime(w.date, e.target.value, raw),\n" +
+       "        gridCols: n ? '1fr' : ((w.hasTime || !!time) ? '150px 110px minmax(0,1fr)' : '170px minmax(0,1fr)'),"],
+
+      ['add the read-only Time field beside Date in the milestone view',
+       '<sc-if value="{{ noEdit }}" hint-placeholder-val="{{ true }}">\n' +
+       '                    <span style="display:flex;gap:24px;flex-wrap:wrap">\n' +
+       '                      <span style="display:flex;flex-direction:column;gap:1px">\n' +
+       '                        <span style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.15em;color:#908A82">Date</span>\n' +
+       '                        <span style="{{ m.dateStyle }}">{{ m.date }}</span>\n' +
+       '                      </span>\n' +
+       '                      <span style="display:flex;flex-direction:column;gap:1px;min-width:0">',
+       '<sc-if value="{{ noEdit }}" hint-placeholder-val="{{ true }}">\n' +
+       '                    <span style="display:flex;gap:24px;flex-wrap:wrap">\n' +
+       '                      <span style="display:flex;flex-direction:column;gap:1px">\n' +
+       '                        <span style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.15em;color:#908A82">Date</span>\n' +
+       '                        <span style="{{ m.dateStyle }}">{{ m.date }}</span>\n' +
+       '                      </span>\n' +
+       '                      <sc-if value="{{ m.hasTime }}" hint-placeholder-val="{{ false }}">\n' +
+       '                        <span style="display:flex;flex-direction:column;gap:1px">\n' +
+       '                          <span style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.15em;color:#908A82">Time</span>\n' +
+       '                          <span style="{{ m.dateStyle }}">{{ m.time }}</span>\n' +
+       '                        </span>\n' +
+       '                      </sc-if>\n' +
+       '                      <span style="display:flex;flex-direction:column;gap:1px;min-width:0">']
     ]
   },
 
@@ -1346,7 +1418,46 @@ const PAGES = {
 
       ['disable and grey out the Reset button when locked',
        '<button sc-camel-on-click="{{ onReset }}" style="height:30px;padding:0 12px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;color:#303030;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap" style-hover="background:#F1EBE1">Reset</button>',
-       '<button sc-camel-on-click="{{ onReset }}" disabled="{{ resetOff }}" title="{{ resetTitle }}" style="height:30px;padding:0 12px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;color:#303030;font-size:12px;font-weight:600;cursor:{{ resetCursor }};opacity:{{ resetOpacity }};white-space:nowrap" style-hover="background:#F1EBE1">Reset</button>']
+       '<button sc-camel-on-click="{{ onReset }}" disabled="{{ resetOff }}" title="{{ resetTitle }}" style="height:30px;padding:0 12px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;color:#303030;font-size:12px;font-weight:600;cursor:{{ resetCursor }};opacity:{{ resetOpacity }};white-space:nowrap" style-hover="background:#F1EBE1">Reset</button>'],
+
+      /* Time Off gained optional Start Time/End Time (see netlify/functions/
+       * time-off.js): a lone date still means the whole day is off, but a
+       * date with both times set now blocks only that clock-hour window.
+       * isOff() takes the slot being checked ("9:00 AM"/"12:00 PM"/"3:00 PM")
+       * and only excludes a QAM when that slot's hour falls inside the
+       * window -- both existing call sites already have a slot in scope. */
+      ['add slotHour()/clockHour() helpers',
+       'const adjustWeekend = d => d.getDay() === 6 ? addDays(d, -1) : d.getDay() === 0 ? addDays(d, 1) : new Date(d);',
+       'const adjustWeekend = d => d.getDay() === 6 ? addDays(d, -1) : d.getDay() === 0 ? addDays(d, 1) : new Date(d);\n' +
+       '/* "9:00 AM" / "12:00 PM" / "3:00 PM" -> 24h decimal hour (9, 12, 15), for\n' +
+       '   comparing a fixed CEL/ACC slot against a partial-day time-off window. */\n' +
+       'const slotHour = slot => { const m = /^(\\d+):(\\d+)\\s*(AM|PM)$/i.exec(String(slot).trim()); if (!m) return null;\n' +
+       '  let h = parseInt(m[1], 10) % 12; if (/PM/i.test(m[3])) h += 12; return h + parseInt(m[2], 10) / 60; };\n' +
+       '/* "HH:MM" -> 24h decimal hour, for the same comparison against startTime/endTime. */\n' +
+       'const clockHour = hhmm => { const m = /^(\\d\\d):(\\d\\d)$/.exec(String(hhmm).trim()); if (!m) return null;\n' +
+       '  return parseInt(m[1], 10) + parseInt(m[2], 10) / 60; };'],
+
+      ['loadTimeOff() carries startTime/endTime',
+       'this.setState({ timeOff: data.entries.map(e => ({ personId: e.personId, date: e.date })) });',
+       'this.setState({ timeOff: data.entries.map(e => ({ personId: e.personId, date: e.date, startTime: e.startTime || "", endTime: e.endTime || "" })) });'],
+
+      ['isOff() checks the slot hour against a partial-day window',
+       'isOff(id, k) { return this.state.timeOff.some(t => t.personId === id && t.date === k); }',
+       'isOff(id, k, slot) { return this.state.timeOff.some(t => {\n' +
+       '    if (t.personId !== id || t.date !== k) return false;\n' +
+       '    if (!t.startTime || !t.endTime) return true; // full day off\n' +
+       '    if (!slot) return true; // no slot to check against -- treat as blocked, same as before\n' +
+       '    const sh = slotHour(slot), start = clockHour(t.startTime), end = clockHour(t.endTime);\n' +
+       '    return sh != null && start != null && end != null && sh >= start && sh < end;\n' +
+       '  }); }'],
+
+      ['candidate-pool filter passes slot to isOff()',
+       'const avail = g.filter(p => !this.isOff(p.id, k) &&',
+       'const avail = g.filter(p => !this.isOff(p.id, k, slot) &&'],
+
+      ['manual-assign guard passes the chosen slot to isOff()',
+       'if (this.isOff(p.id, k)) { this.setState({ mWarn: p.name + " is on time off that day." }); return; }',
+       'if (this.isOff(p.id, k, this.state.mSlot)) { this.setState({ mWarn: p.name + " is on time off " + (this.state.mSlot ? "during the " + this.state.mSlot + " slot." : "that day.") }); return; }']
     ]
   },
 
@@ -1433,7 +1544,7 @@ const PAGES = {
    * grep the page for WALK_ rather than reason about what it "should" need.
    */
   'qa-management.html': {
-    data: true, inject: true, walkRef: true, caches: [],
+    data: true, inject: true, walkRef: true, multiselect: true, caches: [],
     patches: [
       /* Each writes.push() gains a `patch` -- the exact /api/update-job fields
        * payload for that one mark. Kept beside the audit entry it belongs to so
@@ -1604,7 +1715,61 @@ const PAGES = {
        "  }\n" +
        "\n" +
        "  save(){\n" +
-       "    if(!this.can('walk.schedule')){"]
+       "    if(!this.can('walk.schedule')){"],
+
+      /* Community was the one native <select> filter on this page (Walk Type
+       * is already a set of toggle chips, so nothing to convert there).
+       * Converted to <olh-multiselect> (see dev/multiselect.js) the same way
+       * as tracker.html's filters: a ref, pushed down via componentDidUpdate
+       * since the element takes its options through setOptions() rather than
+       * nested <option> markup. */
+      ['state: comm string -> array',
+       "day: null, comm: '', types: [], openOnly: false, q: '', sortBy: 'type',",
+       "day: null, comm: [], types: [], openOnly: false, q: '', sortBy: 'type',"],
+
+      ['add componentDidUpdate + syncComm() to push options/value into the ref',
+       "componentDidMount(){",
+       "componentDidUpdate(){ this.syncComm(); }\n\n" +
+       "  /* <olh-multiselect> is a plain custom element, not a native <select> --\n" +
+       "     it takes its option list via setOptions() rather than nested <option>\n" +
+       "     markup, and this pushes the current value down too, the same way\n" +
+       "     tracker.html's syncSelects() does for its own filter refs. */\n" +
+       "  syncComm(){\n" +
+       "    const n = this.commRef && this.commRef.current;\n" +
+       "    if(!n) return;\n" +
+       "    if(n.setOptions && this._commOptions) n.setOptions(this._commOptions);\n" +
+       "    if(n.value !== this.state.comm) n.value = this.state.comm;\n" +
+       "  }\n\n" +
+       "  componentDidMount(){"],
+
+      ['filter predicate: equality -> array includes (shown)',
+       "let shown = s.comm ? all.filter(w => w.community === s.comm) : all.slice();",
+       "let shown = s.comm.length ? all.filter(w => s.comm.indexOf(w.community) > -1) : all.slice();"],
+
+      ['filter predicate: equality -> array includes (scope, for the stat tiles)',
+       "const scope = s.comm ? all.filter(w => w.community === s.comm) : all;",
+       "const scope = s.comm.length ? all.filter(w => s.comm.indexOf(w.community) > -1) : all;"],
+
+      ['stash raw community options right after they are computed',
+       "const comms = Array.from(new Set(all.map(w => w.community))).sort((a,b) => a.localeCompare(b));",
+       "const comms = Array.from(new Set(all.map(w => w.community))).sort((a,b) => a.localeCompare(b));\n" +
+       "    /* <olh-multiselect> takes its option list via setOptions() rather than\n" +
+       "       nested <option> markup (see syncComm()), so stash it here instead of\n" +
+       "       returning it from renderVals() for the template to loop over. */\n" +
+       "    this._commOptions = comms.map(c => ({v:c}));"],
+
+      ['drop comm/commOptions from the return object, ref instead of controlled value',
+       "comm: s.comm,\n" +
+       "      onComm: e => this.setState({comm: e.target.value === 'All communities' ? '' : e.target.value}),\n" +
+       "      commOptions: [{v:'All communities'}].concat(comms.map(c => ({v:c}))),",
+       "refComm: this.commRef || (this.commRef = React.createRef()),\n" +
+       "      onComm: e => this.setState({comm: e.target.value}),"],
+
+      ['markup: Community filter -> <olh-multiselect>',
+       '<sc-raw-select value="{{ comm }}" sc-camel-on-change="{{ onComm }}" style="height:38px;min-width:{{ selW }};padding:0 28px 0 11px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;font-size:15px;color:#303030;cursor:pointer">\n' +
+       '          <sc-for list="{{ commOptions }}" as="o"><option value="{{ o.v }}" label="{{ o.v }}"></option></sc-for>\n' +
+       '        </sc-raw-select>',
+       '<olh-multiselect ref="{{ refComm }}" sc-camel-on-change="{{ onComm }}" placeholder="All communities" style="height:38px;min-width:{{ selW }};padding:0 28px 0 11px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;font-size:15px;color:#303030;cursor:pointer"></olh-multiselect>']
     ]
   },
 
@@ -1614,7 +1779,7 @@ const PAGES = {
   // announce=false -- so a failed FIRST load rendered fabricated records with no
   // message at all.
   'tracker.html': {
-    data: true, inject: false, caches: [],
+    data: true, inject: false, multiselect: true, caches: [],
     patches: [
       /* The first load must WAIT for the auth module, and must announce when
        * it fails.
@@ -1858,6 +2023,120 @@ const PAGES = {
 
       ['bump the column-count loading hint for the CEL Letter Sent column',
        'hint-placeholder-count="40"', 'hint-placeholder-count="41"'],
+
+      /* Status/Constr. Mgr/Concierge/Homesite filters converted from single-
+       * value native selects to multi-select (<olh-multiselect>, see
+       * dev/multiselect.js). Ten small patches, in dependency order: state
+       * shape, the filter predicates and anyFilter check that read it, the
+       * "Homes in Progress" tile (which shares state with the Status filter
+       * and keeps its old single-value-toggle behavior on click), the
+       * reset-all paths, where the option lists get stashed now that the
+       * element takes them via setOptions() instead of nested <option>
+       * markup, syncSelects() pushing those options down through the refs,
+       * and finally the four markup swaps themselves. */
+      ['filter state: rs/cm/ac/lot from single strings to arrays',
+       "q: '', rs: 'Active', cm: '', ac: '', lot: '',",
+       "q: '', rs: ['Active'], cm: [], ac: [], lot: [],"],
+
+      ['filter predicates: equality -> array includes',
+       "if(s.rs && (x['Record Status']||'') !== s.rs) return false;\n" +
+       "      if(s.cm && (x['Construction Manager']||'') !== s.cm) return false;\n" +
+       "      if(s.ac && (x['Assigned Concierge']||'') !== s.ac) return false;\n" +
+       "      if(s.lot && String(x['Lot Status']||'') !== s.lot) return false;",
+       "if(s.rs.length && s.rs.indexOf(x['Record Status']||'') < 0) return false;\n" +
+       "      if(s.cm.length && s.cm.indexOf(x['Construction Manager']||'') < 0) return false;\n" +
+       "      if(s.ac.length && s.ac.indexOf(x['Assigned Concierge']||'') < 0) return false;\n" +
+       "      if(s.lot.length && s.lot.indexOf(String(x['Lot Status']||'')) < 0) return false;"],
+
+      ['anyFilter: truthy string check -> .length check',
+       "const anyFilter = !!(s.bkl || s.nq || s.lt || s.rk || s.qa || s.cr || s.lr\n" +
+       "      || s.rs || s.cm || s.ac || s.lot || s.q);",
+       "const anyFilter = !!(s.bkl || s.nq || s.lt || s.rk || s.qa || s.cr || s.lr\n" +
+       "      || s.rs.length || s.cm.length || s.ac.length || s.lot.length || s.q);"],
+
+      /* Per decision: a tile click still just replaces the whole Status
+       * selection with that one value (or clears it, if that is already the
+       * only thing selected) -- it does not merge into whatever else is
+       * checked in the dropdown. */
+      ["tileProgress toggle: array-aware, still single-value on click",
+       "tileProgress: this.tile(s.rs === 'Active'), onTileProgress: () => this.set({rs: s.rs === 'Active' ? '' : 'Active'}),",
+       "tileProgress: this.tile(s.rs.length === 1 && s.rs[0] === 'Active'), onTileProgress: () => this.set({rs: (s.rs.length === 1 && s.rs[0] === 'Active') ? [] : ['Active']}),"],
+
+      ['onTileClear: array defaults',
+       "this.set({bkl:false, nq:false, lt:false, rk:false,\n" +
+       "          qa:false, cr:false, lr:false, rs:'', cm:'', ac:'', lot:'', q:''});",
+       "this.set({bkl:false, nq:false, lt:false, rk:false,\n" +
+       "          qa:false, cr:false, lr:false, rs:[], cm:[], ac:[], lot:[], q:''});"],
+
+      ['stash raw option lists for setOptions(), drop the now-unused opt() helper',
+       "const all = this.jobs();\n" +
+       "    const opt = (label, vals) => [{v:'',l:label}].concat(vals);\n" +
+       "    const stageOrder = (a,b) => { const na = parseInt(a,10), nb = parseInt(b,10);\n" +
+       "      const ka = Number.isNaN(na) ? (a === 'PR' ? -2 : -1) : na;\n" +
+       "      const kb = Number.isNaN(nb) ? (b === 'PR' ? -2 : -1) : nb; return ka - kb; };",
+       "const all = this.jobs();\n" +
+       "    const stageOrder = (a,b) => { const na = parseInt(a,10), nb = parseInt(b,10);\n" +
+       "      const ka = Number.isNaN(na) ? (a === 'PR' ? -2 : -1) : na;\n" +
+       "      const kb = Number.isNaN(nb) ? (b === 'PR' ? -2 : -1) : nb; return ka - kb; };\n" +
+       "    /* Raw option lists for the multi-select filters, stashed so syncSelects()\n" +
+       "       (called after every render, from componentDidMount/componentDidUpdate)\n" +
+       "       can push them down to the <olh-multiselect> refs imperatively -- these\n" +
+       "       are plain custom elements, not native <select>, so they take their\n" +
+       "       options via setOptions() rather than nested <option> markup. */\n" +
+       "    this._filterOptions = {\n" +
+       "      rs: this.uniq('Record Status').sort().map(v => ({v,l:v})),\n" +
+       "      cm: this.uniq('Construction Manager').sort((a,b)=>a.localeCompare(b)).map(v => ({v,l:v.replace(/\\s*\\(OLH\\)\\s*$/i,'')})),\n" +
+       "      ac: this.uniq('Assigned Concierge').sort((a,b)=>a.localeCompare(b)).map(v => ({v,l:v})),\n" +
+       "      lot: this.uniq('Lot Status').sort().map(v => ({v,l:v}))\n" +
+       "    };"],
+
+      ['drop optRS/optCM/optAC/optLOT from the renderVals() return object',
+       "optRS: opt('All statuses', this.uniq('Record Status').sort().map(v => ({v,l:v}))),\n" +
+       "      optCM: opt('All managers', this.uniq('Construction Manager').sort((a,b)=>a.localeCompare(b)).map(v => ({v,l:v.replace(/\\s*\\(OLH\\)\\s*$/i,'')}))),\n" +
+       "      optAC: opt('All concierges', this.uniq('Assigned Concierge').sort((a,b)=>a.localeCompare(b)).map(v => ({v,l:v}))),\n" +
+       "      optLOT: opt('All homesite statuses', this.uniq('Lot Status').sort().map(v => ({v,l:v}))),\n" +
+       "      fRS: s.rs, fCM: s.cm, fAC: s.ac, fLOT: s.lot,",
+       "fRS: s.rs, fCM: s.cm, fAC: s.ac, fLOT: s.lot,"],
+
+      ['syncSelects() also pushes the stashed option lists down through the refs',
+       "syncSelects(){\n" +
+       "    Object.keys(this.selRefs).forEach(k => {\n" +
+       "      const n = this.selRefs[k].current;\n" +
+       "      if(n && n.value !== this.state[k]) n.value = this.state[k];\n" +
+       "    });\n" +
+       "  }",
+       "syncSelects(){\n" +
+       "    Object.keys(this.selRefs).forEach(k => {\n" +
+       "      const n = this.selRefs[k].current;\n" +
+       "      if(!n) return;\n" +
+       "      if(n.setOptions && this._filterOptions) n.setOptions(this._filterOptions[k] || []);\n" +
+       "      if(n.value !== this.state[k]) n.value = this.state[k];\n" +
+       "    });\n" +
+       "  }"],
+
+      ['markup: Status filter -> <olh-multiselect>',
+       '<sc-raw-select sc-camel-default-value="{{ fRS }}" ref="{{ refRS }}" sc-camel-on-change="{{ onRS }}" style="height:30px;padding:0 22px 0 9px;max-width:190px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;font-size:12.5px;color:#303030;cursor:pointer">\n' +
+       '        <sc-for list="{{ optRS }}" as="o" hint-placeholder-count="3"><option value="{{ o.v }}">{{ o.l }}</option></sc-for>\n' +
+       '      </sc-raw-select>',
+       '<olh-multiselect ref="{{ refRS }}" sc-camel-on-change="{{ onRS }}" placeholder="All statuses" style="height:30px;padding:0 22px 0 9px;max-width:190px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;font-size:12.5px;color:#303030;cursor:pointer"></olh-multiselect>'],
+
+      ['markup: Constr. Mgr filter -> <olh-multiselect>',
+       '<sc-raw-select sc-camel-default-value="{{ fCM }}" ref="{{ refCM }}" sc-camel-on-change="{{ onCM }}" style="height:30px;padding:0 22px 0 9px;max-width:190px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;font-size:12.5px;color:#303030;cursor:pointer">\n' +
+       '        <sc-for list="{{ optCM }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.l }}</option></sc-for>\n' +
+       '      </sc-raw-select>',
+       '<olh-multiselect ref="{{ refCM }}" sc-camel-on-change="{{ onCM }}" placeholder="All managers" style="height:30px;padding:0 22px 0 9px;max-width:190px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;font-size:12.5px;color:#303030;cursor:pointer"></olh-multiselect>'],
+
+      ['markup: Concierge filter -> <olh-multiselect>',
+       '<sc-raw-select sc-camel-default-value="{{ fAC }}" ref="{{ refAC }}" sc-camel-on-change="{{ onAC }}" style="height:30px;padding:0 22px 0 9px;max-width:190px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;font-size:12.5px;color:#303030;cursor:pointer">\n' +
+       '        <sc-for list="{{ optAC }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.l }}</option></sc-for>\n' +
+       '      </sc-raw-select>',
+       '<olh-multiselect ref="{{ refAC }}" sc-camel-on-change="{{ onAC }}" placeholder="All concierges" style="height:30px;padding:0 22px 0 9px;max-width:190px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;font-size:12.5px;color:#303030;cursor:pointer"></olh-multiselect>'],
+
+      ['markup: Homesite filter -> <olh-multiselect>',
+       '<sc-raw-select sc-camel-default-value="{{ fLOT }}" ref="{{ refLOT }}" sc-camel-on-change="{{ onLOT }}" style="height:30px;padding:0 22px 0 9px;max-width:190px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;font-size:12.5px;color:#303030;cursor:pointer">\n' +
+       '        <sc-for list="{{ optLOT }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.l }}</option></sc-for>\n' +
+       '      </sc-raw-select>',
+       '<olh-multiselect ref="{{ refLOT }}" sc-camel-on-change="{{ onLOT }}" placeholder="All homesite statuses" style="height:30px;padding:0 22px 0 9px;max-width:190px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;font-size:12.5px;color:#303030;cursor:pointer"></olh-multiselect>'],
     ]
   },
 
@@ -2343,6 +2622,13 @@ function build(name, spec) {
     console.log('  patched                  ' + label);
   }
 
+  // 4b. "Last synced" header stamp -- every page, unconditionally, right
+  //     beside <olh-user-chip>. One markup insertion, asserted exact-match
+  //     like every other patch above; the sibling script that backs it goes
+  //     in with LOADER below (step 5b).
+  sub(state, name, 'add <olh-sync-stamp> beside <olh-user-chip>',
+    '<olh-user-chip', '<olh-sync-stamp></olh-sync-stamp><olh-user-chip');
+
   // 5. Inject the loader OUTSIDE state.template -- as a sibling of the
   //    bundler's own bootstrap script in the OUTER file -- rather than inside
   //    the template blob. See the "WHERE THE LOADER IS INJECTED" note at the
@@ -2356,16 +2642,30 @@ function build(name, spec) {
   //    that the browser's ordinary parser reaches before any of the bundler's
   //    own async work starts. Splicing shifts every later line, so iManifest
   //    and iTemplate (both used by emit() below) move with it.
-  if (spec.inject) {
+  {
+    // SYNC_STAMP goes in unconditionally -- every page, inject:true or not.
+    // It has no fetch of its own (see the const's comment above), so unlike
+    // LOADER/OPTIMIZER it carries no stall risk and costs nothing on a page
+    // that never sets window.OLH_DATA.
     const blocks = [
       '<script>',
-      'window.__OLH_LIVE = { walkRef: ' + (spec.walkRef ? 'true' : 'false') + ' };',
-      '/* live data loader — injected by dev/build-live-pages.js, OUTSIDE the',
-      '   __bundler/template blob so the runtime\'s script-replay loop cannot',
-      '   starve it. See the note in dev/build-live-pages.js. */',
-      LOADER,
+      '/* "Last synced" header stamp — injected by dev/build-live-pages.js,',
+      '   OUTSIDE the __bundler/template blob for the same reason as the live',
+      '   data loader below. See dev/sync-stamp.js. */',
+      SYNC_STAMP,
       '</script>'
     ];
+    if (spec.inject) {
+      blocks.push(
+        '<script>',
+        'window.__OLH_LIVE = { walkRef: ' + (spec.walkRef ? 'true' : 'false') + ' };',
+        '/* live data loader — injected by dev/build-live-pages.js, OUTSIDE the',
+        '   __bundler/template blob so the runtime\'s script-replay loop cannot',
+        '   starve it. See the note in dev/build-live-pages.js. */',
+        LOADER,
+        '</script>'
+      );
+    }
     // Same outer-injection reasoning as LOADER above, added as a second
     // sibling script rather than folded into the same tag: OPTIMIZER has no
     // async work of its own (pure functions, no fetch), so it has none of
@@ -2381,6 +2681,17 @@ function build(name, spec) {
         '</script>'
       );
     }
+    // Multi-select filter dropdowns -- only pages that actually have one to
+    // convert opt in via `multiselect: true`, same reasoning as `optimizer`.
+    if (spec.multiselect) {
+      blocks.push(
+        '<script>',
+        '/* multi-select filter dropdown — injected by dev/build-live-pages.js.',
+        '   See dev/multiselect.js. */',
+        MULTISELECT,
+        '</script>'
+      );
+    }
     const outerBlock = blocks.join('\n');
     const insertAt = state.iManifest - 1;
     if (!/^\s*<script type="__bundler\/manifest">\s*$/.test(state.lines[insertAt])) {
@@ -2390,7 +2701,7 @@ function build(name, spec) {
     state.lines.splice(insertAt, 0, ...added);
     state.iManifest += added.length;
     state.iTemplate += added.length;
-    console.log('  loader injected (outer)  walkRef=' + (spec.walkRef ? 'true' : 'false') +
+    console.log('  sync stamp injected (outer)' + (spec.inject ? '  loader walkRef=' + (spec.walkRef ? 'true' : 'false') : '') +
       (spec.optimizer ? ' optimizer=true' : ''));
   }
 

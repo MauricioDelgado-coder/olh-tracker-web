@@ -1,6 +1,6 @@
 /**
- * GET    /api/time-off              -> { entries: [{id, personId, personName, date, reason, addedBy}] }
- * POST   /api/time-off  {personId, personName, date, reason?} -> { entry }
+ * GET    /api/time-off              -> { entries: [{id, personId, personName, date, reason, addedBy, startTime, endTime}] }
+ * POST   /api/time-off  {personId, personName, date, reason?, startTime?, endTime?} -> { entry }
  * DELETE /api/time-off  {id}        -> { ok: true }
  *
  * Backs the standalone Time Off page and is read by every page that assigns
@@ -8,6 +8,14 @@
  * workload pages -- so a manager on time off is excluded from candidate
  * pools and manual-assignment dropdowns on every one of them, not just
  * whichever page happens to have its own copy of the list in React state.
+ *
+ * startTime/endTime are both optional and both-or-neither: omitting them
+ * means the whole day is off, same as before this field existed. Setting
+ * both blocks only that clock-hour window on that date -- scheduler.html
+ * checks a CEL/ACC walk's fixed slot (9am/12pm/3pm) against the window
+ * rather than blacking out the entire day for a half-day appointment.
+ * Format is 24-hour "HH:MM", validated below; stored as plain text since
+ * Airtable has no bare time-of-day field type.
  *
  * This table lives in its OWN Airtable base (separate from the main OLH QA &
  * Closing Tracker base) because there is no tool available to add a table to
@@ -33,6 +41,7 @@ const TIME_OFF_TABLE = 'tbl3usD3WtyJweN1h';
 const AIRTABLE_API = 'https://api.airtable.com/v0';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const MAX_TEXT_LEN = 200;
 
 const JSON_HEADERS = {
@@ -103,7 +112,9 @@ function toEntry(r) {
     personName: f['Person Name'] || '',
     date: f.Date || '',
     reason: f.Reason || '',
-    addedBy: f['Added By'] || ''
+    addedBy: f['Added By'] || '',
+    startTime: f['Start Time'] || '',
+    endTime: f['End Time'] || ''
   };
 }
 
@@ -148,6 +159,8 @@ exports.handler = async (event) => {
       const personName = trimmed(body.personName, MAX_TEXT_LEN);
       const date = trimmed(body.date, 10);
       const reason = trimmed(body.reason, MAX_TEXT_LEN);
+      const startTime = trimmed(body.startTime, 5);
+      const endTime = trimmed(body.endTime, 5);
 
       if (!personId) return reply(400, { error: 'personId is required.' });
       if (!date || !DATE_RE.test(date)) {
@@ -155,6 +168,20 @@ exports.handler = async (event) => {
       }
       if (Number.isNaN(new Date(`${date}T00:00:00Z`).getTime())) {
         return reply(400, { error: 'date is not a real calendar date.' });
+      }
+      // Both-or-neither: a lone start or end time is ambiguous (open-ended
+      // off period? typo?) so it is rejected rather than guessed at.
+      if ((startTime && !endTime) || (endTime && !startTime)) {
+        return reply(400, { error: 'startTime and endTime must be set together, or both left blank for a full day off.' });
+      }
+      if (startTime && !TIME_RE.test(startTime)) {
+        return reply(400, { error: 'startTime must be formatted 24-hour HH:MM.' });
+      }
+      if (endTime && !TIME_RE.test(endTime)) {
+        return reply(400, { error: 'endTime must be formatted 24-hour HH:MM.' });
+      }
+      if (startTime && endTime && startTime >= endTime) {
+        return reply(400, { error: 'endTime must be later than startTime.' });
       }
 
       const fields = {
@@ -164,6 +191,7 @@ exports.handler = async (event) => {
         'Added By': session.user.name || ''
       };
       if (reason) fields.Reason = reason;
+      if (startTime && endTime) { fields['Start Time'] = startTime; fields['End Time'] = endTime; }
 
       const created = await airtable('POST', `/${TIME_OFF_TABLE}`, { fields, typecast: true });
       return reply(200, { entry: toEntry(created) });
