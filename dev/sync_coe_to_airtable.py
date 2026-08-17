@@ -152,13 +152,16 @@ DATE_COLUMNS = {
 # (or, for CCC Date, carries the wrong object's copy of them -- see the note above
 # COLUMN_MAP).
 #
-# The kind is load bearing. "Construction Stage 7 (JDE) Date" is a dateTime in
-# Airtable and Salesforce returns a full timestamp
-# (2023-08-29T06:06:56.000+0000); truncating it to a date would silently drop the
-# time on every row it wrote, and a date-only comparison would not even report the
-# change. "Scheduled Closing Date" and "CCC Date" really are date-only.
+# The kind is load bearing: a date-only comparison on a field that is really a
+# dateTime would silently drop the time on every row it wrote. "Scheduled
+# Closing Date" and "CCC Date" really are date-only.
+#
+# Construction Stage 7 (JDE) Date was dropped 2026-08-17 at Mauricio's request
+# (removed from the sync and from Airtable) after a supplementary-pull failure
+# investigation -- see git log for that date. The field itself still exists on
+# Homesite__c and the query still works; it was removed as a product decision,
+# not because the mapping went stale.
 EXTRA_FIELDS = {
-    'Construction Stage 7 (JDE) Date': ('Construction_Stage_7_JDE_Date__c', 'datetime'),
     'Scheduled Closing Date': ('Primary_Opportunity_ID__r.Scheduled_Closing_Date__c', 'date'),
     'CCC Date': ('Primary_Opportunity_ID__r.CCC_Date__c', 'date'),
 }

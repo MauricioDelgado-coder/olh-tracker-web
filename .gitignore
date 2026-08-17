@@ -38,6 +38,14 @@ npm-debug.log*
 yarn-error.log*
 package-lock.json.bak
 
+# Python bytecode cache
+__pycache__/
+*.pyc
+
+# Raw QA export data snapshot -- same reason as the design-tool exports below:
+# real homesite data, regenerable from Salesforce, not source we maintain.
+dev/qa_export.csv
+
 # OS / editor
 .DS_Store
 Thumbs.db

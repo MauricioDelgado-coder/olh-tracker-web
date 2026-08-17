@@ -747,10 +747,11 @@ to Estimated COE in all 1378 rows where both are set), `Construction Stage`
 (populated on 3 of 1400 rows).
 
 Two fields come from a supplementary SOQL because the workbook lacks them:
-`Construction Stage 7 (JDE) Date` and `Scheduled Closing Date`. The first is a
-**dateTime** and Salesforce returns a full timestamp, so it is not truncated to a
-date — doing that would drop the time on every row and a date-only comparison
-would not even report the change.
+`Scheduled Closing Date` and `CCC Date`, both date-only. (`Construction Stage 7
+(JDE) Date` was also sourced this way but was dropped from the sync and from
+Airtable on 2026-08-17 at Mauricio's request; the field still exists on
+Homesite__c and the query still worked, it was simply removed as a product
+decision.)
 
 ## Two bugs this shook out, both now guarded
 
