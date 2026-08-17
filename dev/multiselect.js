@@ -37,7 +37,17 @@
       this.style.position = 'relative';
       this.style.display = 'inline-block';
       if (!this.style.width) this.style.width = '100%';
-      this._build();
+      // connectedCallback can fire more than once for the SAME element --
+      // any reconciler that ever removes-then-reappends this node (a plain
+      // custom element with no special-cased "don't touch me" handling in
+      // the bundler's templating engine, unlike its own sc-raw-select) will
+      // trigger it again. _build() unconditionally appends a fresh _btn and
+      // _panel without removing whatever it appended last time, so a second
+      // call stacks a second, orphaned button+dropdown inside the same host
+      // -- the "duplicated" dropdown seen on tracker.html. Guard so the
+      // actual DOM only ever gets built once per instance; a reconnect just
+      // needs its outside-click listener re-armed, not a rebuild.
+      if (!this._built) { this._built = true; this._build(); }
       this._outsideHandler = (e) => { if (!this.contains(e.target)) this._setOpen(false); };
       document.addEventListener('mousedown', this._outsideHandler);
     }
@@ -152,9 +162,20 @@
 
     /** options: array of strings, or array of {value,label}. */
     setOptions(options) {
-      this._options = (options || []).map((o) =>
+      const next = (options || []).map((o) =>
         (o && typeof o === 'object') ? { value: String(o.value), label: String(o.label != null ? o.label : o.value) }
           : { value: String(o), label: String(o) });
+      // Callers like syncSelects() (pushing a freshly-recomputed options
+      // list down to every ref on every componentDidUpdate) call this on
+      // EVERY render, not just when the list actually changed. Without this
+      // guard, _renderPanel() below wipes and rebuilds the checkbox list
+      // every single time -- including while the panel is open and the
+      // user is mid-click, which reads as the dropdown "not working"/losing
+      // its state constantly. Skip the rebuild when nothing changed.
+      const same = next.length === this._options.length &&
+        next.every((o, i) => o.value === this._options[i].value && o.label === this._options[i].label);
+      if (same) return;
+      this._options = next;
       // Drop selections that no longer exist (e.g. a community list refreshed).
       this._selected = new Set([...this._selected].filter(v => this._options.some(o => o.value === v)));
       if (this._panel) { this._renderPanel(); this._renderLabel(); }
