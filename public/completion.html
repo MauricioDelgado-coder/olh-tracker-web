@@ -832,11 +832,22 @@ window.__OLH_LIVE = { walkRef: false };
       this.dispatchEvent(new CustomEvent('change', { detail: { values: this.getValues() } }));
     }
 
-    /** options: array of strings, or array of {value,label}. */
+    /** options: array of strings, or array of {value,label} / {v,l}. Every
+     *  real caller in this codebase (tracker.html's _filterOptions,
+     *  qa-management.html, completion.html's opts()) produces {v,l} --
+     *  the same shape the old <sc-raw-select>'s <option value="{{o.v}}">
+     *  {{o.l}}</option> templates read. This originally only accepted
+     *  {value,label}, so o.value/o.label were always undefined and every
+     *  option rendered its label as the literal string "undefined". */
     setOptions(options) {
-      const next = (options || []).map((o) =>
-        (o && typeof o === 'object') ? { value: String(o.value), label: String(o.label != null ? o.label : o.value) }
-          : { value: String(o), label: String(o) });
+      const next = (options || []).map((o) => {
+        if (o && typeof o === 'object') {
+          const value = o.value !== undefined ? o.value : o.v;
+          const label = o.label != null ? o.label : (o.l != null ? o.l : value);
+          return { value: String(value), label: String(label) };
+        }
+        return { value: String(o), label: String(o) };
+      });
       // Callers like syncSelects() (pushing a freshly-recomputed options
       // list down to every ref on every componentDidUpdate) call this on
       // EVERY render, not just when the list actually changed. Without this
