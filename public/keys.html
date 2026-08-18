@@ -25,6 +25,11 @@
   .colf-daterange{display:flex;gap:3px}
   .colf-daterange input{height:26px;width:50%;min-width:0;padding:0 3px;border:1px solid #BFB8AB;border-radius:4px;font-size:10px;background:#fff}
   .colf-clear{height:19px;padding:0 6px;border:0;background:none;color:#005DAA;font-size:10px;font-weight:600;cursor:pointer;margin-top:3px}
+  select.status-pill{height:26px;width:100%;min-width:140px;padding:0 26px 0 12px;border:1px solid transparent;border-radius:999px;font-size:11.5px;text-align:center;text-align-last:center;cursor:pointer;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='9' height='6'><path d='M0 0L4.5 6L9 0Z' fill='%23707070'/></svg>");background-repeat:no-repeat;background-position:right 9px center}
+  select.status-pill:disabled{cursor:default;opacity:1;background-image:none;padding-right:12px}
+  .kpi-tile{display:flex;flex-direction:column;justify-content:center;min-width:96px;height:44px;padding:2px 16px;border-radius:10px;line-height:1.15}
+  .kpi-tile .kpi-count{font-size:19px;font-weight:700}
+  .kpi-tile .kpi-label{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;opacity:.85}
 </style>
 </head>
 <body>
@@ -283,6 +288,7 @@
     <h1 style="margin:0;font-size:18px;font-weight:600;letter-spacing:.005em;color:#fff;white-space:nowrap">Keys</h1>
     <span style="font-size:11.5px;color:#C7BFB2;white-space:nowrap">Job #, community, address and key handover status — admin &amp; leadership only</span>
     <span style="margin-left:auto;display:flex;align-items:center;gap:14px">
+      <span id="loadedNote" style="font-size:11px;color:rgba(255,255,255,.55);white-space:nowrap"></span>
       <olh-sync-stamp></olh-sync-stamp><olh-user-chip></olh-user-chip>
     </span>
     <a href="index.html" style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 13px;border:1px solid rgba(255,255,255,.28);border-radius:4px;color:#C7BFB2;font-size:13px;font-weight:500;white-space:nowrap">← All Views</a>
@@ -296,6 +302,14 @@
   <main style="flex:1 1 auto;max-width:1400px;width:100%;margin:0 auto;padding:20px 32px 40px">
 
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;border:1px solid #E4DED2;border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(27,42,88,.05);margin-bottom:14px">
+      <div id="tilePending" class="kpi-tile" style="background:#FBEFC0;color:#8A6B12">
+        <span class="kpi-count" id="tilePendingCount">0</span>
+        <span class="kpi-label">Pending</span>
+      </div>
+      <div id="tilePriority" class="kpi-tile" style="background:#F7D6D6;color:#A73939">
+        <span class="kpi-count" id="tilePriorityCount">0</span>
+        <span class="kpi-label">Priority</span>
+      </div>
       <input id="q" type="search" placeholder="Search job, community, address…" autocomplete="off" style="height:32px;width:250px;padding:0 10px;border:1px solid #BFB8AB;border-radius:4px;font-size:12.5px">
       <button id="btnClearFilters" style="height:30px;padding:0 12px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;color:#6F6963;font-size:12.5px;font-weight:500;cursor:pointer">Clear Column Filters</button>
       <span style="margin-left:auto;font-size:12px;color:#908A82" id="countNote"></span>
@@ -1299,6 +1313,29 @@
 
   var KEY_STATUS_OPTIONS = ['Pending', 'Priority', 'Received', 'Delivered to title', 'Delivered to WHC', 'Other', 'Issue'];
 
+  /* Muted/pastel pill colors per Key Status, applied directly to the select
+     element's background/text (kept inline so it survives the select's
+     disabled state and doesn't depend on a stylesheet load order). Blank
+     falls back to a neutral gray "no status" look. */
+  var STATUS_PILL_STYLES = {
+    '':                    {bg: '#EFEBE3', fg: '#8A8478'},
+    'Pending':             {bg: '#FBEFC0', fg: '#8A6B12'},
+    'Priority':            {bg: '#F7D6D6', fg: '#A73939'},
+    'Issue':               {bg: '#D99A9A', fg: '#5C1414'},
+    'Received':            {bg: '#DCEEDD', fg: '#2F6B3A'},
+    'Delivered to title':  {bg: '#C7E4CE', fg: '#215C33'},
+    'Delivered to WHC':    {bg: '#B2DABC', fg: '#184A28'},
+    'Other':               {bg: '#D9E7F7', fg: '#2A5580'}
+  };
+
+  function paintStatusPill(sel){
+    var s = STATUS_PILL_STYLES[sel.value || ''] || STATUS_PILL_STYLES[''];
+    sel.style.background = s.bg;
+    sel.style.color = s.fg;
+    sel.style.borderColor = 'transparent';
+    sel.style.fontWeight = '600';
+  }
+
   /* One row per job, not per walk -- this is a summary of identity and key
      handover status, not the full tracker grid. Only the Keys section
      (Key Status / Delivered To / Delivery Date) is editable here; Sale Date
@@ -1373,6 +1410,13 @@
     buildMultiOptions(document.getElementById('fCity'), all.map(function(r){ return r.city || BLANK; }));
     buildMultiOptions(document.getElementById('fStatus'), all.map(function(r){ return r.keyStatus || BLANK; }));
 
+    // KPI tiles reflect all active homesites, independent of whatever
+    // column filters are currently applied -- an urgency snapshot, not a
+    // count of the current view.
+    var activeAll = all.filter(function(r){ return !r.closed; });
+    document.getElementById('tilePendingCount').textContent = activeAll.filter(function(r){ return r.keyStatus === 'Pending'; }).length;
+    document.getElementById('tilePriorityCount').textContent = activeAll.filter(function(r){ return r.keyStatus === 'Priority'; }).length;
+
     var rows = all.filter(function(r){
       if(r.closed) return false;
       if(fComm.length && fComm.indexOf(r.community) < 0) return false;
@@ -1422,11 +1466,16 @@
 
       var statusTd = tr.querySelector('[data-cell="keyStatus"]');
       var statusSel = document.createElement('select');
+      statusSel.className = 'status-pill';
       statusSel.disabled = !editable;
       statusSel.innerHTML = '<option value=""></option>' +
         KEY_STATUS_OPTIONS.map(function(o){ return '<option value="' + esc(o) + '">' + esc(o) + '</option>'; }).join('');
       statusSel.value = KEY_STATUS_OPTIONS.indexOf(row.keyStatus) >= 0 ? row.keyStatus : '';
-      statusSel.addEventListener('change', function(){ saveField(row, 'Key Status', statusSel.value || null, statusSel); });
+      paintStatusPill(statusSel);
+      statusSel.addEventListener('change', function(){
+        paintStatusPill(statusSel);
+        saveField(row, 'Key Status', statusSel.value || null, statusSel);
+      });
       statusTd.appendChild(statusSel);
 
       var deliveredTd = tr.querySelector('[data-cell="deliveredTo"]');
@@ -1531,6 +1580,14 @@
       if(!res.ok || !data || !Array.isArray(data.jobs)) throw new Error((data && data.error) || ('Request failed (' + res.status + ')'));
       jobs = data.jobs; managers = data.managers || [];
       await applyAutoKeyStatuses();
+      // <olh-sync-stamp> reads window.OLH_DATA.jobs for its "Last synced"
+      // text; this page fetches its own data directly rather than through
+      // the bundler's shared live-loader, so nothing was ever setting that
+      // global -- the stamp sat permanently blank.
+      window.OLH_DATA = {jobs: jobs, managers: managers, today: new Date(), source: 'airtable'};
+      window.dispatchEvent(new CustomEvent('olh-data'));
+      var loadedNote = document.getElementById('loadedNote');
+      if(loadedNote) loadedNote.textContent = jobs.length.toLocaleString() + (jobs.length === 1 ? ' homesite loaded' : ' homesites loaded');
       render();
     }catch(err){
       toast('err', 'Could Not Load Homesite Data', (err && err.message) || String(err));
