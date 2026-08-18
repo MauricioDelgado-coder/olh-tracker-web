@@ -19,6 +19,12 @@
   tr:nth-child(even) td{background:#FCFAF6}
   td input[type=text],td input[type=date],td select{height:28px;width:100%;min-width:110px;padding:0 8px;border:1px solid #BFB8AB;border-radius:4px;font-size:12.5px;background:#fff}
   td input:disabled,td select:disabled{background:transparent;border-color:transparent;padding:0;color:#303030}
+  tr.filterRow th{position:sticky;top:31px;background:#F6F2EA;padding:5px 8px 8px;border-bottom:1px solid #D8CFBE;text-transform:none;letter-spacing:normal;font-weight:400}
+  .colf-text{height:26px;width:100%;min-width:88px;padding:0 6px;border:1px solid #BFB8AB;border-radius:4px;font-size:11.5px;background:#fff;font-weight:400}
+  tr.filterRow olh-multiselect{height:26px;min-width:88px;font-size:11.5px;border:1px solid #BFB8AB;border-radius:4px;background:#fff}
+  .colf-daterange{display:flex;gap:3px}
+  .colf-daterange input{height:26px;width:50%;min-width:0;padding:0 3px;border:1px solid #BFB8AB;border-radius:4px;font-size:10px;background:#fff}
+  .colf-clear{height:19px;padding:0 6px;border:0;background:none;color:#005DAA;font-size:10px;font-weight:600;cursor:pointer;margin-top:3px}
 </style>
 </head>
 <body>
@@ -291,10 +297,10 @@
 
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;border:1px solid #E4DED2;border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(27,42,88,.05);margin-bottom:14px">
       <input id="q" type="search" placeholder="Search job, community, address…" autocomplete="off" style="height:32px;width:250px;padding:0 10px;border:1px solid #BFB8AB;border-radius:4px;font-size:12.5px">
-      <olh-multiselect id="fComm" placeholder="All communities" style="height:32px;width:180px;padding:0 8px;border:1px solid #BFB8AB;border-radius:4px;font-size:12.5px"></olh-multiselect>
       <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:#6F6963;margin-left:8px">
         <input id="fClosed" type="checkbox"> Show closed jobs too
       </label>
+      <button id="btnClearFilters" style="height:30px;padding:0 12px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;color:#6F6963;font-size:12.5px;font-weight:500;cursor:pointer">Clear Column Filters</button>
       <span style="margin-left:auto;font-size:12px;color:#908A82" id="countNote"></span>
       <button id="btnRefresh" style="height:30px;padding:0 12px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;color:#6F6963;font-size:12.5px;font-weight:500;cursor:pointer">Refresh</button>
     </div>
@@ -312,6 +318,17 @@
             <th>Delivery Date</th>
             <th>Sale Date</th>
             <th>Scheduled Closing</th>
+          </tr>
+          <tr class="filterRow">
+            <th><input id="fJob" class="colf-text" type="text" placeholder="Filter…"></th>
+            <th><olh-multiselect id="fComm" placeholder="All"></olh-multiselect></th>
+            <th><input id="fAddr" class="colf-text" type="text" placeholder="Filter…"></th>
+            <th><olh-multiselect id="fCity" placeholder="All"></olh-multiselect></th>
+            <th><olh-multiselect id="fStatus" placeholder="All"></olh-multiselect></th>
+            <th><input id="fDelivered" class="colf-text" type="text" placeholder="Filter…"></th>
+            <th><div class="colf-daterange"><input id="fDelDateFrom" type="date" title="From"><input id="fDelDateTo" type="date" title="To"></div></th>
+            <th><div class="colf-daterange"><input id="fSaleDateFrom" type="date" title="From"><input id="fSaleDateTo" type="date" title="To"></div></th>
+            <th><div class="colf-daterange"><input id="fCloseDateFrom" type="date" title="From"><input id="fCloseDateTo" type="date" title="To"></div></th>
           </tr>
         </thead>
         <tbody id="rows"></tbody>
@@ -1308,23 +1325,64 @@
     return out;
   }
 
+  var BLANK = '__blank__';
+
+  function dstr(v){ var d = pd(v); if(!d) return null;
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+
+  function inDateRange(v, fromStr, toStr){
+    if(!fromStr && !toStr) return true;
+    var ds = dstr(v);
+    if(!ds) return false;
+    if(fromStr && ds < fromStr) return false;
+    if(toStr && ds > toStr) return false;
+    return true;
+  }
+
+  function buildMultiOptions(el, values){
+    var raw = Array.from(new Set(values)).sort(function(a,b){ return a.localeCompare(b); });
+    var key = raw.join('|');
+    if(el.dataset.built !== key){
+      el.setOptions(raw.map(function(v){
+        return v === BLANK ? {value: BLANK, label: '(Blank)'} : v;
+      }));
+      el.dataset.built = key;
+    }
+  }
+
   function render(){
     var q = (document.getElementById('q').value || '').trim().toLowerCase();
+    var qJob = (document.getElementById('fJob').value || '').trim().toLowerCase();
+    var qAddr = (document.getElementById('fAddr').value || '').trim().toLowerCase();
+    var qDelivered = (document.getElementById('fDelivered').value || '').trim().toLowerCase();
     var fComm = document.getElementById('fComm').getValues();
+    var fCity = document.getElementById('fCity').getValues();
+    var fStatus = document.getElementById('fStatus').getValues();
+    var delFrom = document.getElementById('fDelDateFrom').value || '';
+    var delTo = document.getElementById('fDelDateTo').value || '';
+    var saleFrom = document.getElementById('fSaleDateFrom').value || '';
+    var saleTo = document.getElementById('fSaleDateTo').value || '';
+    var closeFrom = document.getElementById('fCloseDateFrom').value || '';
+    var closeTo = document.getElementById('fCloseDateTo').value || '';
     var showClosed = document.getElementById('fClosed').checked;
 
     var all = buildRows();
 
-    var comms = Array.from(new Set(all.map(function(r){ return r.community; }))).sort(function(a,b){ return a.localeCompare(b); });
-    var commSel = document.getElementById('fComm');
-    if(commSel.dataset.built !== String(comms.length)){
-      commSel.setOptions(comms);
-      commSel.dataset.built = String(comms.length);
-    }
+    buildMultiOptions(document.getElementById('fComm'), all.map(function(r){ return r.community; }));
+    buildMultiOptions(document.getElementById('fCity'), all.map(function(r){ return r.city || BLANK; }));
+    buildMultiOptions(document.getElementById('fStatus'), all.map(function(r){ return r.keyStatus || BLANK; }));
 
     var rows = all.filter(function(r){
       if(!showClosed && r.closed) return false;
       if(fComm.length && fComm.indexOf(r.community) < 0) return false;
+      if(fCity.length && fCity.indexOf(r.city || BLANK) < 0) return false;
+      if(fStatus.length && fStatus.indexOf(r.keyStatus || BLANK) < 0) return false;
+      if(qJob && r.job.toLowerCase().indexOf(qJob) < 0) return false;
+      if(qAddr && (r.address || '').toLowerCase().indexOf(qAddr) < 0) return false;
+      if(qDelivered && (r.deliveredTo || '').toLowerCase().indexOf(qDelivered) < 0) return false;
+      if(!inDateRange(r.deliveryDate, delFrom, delTo)) return false;
+      if(!inDateRange(r.saleDate, saleFrom, saleTo)) return false;
+      if(!inDateRange(r.closingDate, closeFrom, closeTo)) return false;
       if(q && (r.job + ' ' + r.community + ' ' + r.address + ' ' + r.city).toLowerCase().indexOf(q) < 0) return false;
       return true;
     });
@@ -1469,9 +1527,25 @@
   document.getElementById('q').addEventListener('input', function(){
     clearTimeout(window.__tsQt); window.__tsQt = setTimeout(render, 220);
   });
-  document.getElementById('fComm').addEventListener('change', render);
+  ['fJob', 'fAddr', 'fDelivered'].forEach(function(id){
+    document.getElementById(id).addEventListener('input', function(){
+      clearTimeout(window.__tsQt2); window.__tsQt2 = setTimeout(render, 220);
+    });
+  });
+  ['fComm', 'fCity', 'fStatus'].forEach(function(id){
+    document.getElementById(id).addEventListener('change', render);
+  });
+  ['fDelDateFrom', 'fDelDateTo', 'fSaleDateFrom', 'fSaleDateTo', 'fCloseDateFrom', 'fCloseDateTo'].forEach(function(id){
+    document.getElementById(id).addEventListener('change', render);
+  });
   document.getElementById('fClosed').addEventListener('change', render);
   document.getElementById('btnRefresh').addEventListener('click', loadLive);
+  document.getElementById('btnClearFilters').addEventListener('click', function(){
+    ['fJob', 'fAddr', 'fDelivered'].forEach(function(id){ document.getElementById(id).value = ''; });
+    ['fComm', 'fCity', 'fStatus'].forEach(function(id){ document.getElementById(id).setValues([]); });
+    ['fDelDateFrom', 'fDelDateTo', 'fSaleDateFrom', 'fSaleDateTo', 'fCloseDateFrom', 'fCloseDateTo'].forEach(function(id){ document.getElementById(id).value = ''; });
+    render();
+  });
 
   wireAuth(0);
 })();
