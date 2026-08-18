@@ -313,8 +313,9 @@
             <th>Community</th>
             <th>Street Address</th>
             <th>City</th>
+            <th>ECOE</th>
             <th>Key Status</th>
-            <th>Delivered To</th>
+            <th>Key Delivery Notes</th>
             <th>Delivery Date</th>
             <th>Sale Date</th>
             <th>Scheduled Closing</th>
@@ -324,6 +325,7 @@
             <th><olh-multiselect id="fComm" placeholder="All"></olh-multiselect></th>
             <th><input id="fAddr" class="colf-text" type="text" placeholder="Filter…"></th>
             <th><olh-multiselect id="fCity" placeholder="All"></olh-multiselect></th>
+            <th><div class="colf-daterange"><input id="fEcoeFrom" type="date" title="From"><input id="fEcoeTo" type="date" title="To"></div></th>
             <th><olh-multiselect id="fStatus" placeholder="All"></olh-multiselect></th>
             <th><input id="fDelivered" class="colf-text" type="text" placeholder="Filter…"></th>
             <th><div class="colf-daterange"><input id="fDelDateFrom" type="date" title="From"><input id="fDelDateTo" type="date" title="To"></div></th>
@@ -1315,6 +1317,7 @@
         community: f['Community'] || 'Unassigned Community',
         address: f['Street Address'] || '',
         city: f['City'] || '',
+        ecoe: f['Estimated COE Date'] || null,
         keyStatus: f['Key Status'] || '',
         deliveredTo: f['Delivered To'] || '',
         deliveryDate: f['Delivery Date'] || null,
@@ -1364,6 +1367,8 @@
     var saleTo = document.getElementById('fSaleDateTo').value || '';
     var closeFrom = document.getElementById('fCloseDateFrom').value || '';
     var closeTo = document.getElementById('fCloseDateTo').value || '';
+    var ecoeFrom = document.getElementById('fEcoeFrom').value || '';
+    var ecoeTo = document.getElementById('fEcoeTo').value || '';
     var showClosed = document.getElementById('fClosed').checked;
 
     var all = buildRows();
@@ -1383,6 +1388,7 @@
       if(!inDateRange(r.deliveryDate, delFrom, delTo)) return false;
       if(!inDateRange(r.saleDate, saleFrom, saleTo)) return false;
       if(!inDateRange(r.closingDate, closeFrom, closeTo)) return false;
+      if(!inDateRange(r.ecoe, ecoeFrom, ecoeTo)) return false;
       if(q && (r.job + ' ' + r.community + ' ' + r.address + ' ' + r.city).toLowerCase().indexOf(q) < 0) return false;
       return true;
     });
@@ -1410,6 +1416,7 @@
         '<td>' + esc(row.community) + '</td>' +
         '<td>' + esc(row.address || '\u2014') + '</td>' +
         '<td>' + esc(row.city || '\u2014') + '</td>' +
+        '<td>' + fmtD(row.ecoe) + '</td>' +
         '<td data-cell="keyStatus"></td>' +
         '<td data-cell="deliveredTo"></td>' +
         '<td data-cell="deliveryDate"></td>' +
@@ -1474,12 +1481,61 @@
     }
   }
 
+  /* Auto-advance Key Status based on how close the ECOE (Estimated COE
+     Date) is, without ever overriding real handover progress:
+       - blank, 7-21 days out            -> Pending
+       - blank or Pending, <7 days out   -> Priority
+     Never downgrades or touches anything past "Pending" (Received,
+     Delivered to title/WHC, Other, Issue) -- those reflect real work someone
+     already did. Runs once per data load, only for users who can edit
+     tracker.edit, and only writes rows that actually need to change. */
+  async function applyAutoKeyStatuses(){
+    if(!canEdit()) return;
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var updates = [];
+    jobs.forEach(function(j){
+      var f = j.fields;
+      if(f['Record Status'] === 'Closed') return;
+      var ecoe = pd(f['Estimated COE Date']);
+      if(!ecoe) return;
+      var ecoeDay = new Date(ecoe.getFullYear(), ecoe.getMonth(), ecoe.getDate());
+      var daysUntil = Math.round((ecoeDay - today) / 86400000);
+      var current = f['Key Status'] || '';
+      var target = null;
+      if(daysUntil < 7){
+        if(current === '' || current === 'Pending') target = 'Priority';
+      } else if(daysUntil <= 21){
+        if(current === '') target = 'Pending';
+      }
+      if(target) updates.push({job: j, from: current, to: target});
+    });
+    if(!updates.length) return;
+    await Promise.all(updates.map(function(u){
+      return fetch(API + '/update-job', {
+        method: 'POST', headers: authHeaders({'Content-Type':'application/json'}),
+        body: JSON.stringify({recordId: u.job.id, fields: {'Key Status': u.to}})
+      }).then(function(res){
+        return res.json().catch(function(){ return null; }).then(function(){
+          if(!res.ok) return;
+          u.job.fields['Key Status'] = u.to;
+          if(window.OLHAudit){
+            window.OLHAudit.record({
+              recordId: u.job.id, job: u.job.fields['Job #'], field: 'Key Status', label: 'Key Status',
+              from: u.from || null, to: u.to, action: 'edit', page: 'Keys (auto)'
+            }).catch(function(){});
+          }
+        });
+      }).catch(function(){});
+    }));
+  }
+
   async function loadLive(){
     try{
       var res = await fetch(API + '/jobs', {headers: authHeaders()});
       var data = await res.json().catch(function(){ return null; });
       if(!res.ok || !data || !Array.isArray(data.jobs)) throw new Error((data && data.error) || ('Request failed (' + res.status + ')'));
       jobs = data.jobs; managers = data.managers || [];
+      await applyAutoKeyStatuses();
       render();
     }catch(err){
       toast('err', 'Could Not Load Homesite Data', (err && err.message) || String(err));
@@ -1535,7 +1591,7 @@
   ['fComm', 'fCity', 'fStatus'].forEach(function(id){
     document.getElementById(id).addEventListener('change', render);
   });
-  ['fDelDateFrom', 'fDelDateTo', 'fSaleDateFrom', 'fSaleDateTo', 'fCloseDateFrom', 'fCloseDateTo'].forEach(function(id){
+  ['fDelDateFrom', 'fDelDateTo', 'fSaleDateFrom', 'fSaleDateTo', 'fCloseDateFrom', 'fCloseDateTo', 'fEcoeFrom', 'fEcoeTo'].forEach(function(id){
     document.getElementById(id).addEventListener('change', render);
   });
   document.getElementById('fClosed').addEventListener('change', render);
@@ -1543,7 +1599,7 @@
   document.getElementById('btnClearFilters').addEventListener('click', function(){
     ['fJob', 'fAddr', 'fDelivered'].forEach(function(id){ document.getElementById(id).value = ''; });
     ['fComm', 'fCity', 'fStatus'].forEach(function(id){ document.getElementById(id).setValues([]); });
-    ['fDelDateFrom', 'fDelDateTo', 'fSaleDateFrom', 'fSaleDateTo', 'fCloseDateFrom', 'fCloseDateTo'].forEach(function(id){ document.getElementById(id).value = ''; });
+    ['fDelDateFrom', 'fDelDateTo', 'fSaleDateFrom', 'fSaleDateTo', 'fCloseDateFrom', 'fCloseDateTo', 'fEcoeFrom', 'fEcoeTo'].forEach(function(id){ document.getElementById(id).value = ''; });
     render();
   });
 
