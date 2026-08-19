@@ -383,6 +383,7 @@
   var PAGES = [
     { key: "page.home", label: "All Views (home)", href: "index.html", note: "The launcher. A role without this lands on the first page it can open." },
     { key: "page.tracker", label: "QA & Closing Tracker", href: "tracker.html", note: "The homesite grid \u2014 walk dates, meters, keys and notes." },
+    { key: "page.sanmpr", label: "SAN MPR (Sandbox)", href: "tracker-san-mpr.html", note: "San Antonio tracker sandbox on isolated data. Does not read or write the live OLH tracker." },
     { key: "page.completion", label: "Completion Report", href: "completion.html", note: "Homesites under construction with their projected completion and closing dates." },
     { key: "page.walks", label: "Walk Schedule", href: "walk-calendar.html", note: "The published walk calendar and its export." },
     { key: "page.qamgmt", label: "QA Management", href: "qa-management.html", note: "Today's walks by community \u2014 mark each one completed or missed." },
@@ -397,7 +398,8 @@
     { key: "tracker.edit", label: "Edit tracker fields", note: "Change dates, walk managers, notes and checkboxes on the QA & Closing Tracker." },
     { key: "walk.schedule", label: "Schedule & reassign walks", note: "Book Celebration and Acceptance Walks and move them between QA Managers." },
     { key: "optimizer.apply", label: "Apply optimizer suggestions", note: "Accept the schedule optimizer's proposed moves, one at a time or all at once." },
-    { key: "roster.manage", label: "Manage users & permissions", note: "Add and suspend users, change roles, and edit this grid." }
+    { key: "roster.manage", label: "Manage users & permissions", note: "Add and suspend users, change roles, and edit this grid." },
+    { key: "sandbox.edit", label: "Edit SAN MPR sandbox", note: "Change dates, walk managers, notes and checkboxes on the SAN MPR sandbox tracker. Has no effect on the live tracker." }
   ];
 
   var ALL_PAGES = PAGES.map(function (p) { return p.key; });
@@ -405,7 +407,8 @@
   // Shipped defaults. An admin can override these; ROLE_LOCKS keeps the
   // console reachable no matter what the grid is set to.
   var DEFAULT_ROLES = {
-    admin: { label: "Admin", can: ["suite.view", "tracker.edit", "walk.schedule", "optimizer.apply", "roster.manage"].concat(ALL_PAGES) },
+    admin: { label: "Admin", can: ["suite.view", "tracker.edit", "walk.schedule", "optimizer.apply", "roster.manage", "sandbox.edit"].concat(ALL_PAGES) },
+    sandbox: { label: "Sandbox", can: ["suite.view", "page.home", "page.sanmpr", "sandbox.edit"] },
     qam: { label: "QA Manager", can: ["suite.view", "tracker.edit", "walk.schedule", "optimizer.apply", "page.home", "page.tracker", "page.completion", "page.walks", "page.qamgmt", "page.walkstoschedule", "page.scheduler", "page.workload"] },
     cm: { label: "Construction Manager", can: ["suite.view", "tracker.edit", "page.home", "page.tracker", "page.completion", "page.walks"] },
     ccr: { label: "Customer Care", can: ["suite.view", "tracker.edit", "page.home", "page.tracker", "page.walks", "page.qamgmt", "page.walkstoschedule"] },
@@ -417,9 +420,9 @@
   var ADMIN_ONLY_PAGES = ["page.admin"];
   /* Every capability implies being able to see the thing you are changing, so
      an editing permission drags "View the suite" along with it. */
-  var IMPLIES_VIEW = ["tracker.edit", "walk.schedule", "optimizer.apply", "roster.manage"].concat(ALL_PAGES);
+  var IMPLIES_VIEW = ["tracker.edit", "walk.schedule", "optimizer.apply", "roster.manage", "sandbox.edit"].concat(ALL_PAGES);
   /* An editing capability is meaningless without the page it edits. */
-  var NEEDS_PAGE = { "tracker.edit": "page.tracker", "walk.schedule": "page.walks", "optimizer.apply": "page.scheduler", "roster.manage": "page.admin" };
+  var NEEDS_PAGE = { "tracker.edit": "page.tracker", "walk.schedule": "page.walks", "optimizer.apply": "page.scheduler", "roster.manage": "page.admin", "sandbox.edit": "page.sanmpr" };
   var ROLES_KEY = "olh.roles.v1";
 
   var ROLES = {};
@@ -457,14 +460,16 @@
     "tracker.edit": "Your role can view the tracker but not change it.",
     "walk.schedule": "Only QA Managers and admins can schedule or reassign walks.",
     "optimizer.apply": "Only QA Managers and admins can apply optimizer suggestions.",
-    "roster.manage": "Only admins can change the roster."
+    "roster.manage": "Only admins can change the roster.",
+    "sandbox.edit": "Your role can view the SAN MPR sandbox but not change it."
   };
   PAGES.forEach(function (p) { DENY[p.key] = "Your role does not have access to the " + p.label + " page."; });
   var ROLE_ALIAS = {
     "admin": "admin", "qa manager": "qam", "qam": "qam",
     "construction manager": "cm", "cm": "cm",
     "customer care": "ccr", "customer care rep": "ccr", "ccr": "ccr",
-    "leadership": "leadership", "division leadership": "leadership"
+    "leadership": "leadership", "division leadership": "leadership",
+    "sandbox": "sandbox"
   };
 
   var state = { user: null, token: null, demo: false, base: "/api", ready: false };

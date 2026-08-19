@@ -5,9 +5,10 @@
  *
  * This file is the Azure translation of the `[[redirects]]` table in
  * netlify.toml -- the eleven account endpoints plus jobs, update-job and
- * walk-config. It is the ONLY copy of that mapping on this platform, so the
- * routes below and the ones in netlify.toml must stay in step. If you add an
- * endpoint, it goes in both.
+ * walk-config, plus the SAN tracker sandbox pair (jobs-sandbox-san,
+ * update-job-sandbox-san). It is the ONLY copy of that mapping on this
+ * platform, so the routes below and the ones in netlify.toml must stay in
+ * step. If you add an endpoint, it goes in both.
  *
  * Static Web Apps mounts managed functions under /api, so a route of 'jobs'
  * answers at /api/jobs. That is the same public path the Netlify rewrite
@@ -105,7 +106,13 @@ const ROUTES = [
   ['walkMissLog', 'walk-miss-log', 'walk-miss-log'],
 
   // ---- Sync Conflicts resolution -> resolve-conflict.js (roster.manage only)
-  ['resolveConflict', 'resolve-conflict', 'resolve-conflict']
+  ['resolveConflict', 'resolve-conflict', 'resolve-conflict'],
+
+  // ---- SAN tracker sandbox -> jobs-sandbox-san.js / update-job-sandbox-san.js
+  // Isolated dataset (Jobs (Sandbox - SAN) table), same session + permission
+  // checks as the live jobs/update-job routes. Powers tracker-san-mpr.html only.
+  ['jobsSandboxSan', 'jobs-sandbox-san', 'jobs-sandbox-san'],
+  ['updateJobSandboxSan', 'update-job-sandbox-san', 'update-job-sandbox-san']
 ];
 
 for (const [name, route, netlifyFunction] of ROUTES) {

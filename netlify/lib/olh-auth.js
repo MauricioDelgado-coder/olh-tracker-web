@@ -286,7 +286,7 @@ function readSession(token) {
 const ALL_PAGES = [
   'page.home', 'page.tracker', 'page.completion', 'page.walks',
   'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload',
-  'page.walkstoschedule', 'page.admin', 'page.keys'
+  'page.walkstoschedule', 'page.admin', 'page.keys', 'page.sanmpr'
 ];
 
 // Mirrors DEFAULT_ROLES in the frontend auth module. Used when the Roles table
@@ -299,7 +299,7 @@ const ALL_PAGES = [
 // it's granted (and view-only for leadership) alongside it, not alongside
 // page.qamgmt.
 const DEFAULT_ROLES = {
-  admin: ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage'].concat(ALL_PAGES),
+  admin: ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage', 'sandbox.edit'].concat(ALL_PAGES),
   qam: ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply',
     'page.home', 'page.tracker', 'page.completion', 'page.walks', 'page.qamgmt', 'page.missedwalks',
     'page.scheduler', 'page.timeoff', 'page.workload', 'page.walkstoschedule'],
@@ -314,9 +314,15 @@ const DEFAULT_ROLES = {
   // reached by drilling into a record from the tracker). No tracker.edit,
   // walk.schedule, or optimizer.apply: a concierge can see dates and
   // proposed moves but not change them.
-  concierge: ['suite.view', 'page.home', 'page.tracker', 'page.scheduler']
+  concierge: ['suite.view', 'page.home', 'page.tracker', 'page.scheduler'],
+  // Added for the SAN MPR tracker sandbox (San Antonio, isolated Airtable
+  // data). Deliberately minimal: page.home + page.sanmpr + sandbox.edit only,
+  // and NOT tracker.edit -- see the note on sandbox.edit below for why the two
+  // capabilities are kept apart even though they validate the same field
+  // whitelist shape.
+  sandbox: ['suite.view', 'page.home', 'page.sanmpr', 'sandbox.edit']
 };
-const PERMS = ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage']
+const PERMS = ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage', 'sandbox.edit']
   .concat(ALL_PAGES);
 const ROLE_LOCKS = { admin: ['suite.view', 'roster.manage', 'page.admin'] };
 
@@ -324,7 +330,7 @@ const ROLE_LOCKS = { admin: ['suite.view', 'roster.manage', 'page.admin'] };
    enforced here and not just in the grid, because the grid is a UI and this is
    the boundary. */
 const ADMIN_ONLY_PAGES = ['page.admin'];
-const IMPLIES_VIEW = ['tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage']
+const IMPLIES_VIEW = ['tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage', 'sandbox.edit']
   .concat(ALL_PAGES);
 
 /* An editing capability is meaningless without the page it edits, so granting
@@ -334,7 +340,8 @@ const NEEDS_PAGE = {
   'tracker.edit': 'page.tracker',
   'walk.schedule': 'page.walks',
   'optimizer.apply': 'page.scheduler',
-  'roster.manage': 'page.admin'
+  'roster.manage': 'page.admin',
+  'sandbox.edit': 'page.sanmpr'
 };
 
 const ROLE_ALIAS = {
@@ -343,11 +350,13 @@ const ROLE_ALIAS = {
   'construction manager': 'cm', 'cm': 'cm',
   'customer care': 'ccr', 'customer care rep': 'ccr', 'ccr': 'ccr',
   'leadership': 'leadership', 'division leadership': 'leadership',
-  'concierge': 'concierge', 'homebuyer concierge': 'concierge'
+  'concierge': 'concierge', 'homebuyer concierge': 'concierge',
+  'sandbox': 'sandbox'
 };
 const ROLE_LABEL = {
   admin: 'Admin', qam: 'QA Manager', cm: 'Construction Manager',
-  ccr: 'Customer Care', leadership: 'Division Leadership', concierge: 'Concierge'
+  ccr: 'Customer Care', leadership: 'Division Leadership', concierge: 'Concierge',
+  sandbox: 'Sandbox'
 };
 
 /** Unknown roles collapse to the least-privileged role, never to admin. */
@@ -548,14 +557,23 @@ const PAGE_LABEL = {
   'page.timeoff': 'Time Off',
   'page.workload': 'Workload Predictor',
   'page.walkstoschedule': 'Walks To Schedule',
-  'page.admin': 'User Administration'
+  'page.admin': 'User Administration',
+  'page.keys': 'Keys',
+  'page.sanmpr': 'SAN MPR (Sandbox)'
 };
 const DENY = {
   'suite.view': 'Your account does not have access to the OLH Suite yet. Ask an admin to grant it.',
   'tracker.edit': 'Your role can view the tracker but not change it.',
   'walk.schedule': 'Only QA Managers and admins can schedule or reassign walks.',
   'optimizer.apply': 'Only QA Managers and admins can apply optimizer suggestions.',
-  'roster.manage': 'Only admins can change the roster.'
+  'roster.manage': 'Only admins can change the roster.',
+  // Deliberately its own capability rather than reusing tracker.edit: the two
+  // validate the same field-whitelist shape, but a role that can only edit the
+  // SAN MPR sandbox must never be able to reach the live update-job endpoint
+  // just because it holds an editing capability. Keeping them separate means
+  // the sandbox role's write access ends at the sandbox table even if someone
+  // calls the API directly instead of clicking through the UI.
+  'sandbox.edit': 'Your role can view the SAN MPR sandbox but not change it.'
 };
 // Same sentence the frontend builds, so a refusal reads identically whether it
 // came from the page or from the API behind it.

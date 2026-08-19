@@ -26,7 +26,7 @@ const eq = (label, got, want) => {
 
 const PAGES = ['page.home', 'page.tracker', 'page.completion', 'page.walks',
   'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload',
-  'page.walkstoschedule', 'page.admin'];
+  'page.walkstoschedule', 'page.admin', 'page.keys', 'page.sanmpr'];
 
 console.log('\n=== the catalog ===');
 for (const p of PAGES) {
@@ -34,7 +34,7 @@ for (const p of PAGES) {
   else bad(p + ' is a known permission', 'missing from PERMS, so normalizeMatrix drops it');
 }
 eq('PERMS is capabilities then pages', A.PERMS, [
-  'suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage'
+  'suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage', 'sandbox.edit'
 ].concat(PAGES));
 
 console.log('\n=== every page has a refusal message ===');
@@ -58,6 +58,17 @@ eq('concierge cannot edit anything',
 eq('concierge has no page.admin', A.DEFAULT_ROLES.concierge.includes('page.admin'), false);
 eq('roleSlug recognizes concierge', A.roleSlug('Concierge'), 'concierge');
 eq('roleLabel for concierge', A.roleLabel('concierge'), 'Concierge');
+
+eq('sandbox role has page.sanmpr and sandbox.edit, nothing more sensitive',
+  ['page.sanmpr', 'sandbox.edit', 'tracker.edit', 'page.tracker', 'roster.manage']
+    .filter((p) => A.DEFAULT_ROLES.sandbox.includes(p)),
+  ['page.sanmpr', 'sandbox.edit']);
+eq('roleSlug recognizes sandbox', A.roleSlug('Sandbox'), 'sandbox');
+eq('roleLabel for sandbox', A.roleLabel('sandbox'), 'Sandbox');
+eq('sandbox.edit does not imply tracker.edit',
+  A.normalizeMatrix({ sandbox: ['suite.view', 'sandbox.edit'] }).sandbox.includes('tracker.edit'), false);
+eq('sandbox.edit drags page.sanmpr',
+  A.normalizeMatrix({ sandbox: ['sandbox.edit'] }).sandbox.includes('page.sanmpr'), true);
 
 console.log('\n=== normalizeMatrix ===');
 const norm = A.normalizeMatrix;
