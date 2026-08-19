@@ -495,6 +495,15 @@ def read_workbook(path, division):
         job = norm_text(r[idx['Job #']])
         if not job:
             continue
+        # SANDBOX-ONLY exclusion, permanent per Mauricio (2026-08-19): Lot
+        # Status "Z" homesites are excluded from the SAN sandbox tracker's
+        # scope by design, not pending an investigation. Confirmed 1:1 against
+        # Salesforce (not a sync artifact); the code never occurs in OLH.
+        # This lives ONLY here, not in the shared no-COE skill or in
+        # sync_coe_to_airtable.py, so it has zero effect on the live OLH
+        # pipeline.
+        if norm_text(r[idx['Lot Status']]) == 'Z':
+            continue
         rec = {}
         for col, field in COLUMN_MAP.items():
             rec[field] = normalise(field, r[idx[col]])

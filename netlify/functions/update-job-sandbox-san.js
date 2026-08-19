@@ -33,25 +33,18 @@ const RECORD_ID_RE = /^rec[A-Za-z0-9]{14}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
- * SELECT_OPTIONS on this sandbox is just Key Status -- the four Miss Reason
- * fields don't exist on the sandbox table, so there is nothing to validate
- * choices for.
+ * No 'select' fields remain on this sandbox -- Key Status was the only one,
+ * and it was removed 2026-08-19 along with the rest of the Keys section
+ * (Mauricio: keys duplicate what keys.html already owns, and don't belong on
+ * this tracker). Kept as an empty map rather than deleted outright so a
+ * future select field has an obvious place to register its choices.
  */
-const SELECT_OPTIONS = Object.freeze({
-  'Key Status': Object.freeze([
-    'Pending',
-    'Priority',
-    'Received',
-    'Delivered to title',
-    'Delivered to WHC',
-    'Other',
-    'Issue'
-  ])
-});
+const SELECT_OPTIONS = Object.freeze({});
 
 /**
- * THE WHITELIST. Trimmed from the live 45 to the 26 fields that exist on
- * Jobs (Sandbox - SAN). Anything else is rejected.
+ * THE WHITELIST. 26 fields that exist on Jobs (Sandbox - SAN), minus the
+ * 4-field Keys section (removed 2026-08-19), plus ACM QA Date, TPI, TPI
+ * Date, and CM Notes (added the same day). Anything else is rejected.
  *   checkbox -> boolean
  *   date     -> 'YYYY-MM-DD'
  *   datetime -> ISO 8601 parseable
@@ -61,10 +54,14 @@ const SELECT_OPTIONS = Object.freeze({
  *   text     -> string, < 10000 chars
  */
 const EDITABLE = Object.freeze({
+  'CM Notes': 'text',
+  'ACM QA Date': 'date',
   'QA Ready': 'checkbox',
   'QAI Date': 'date',
   'QAI Manager': 'link',
   'QAI Complete': 'checkbox',
+  'TPI': 'checkbox',
+  'TPI Date': 'date',
   'QAA Date': 'date',
   'QAA Manager': 'link',
   'QAA Accepted': 'checkbox',
@@ -82,10 +79,6 @@ const EDITABLE = Object.freeze({
   'Construction Risk Notes': 'text',
   'Land Risk': 'checkbox',
   'Land Risk Notes': 'text',
-  'Key Status': 'select',
-  'Delivered To': 'line',
-  'Delivery Date': 'date',
-  'Notes': 'text',
   'CEL Letter Sent': 'checkbox'
 });
 
