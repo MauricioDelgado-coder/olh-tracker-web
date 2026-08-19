@@ -607,7 +607,7 @@ def main():
         if lock is not None:
             os.close(lock)
             try:
-                os.unlink(os.path.join(WORK, 'sync-%s.lock' % div))
+                os.unlink(os.path.join(WORK, 'sync-sandbox-%s.lock' % div))
             except OSError:
                 pass
 
