@@ -122,7 +122,11 @@ cd "$REPO" || { say "FAILED: no repo at $REPO"; exit 1; }
 # run_report.py refuses to hand over a workbook that fails its own verification,
 # and the sync refuses to run on one. That chain is deliberate: a day when
 # Salesforce changes shape should stop here, not propagate 1400 wrong rows.
-if AIRTABLE_PAT="$PAT" python3 dev/sync_coe_to_airtable.py --out "$OUT" >> "$LOG" 2>&1; then
+#
+# OLH_SYNC_ORIGIN=launchd tags every Sync History row this run writes so the
+# tracker's sync-history page can tell an unattended run from someone running
+# the script by hand (which never sets this, and so logs as "manual").
+if AIRTABLE_PAT="$PAT" OLH_SYNC_ORIGIN=launchd python3 dev/sync_coe_to_airtable.py --out "$OUT" >> "$LOG" 2>&1; then
   say "=== done ==="
   exit 0
 fi

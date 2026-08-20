@@ -31,9 +31,11 @@ Python env run_report.py already builds (pandas + openpyxl).
 """
 
 import argparse
+import getpass
 import glob
 import json
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -43,6 +45,7 @@ from datetime import datetime, timezone
 
 BASE_ID = 'appYX9df4lGO6G2uz'
 JOBS_TABLE = 'tblqpmwtZ6i4gtogl'
+SYNC_HISTORY_TABLE = 'tblBHVI7HelUb6vyk'
 AIRTABLE_API = 'https://api.airtable.com/v0'
 
 WORK = os.path.expanduser('~/.homesite_coe_report')
@@ -347,6 +350,50 @@ def write_batches(verb, payload, dry):
     return done
 
 
+def log_sync_history(div, started, finished, status, exit_code, reason, metrics):
+    """Append one row to the Sync History table -- one row per run, success or
+    not, so the tracker's sync-history page reflects what launchd actually did
+    rather than a log file nobody but this machine can read.
+
+    Deliberately never allowed to fail the run: if Airtable is unreachable
+    here (the same failure the sync itself may have just hit), a missing log
+    row is fine. Raising from inside logging and masking the sync's own real
+    result would not be.
+    """
+    fields = {
+        'Started': started.isoformat(),
+        'Finished': finished.isoformat(),
+        'Duration (sec)': round((finished - started).total_seconds()),
+        'Status': status,
+        'Exit Code': exit_code,
+        'Reason': reason,
+        'Division': div,
+        'Origin': os.environ.get('OLH_SYNC_ORIGIN', 'manual'),
+        'Host': socket.gethostname(),
+        'Triggered By': getpass.getuser(),
+    }
+    for key, field in (('rows_raw', 'Rows Raw'), ('rows_final', 'Rows Final'),
+                       ('airtable_total', 'Airtable Total Rows'),
+                       ('airtable_active', 'Airtable Active Rows')):
+        if metrics.get(key) is not None:
+            fields[field] = metrics[key]
+
+    try:
+        token = os.environ.get('AIRTABLE_PAT', '').strip()
+        if not token:
+            print('WARNING: no AIRTABLE_PAT -- Sync History row not written.', flush=True)
+            return
+        req = urllib.request.Request(
+            AIRTABLE_API + '/' + BASE_ID + '/' + SYNC_HISTORY_TABLE,
+            method='POST',
+            data=json.dumps({'records': [{'fields': fields}], 'typecast': True}).encode(),
+            headers={'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            r.read()
+    except Exception as e:
+        print('WARNING: could not write Sync History row: %s' % e, flush=True)
+
+
 # ---------------------------------------------------------------------------
 # Salesforce
 # ---------------------------------------------------------------------------
@@ -564,6 +611,16 @@ def main():
     assert_disjoint()
     div = a.division.upper()
 
+    # Every run gets exactly one Sync History row, success or not -- see
+    # log_sync_history(). status/exit_code/reason are set at whichever exit
+    # point is actually hit; metrics is filled in as far as sync() gets before
+    # any failure, so a row for a failed run can still carry a partial picture
+    # (e.g. rows_raw/rows_final if the Salesforce pull succeeded but the
+    # Airtable write did not).
+    started = datetime.now(timezone.utc)
+    metrics = {}
+    status, exit_code, reason = 'Success', 0, ''
+
     # One run at a time, always.
     #
     # Two concurrent runs each read the table, each compute the same set of
@@ -573,25 +630,39 @@ def main():
     # This happened for real, because a wrapper timed out and the run looked dead
     # while it was still writing.
     lock = None
-    if not a.dry_run:
-        os.makedirs(WORK, exist_ok=True)
-        lock_path = os.path.join(WORK, 'sync-%s.lock' % div)
-        try:
-            lock = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            os.write(lock, ('pid %d started %s\n'
-                            % (os.getpid(), datetime.now().isoformat())).encode())
-        except FileExistsError:
-            try:
-                held = open(lock_path).read().strip()
-            except OSError:
-                held = '(unreadable)'
-            die('another sync for %s is already running:\n  %s\n\n'
-                'Wait for it to finish. A slow run is normal -- ~1400 rows takes a '
-                'couple of minutes. If you are certain nothing is running, delete:\n'
-                '  %s' % (div, held, lock_path))
-
     try:
-        sync(a, div)
+        if not a.dry_run:
+            os.makedirs(WORK, exist_ok=True)
+            lock_path = os.path.join(WORK, 'sync-%s.lock' % div)
+            try:
+                lock = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.write(lock, ('pid %d started %s\n'
+                                % (os.getpid(), datetime.now().isoformat())).encode())
+            except FileExistsError:
+                try:
+                    held = open(lock_path).read().strip()
+                except OSError:
+                    held = '(unreadable)'
+                status, exit_code = 'Blocked', 1
+                reason = 'Another sync for %s already running (lock collision): %s' % (div, held)
+                die('another sync for %s is already running:\n  %s\n\n'
+                    'Wait for it to finish. A slow run is normal -- ~1400 rows takes a '
+                    'couple of minutes. If you are certain nothing is running, delete:\n'
+                    '  %s' % (div, held, lock_path))
+
+        sync(a, div, metrics)
+    except SystemExit as e:
+        # die() calls sys.exit(msg) with the message AS the exit code, not an
+        # int -- that string is exactly the reason a person watching the log
+        # would want. A plain int code (or None, for a clean exit that still
+        # somehow lands here) falls back to a generic reason.
+        if status == 'Success':  # not already set by the lock-collision branch above
+            status = 'Failed'
+        exit_code = 1
+        reason = reason or (str(e.code) if e.code else 'Exited unexpectedly.')
+    except Exception as e:
+        status, exit_code = 'Failed', 1
+        reason = reason or ('%s: %s' % (type(e).__name__, e))
     finally:
         if lock is not None:
             os.close(lock)
@@ -599,9 +670,17 @@ def main():
                 os.unlink(os.path.join(WORK, 'sync-%s.lock' % div))
             except OSError:
                 pass
+        finished = datetime.now(timezone.utc)
+        if not a.dry_run:
+            log_sync_history(div, started, finished, status, exit_code, reason, metrics)
+
+    if status != 'Success':
+        sys.exit(exit_code)
 
 
-def sync(a, div):
+def sync(a, div, metrics=None):
+    if metrics is None:
+        metrics = {}
     if not a.skip_report:
         run_report(a.out, div, a.alias, a.report_script)
 
@@ -612,8 +691,10 @@ def sync(a, div):
     print('\nReading %s' % path, flush=True)
     report = read_workbook(path, div)
     print('  %d homesites in scope' % len(report), flush=True)
+    metrics['rows_final'] = len(report)
 
     extra = supplementary(div, a.alias)
+    metrics['rows_raw'] = len(extra)
     for job, vals in extra.items():
         if job in report:
             report[job].update(vals)
@@ -741,6 +822,8 @@ def sync(a, div):
               '`node dev/dedupe-jobs.js --apply`.' % len(after_dupes))
     active = sum(1 for r in after.values()
                  if (r.get('fields') or {}).get('Record Status') == 'Active')
+    metrics['airtable_total'] = len(after)
+    metrics['airtable_active'] = active
     print('\nDone. Airtable now holds %d rows, %d Active.' % (len(after), active))
     if active != len(report):
         print('NOTE: %d Active but %d in the pull. Every row in the pull is set Active '

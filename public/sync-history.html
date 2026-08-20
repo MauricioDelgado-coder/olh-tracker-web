@@ -107,6 +107,9 @@
       <select id="filterDivision" style="height:36px;padding:0 10px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;color:#303030;font-size:12.5px">
         <option value="">All divisions</option>
       </select>
+      <select id="filterOrigin" style="height:36px;padding:0 10px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;color:#303030;font-size:12.5px">
+        <option value="">All origins</option>
+      </select>
       <select id="filterStatus" style="height:36px;padding:0 10px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;color:#303030;font-size:12.5px">
         <option value="">All statuses</option>
       </select>
@@ -122,6 +125,9 @@
             <th>Finished</th>
             <th>Duration</th>
             <th>Division</th>
+            <th>Origin</th>
+            <th>Host</th>
+            <th>Triggered By</th>
             <th>Rows Raw</th>
             <th>Rows Final</th>
             <th>Airtable Total</th>
@@ -1118,6 +1124,7 @@
 
   function populateFilters(){
     var divisions = Array.from(new Set(entries.map(function(e){ return e.division; }).filter(Boolean))).sort();
+    var origins = Array.from(new Set(entries.map(function(e){ return e.origin; }).filter(Boolean))).sort();
     var statuses = Array.from(new Set(entries.map(function(e){ return e.status; }).filter(Boolean))).sort();
 
     var divSel = document.getElementById('filterDivision');
@@ -1125,6 +1132,12 @@
     divSel.innerHTML = '<option value="">All divisions</option>' +
       divisions.map(function(d){ return '<option value="' + esc(d) + '">' + esc(d) + '</option>'; }).join('');
     divSel.value = divisions.indexOf(curDiv) >= 0 ? curDiv : '';
+
+    var originSel = document.getElementById('filterOrigin');
+    var curOrigin = originSel.value;
+    originSel.innerHTML = '<option value="">All origins</option>' +
+      origins.map(function(o){ return '<option value="' + esc(o) + '">' + esc(o) + '</option>'; }).join('');
+    originSel.value = origins.indexOf(curOrigin) >= 0 ? curOrigin : '';
 
     var statSel = document.getElementById('filterStatus');
     var curStat = statSel.value;
@@ -1135,9 +1148,10 @@
 
   function applyFilters(){
     var div = document.getElementById('filterDivision').value;
+    var origin = document.getElementById('filterOrigin').value;
     var stat = document.getElementById('filterStatus').value;
     filtered = entries.filter(function(e){
-      return (!div || e.division === div) && (!stat || e.status === stat);
+      return (!div || e.division === div) && (!origin || e.origin === origin) && (!stat || e.status === stat);
     });
   }
 
@@ -1199,6 +1213,9 @@
         '<td>' + esc(fmtWhen(e.finished)) + '</td>' +
         '<td>' + esc(fmtDuration(e.durationSec)) + '</td>' +
         '<td>' + esc(e.division || '—') + '</td>' +
+        '<td>' + esc(e.origin || '—') + '</td>' +
+        '<td style="color:#6F6963">' + esc(e.host || '—') + '</td>' +
+        '<td style="color:#6F6963">' + esc(e.triggeredBy || '—') + '</td>' +
         '<td>' + esc(fmtNum(e.rowsRaw)) + '</td>' +
         '<td>' + esc(fmtNum(e.rowsFinal)) + '</td>' +
         '<td>' + esc(fmtNum(e.airtableTotalRows)) + '</td>' +
@@ -1254,6 +1271,7 @@
 
   document.getElementById('btnRefresh').addEventListener('click', loadLive);
   document.getElementById('filterDivision').addEventListener('change', render);
+  document.getElementById('filterOrigin').addEventListener('change', render);
   document.getElementById('filterStatus').addEventListener('change', render);
 
   wireAuth(0);

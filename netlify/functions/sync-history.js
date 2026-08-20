@@ -27,7 +27,10 @@ function entryOf(rec) {
     rowsFinal: typeof f['Rows Final'] === 'number' ? f['Rows Final'] : null,
     airtableTotalRows: typeof f['Airtable Total Rows'] === 'number' ? f['Airtable Total Rows'] : null,
     airtableActiveRows: typeof f['Airtable Active Rows'] === 'number' ? f['Airtable Active Rows'] : null,
-    division: f.Division || ''
+    division: f.Division || '',
+    origin: (f.Origin && f.Origin.name) || f.Origin || '',
+    host: f.Host || '',
+    triggeredBy: f['Triggered By'] || ''
   };
 }
 
