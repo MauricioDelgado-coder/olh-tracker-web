@@ -56,7 +56,8 @@ const FUNCTIONS = [
   'walk-miss-log.js',
   'resolve-conflict.js',
   'jobs-sandbox-san.js',
-  'update-job-sandbox-san.js'
+  'update-job-sandbox-san.js',
+  'sync-history.js'
 ];
 
 /** Shared helpers. Kept outside functions/ on Netlify so it is never itself an

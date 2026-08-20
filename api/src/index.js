@@ -112,7 +112,10 @@ const ROUTES = [
   // Isolated dataset (Jobs (Sandbox - SAN) table), same session + permission
   // checks as the live jobs/update-job routes. Powers tracker-san-mpr.html only.
   ['jobsSandboxSan', 'jobs-sandbox-san', 'jobs-sandbox-san'],
-  ['updateJobSandboxSan', 'update-job-sandbox-san', 'update-job-sandbox-san']
+  ['updateJobSandboxSan', 'update-job-sandbox-san', 'update-job-sandbox-san'],
+
+  // ---- Sync History (read-only log of daily Airtable sync runs) -> sync-history.js
+  ['syncHistory', 'sync-history', 'sync-history']
 ];
 
 for (const [name, route, netlifyFunction] of ROUTES) {
