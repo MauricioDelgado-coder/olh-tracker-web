@@ -1,4 +1,4 @@
-e788ebe648c7768888100745a8808eb153d3ff4f5b891ecb0832ae8c1bc92f49  dev/sync_coe_to_airtable.py
+ee7df5b19d801066d81890dbd897d596147429b96b1d4a69b4c82ded22ed36fe  dev/sync_coe_to_airtable.py
 # ^ sha256 of the sync_coe_to_airtable.py version last uploaded to the
 # olh-airtable-sync skill (scripts/sync_coe_to_airtable.py) on Claude.ai.
 # Update this after every re-upload: shasum -a 256 dev/sync_coe_to_airtable.py
