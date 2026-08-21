@@ -416,11 +416,14 @@
     { key: "page.completion", label: "Completion Report", href: "completion.html", note: "Homesites under construction with their projected completion and closing dates." },
     { key: "page.walks", label: "Walk Schedule", href: "walk-calendar.html", note: "The published walk calendar and its export." },
     { key: "page.qamgmt", label: "QA Management", href: "qa-management.html", note: "Today's walks by community \u2014 mark each one completed or missed." },
+    { key: "page.missedwalks", label: "Missed Walks", href: "missed-walks.html", note: "Walks marked missed \u2014 reconcile each one once it has been handled." },
     { key: "page.walkstoschedule", label: "Walks To Schedule", href: "walks-to-schedule.html", note: "Homesites where QAI is complete but the CEL letter has not been sent yet." },
     { key: "page.scheduler", label: "Schedule Optimizer", href: "scheduler.html", note: "Proposed walk moves and the workload balance behind them." },
+    { key: "page.timeoff", label: "Time Off", href: "time-off.html", note: "QA Manager time off \u2014 who is off the board on a given day." },
     { key: "page.workload", label: "Workload Predictor", href: "workload.html", note: "Forecast walk volume per QA Manager." },
-    { key: "page.admin", label: "User Administration", href: "admin.html", note: "This console \u2014 the roster and this grid." },
-    { key: "page.keys", label: "Keys", href: "keys.html", note: "Job #, community, address and key handover status, editable. Admin and Division Leadership only." }
+    { key: "page.keys", label: "Keys", href: "keys.html", note: "Job #, community, address and key handover status, editable. Admin and Division Leadership only." },
+    { key: "page.synchistory", label: "Sync History", href: "sync-history.html", note: "Every daily Airtable sync run \u2014 success, failure, and row counts." },
+    { key: "page.admin", label: "User Administration", href: "admin.html", note: "This console \u2014 the roster and this grid." }
   ];
 
   var PERMS = [
@@ -439,10 +442,10 @@
   var DEFAULT_ROLES = {
     admin: { label: "Admin", can: ["suite.view", "tracker.edit", "walk.schedule", "optimizer.apply", "roster.manage", "sandbox.edit"].concat(ALL_PAGES) },
     sandbox: { label: "Sandbox", can: ["suite.view", "page.home", "page.sanmpr", "sandbox.edit"] },
-    qam: { label: "QA Manager", can: ["suite.view", "tracker.edit", "walk.schedule", "optimizer.apply", "page.home", "page.tracker", "page.completion", "page.walks", "page.qamgmt", "page.walkstoschedule", "page.scheduler", "page.workload"] },
+    qam: { label: "QA Manager", can: ["suite.view", "tracker.edit", "walk.schedule", "optimizer.apply", "page.home", "page.tracker", "page.completion", "page.walks", "page.qamgmt", "page.missedwalks", "page.walkstoschedule", "page.scheduler", "page.timeoff", "page.workload"] },
     cm: { label: "Construction Manager", can: ["suite.view", "tracker.edit", "page.home", "page.tracker", "page.completion", "page.walks"] },
-    ccr: { label: "Customer Care", can: ["suite.view", "tracker.edit", "page.home", "page.tracker", "page.walks", "page.qamgmt", "page.walkstoschedule"] },
-    leadership: { label: "Division Leadership", can: ["suite.view", "page.home", "page.tracker", "page.completion", "page.walks", "page.qamgmt", "page.walkstoschedule", "page.scheduler", "page.workload", "page.keys"] },
+    ccr: { label: "Customer Care", can: ["suite.view", "tracker.edit", "page.home", "page.tracker", "page.walks", "page.qamgmt", "page.missedwalks", "page.walkstoschedule"] },
+    leadership: { label: "Division Leadership", can: ["suite.view", "page.home", "page.tracker", "page.completion", "page.walks", "page.qamgmt", "page.missedwalks", "page.walkstoschedule", "page.scheduler", "page.timeoff", "page.workload", "page.keys", "page.synchistory"] },
     concierge: { label: "Concierge", can: ["suite.view", "page.home", "page.tracker", "page.scheduler"] }
   };
   var ROLE_LOCKS = { admin: ["suite.view", "roster.manage", "page.admin"] };
