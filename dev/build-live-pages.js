@@ -1505,6 +1505,51 @@ const PAGES = {
        '    }\n' +
        '  }'],
 
+      /* The manager dropdown wrote the wrong kind of id.
+       *
+       * walkOptions() built options as {v: p.id} from WALK_ROSTER, where p.id
+       * is the roster's "Person Id" ("anthonybullard"). QAI/QAA/CEL/ACC
+       * Manager are LINKED RECORD fields on the Managers table, so update-job's
+       * link validation rejected every save:
+       *
+       *   "CEL Manager" contains value(s) that are not Airtable record ids:
+       *   "anthonybullard". The field was reverted.
+       *
+       * The same mismatch broke reading: mgrValue is the stored value, a
+       * Managers record id, which never equalled any Person-Id option, so a
+       * walk WITH a manager rendered as "-- unassigned --".
+       *
+       * Resolved by name against OLH_DATA.managers, the same join
+       * resolveMgrId() does on scheduler.html and walk-calendar.html. Against
+       * the live tables all 36 roster people resolve; anyone who did not could
+       * not be written to the field at all, so they are omitted rather than
+       * offered as a choice guaranteed to fail. */
+      ['walkOptions emits Managers-table record ids, not roster Person Ids',
+       '  walkOptions(){\n' +
+       '    const roster = window.WALK_ROSTER || [];\n' +
+       "    const name = n => String(n).replace(/\\s*\\(OLH\\)\\s*$/i, '');\n" +
+       "    const qam = roster.filter(p => p.role === 'QAM').sort((a,b)=>a.name.localeCompare(b.name))\n" +
+       "      .map(p => ({v:p.id, l:name(p.name) + ' \\u2014 QA Manager, ' + p.home}));\n" +
+       "    const ccr = roster.filter(p => p.role === 'CCR').sort((a,b)=>a.name.localeCompare(b.name))\n" +
+       "      .map(p => ({v:p.id, l:name(p.name) + ' \\u2014 CCR (manual only)'}));\n" +
+       "    return [{v:'', l:'\\u2014 unassigned \\u2014'}].concat(qam, ccr);\n" +
+       '  }',
+       '  walkOptions(){\n' +
+       '    const roster = window.WALK_ROSTER || [];\n' +
+       "    const name = n => String(n).replace(/\\s*\\(OLH\\)\\s*$/i, '');\n" +
+       '    const recByName = new Map(((window.OLH_DATA && window.OLH_DATA.managers) || [])\n' +
+       "      .map(m => [String(m.name || '').trim(), m.id]));\n" +
+       '    const opt = (p, suffix) => {\n' +
+       "      const rec = recByName.get(String(p.name || '').trim());\n" +
+       '      return rec ? {v: rec, l: name(p.name) + suffix} : null;\n' +
+       '    };\n' +
+       "    const qam = roster.filter(p => p.role === 'QAM').sort((a,b)=>a.name.localeCompare(b.name))\n" +
+       "      .map(p => opt(p, ' \\u2014 QA Manager, ' + p.home)).filter(Boolean);\n" +
+       "    const ccr = roster.filter(p => p.role === 'CCR').sort((a,b)=>a.name.localeCompare(b.name))\n" +
+       "      .map(p => opt(p, ' \\u2014 CCR (manual only)')).filter(Boolean);\n" +
+       "    return [{v:'', l:'\\u2014 unassigned \\u2014'}].concat(qam, ccr);\n" +
+       '  }'],
+
       /* mgrById() memoises into this._mgr on first render, which happens before
        * any data has arrived -- so it freezes an EMPTY map and every milestone
        * manager, buyer and person field renders blank for the life of the page.
