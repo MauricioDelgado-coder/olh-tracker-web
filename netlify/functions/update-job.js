@@ -83,7 +83,11 @@ async function fetchJobsOnDay(pat, dayKey, excludeId) {
       IS_SAME({ACC Date}, "${dayKey}T00:00:00.000Z", 'day')
     )
   )`;
-  const fieldsParam = ['QAI Manager', 'QAI Date', 'QAA Manager', 'QAA Date',
+  // 'Job #' is here only so the hard-overlap message can name the colliding
+  // homesite. Without it f['Job #'] is undefined and the message read
+  // "Job #unknown", which told the person nothing about what to go fix.
+  const fieldsParam = ['Job #',
+    'QAI Manager', 'QAI Date', 'QAA Manager', 'QAA Date',
     'CEL Manager', 'CEL Date', 'ACC Manager', 'ACC Date']
     .map((f) => `fields%5B%5D=${encodeURIComponent(f)}`).join('&');
   const url = `${AIRTABLE_API}/${BASE_ID}/${JOBS_TABLE}` +
@@ -145,6 +149,20 @@ async function checkSchedulingConflict(pat, recordId, currentFields, clean) {
         const otherDef = WALK_TYPES[otherType];
         const links = f[otherDef.managerField];
         if (!Array.isArray(links) || links.indexOf(managerId) < 0) continue;
+
+        /* This walk has to be on the day we are summing.
+         *
+         * fetchJobsOnDay() returns a record if ANY of its four walks falls on
+         * dayKey -- that is the correct query, because we cannot filter per
+         * walk type in one formula. But a returned record's OTHER walks are
+         * usually on completely different days. Without this guard every walk
+         * that manager holds on that record counted toward this one day: a job
+         * whose QAI is today and whose CEL is six weeks out charged the CEL's
+         * 120 minutes to today. Summed across a manager's whole book that
+         * reached 1740 minutes for a single day and made the 480 cap
+         * unsatisfiable, so the save was refused and nothing could be
+         * scheduled. */
+        if (dayKeyOf(f[otherDef.dateField], otherDef.isDatetime) !== dayKey) continue;
 
         loadMinutes += WALK_DURATION_MIN[otherType];
 
