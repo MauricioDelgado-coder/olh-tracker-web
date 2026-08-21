@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>Walk Reassignment — OLH Tracker</title>
+<style>
+  :root{
+    --navy:#1B2A58; --ink:#2B2620; --muted:#6F6963; --faint:#908A82;
+    --border:#E4DED2; --bg:#FBF8F3; --card:#ffffff;
+    --amber-bg:#FFF8E1; --amber-ink:#7C4A03; --amber-border:#F0DFAE;
+    --red-bg:#FDECEA; --red-ink:#7F1D1D; --red-border:#F3C6C2;
+    --green-bg:#EAF6EE; --green-ink:#1E5B34; --green-border:#C6E6D2;
+    --lock:#B08900;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  }
+  a{color:var(--navy)}
+  header.top{
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    padding:14px 20px; background:var(--card); border-bottom:1px solid var(--border);
+    position:sticky; top:0; z-index:50;
+  }
+  header.top h1{
+    margin:0; font:400 20px/1.2 Georgia,"Times New Roman",serif; color:var(--navy);
+    letter-spacing:-.01em;
+  }
+  header.top .sub{font-size:12.5px; color:var(--faint); margin-top:2px}
+  .back-link{font-size:13px; color:var(--muted); text-decoration:none; white-space:nowrap}
+  .back-link:hover{text-decoration:underline}
+  .controls{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:12px 20px; background:var(--card); border-bottom:1px solid var(--border);
+  }
+  .controls label{font-size:12.5px; color:var(--muted); font-weight:600}
+  input[type=date], select{
+    font:inherit; padding:6px 9px; border:1px solid var(--border); border-radius:7px;
+    background:#fff; color:var(--ink);
+  }
+  button{
+    font:inherit; font-weight:600; padding:7px 14px; border-radius:7px; border:1px solid var(--border);
+    background:#fff; color:var(--ink); cursor:pointer;
+  }
+  button:hover:not(:disabled){background:#F5F1E9}
+  button:disabled{opacity:.45; cursor:not-allowed}
+  button.primary{background:var(--navy); border-color:var(--navy); color:#fff}
+  button.primary:hover:not(:disabled){background:#142146}
+  button.danger-text{color:var(--red-ink); border-color:var(--red-border); background:var(--red-bg)}
+  .banner{padding:10px 20px; font-size:13px; border-bottom:1px solid transparent}
+  .banner.warn{background:var(--amber-bg); color:var(--amber-ink); border-color:var(--amber-border)}
+  .banner.error{background:var(--red-bg); color:var(--red-ink); border-color:var(--red-border)}
+  .banner.info{background:#EEF1FA; color:var(--navy); border-color:#D9DFF3}
+  .banner a{color:inherit; text-decoration:underline}
+  main{padding:16px 20px 120px}
+  #board{display:flex; gap:14px; align-items:flex-start; overflow-x:auto; padding-bottom:8px}
+  .col{
+    flex:0 0 260px; background:var(--card); border:1px solid var(--border); border-radius:10px;
+    display:flex; flex-direction:column; min-height:120px;
+  }
+  .col.dragover{border-color:var(--navy); box-shadow:0 0 0 2px rgba(27,42,88,.15) inset}
+  .col-head{
+    padding:10px 12px; border-bottom:1px solid var(--border); border-radius:10px 10px 0 0;
+  }
+  .col-head .name{font-weight:700; font-size:13.5px; color:var(--ink)}
+  .col-head .meta{font-size:11.5px; color:var(--faint); margin-top:2px; display:flex; gap:8px; flex-wrap:wrap}
+  .col-head .meta .cap-over{color:var(--red-ink); font-weight:700}
+  .col-body{padding:8px; display:flex; flex-direction:column; gap:7px; min-height:60px}
+  .col-empty{font-size:12px; color:var(--faint); padding:8px 4px; text-align:center}
+  .card{
+    background:#fff; border:1px solid var(--border); border-radius:8px; padding:8px 9px;
+    cursor:grab; font-size:12.5px; position:relative;
+  }
+  .card:active{cursor:grabbing}
+  .card.locked{cursor:not-allowed; background:#FAFAF8; opacity:.85}
+  .card.staged{border-color:var(--navy); box-shadow:0 0 0 1px var(--navy) inset}
+  .card .row1{display:flex; justify-content:space-between; gap:6px; align-items:baseline}
+  .card .job{font-weight:700; color:var(--navy)}
+  .card .type{
+    font-size:10.5px; font-weight:700; padding:1px 6px; border-radius:999px; letter-spacing:.02em;
+  }
+  .type-QAI{background:#E7EEFB; color:#1B4FA0}
+  .type-QAA{background:#EAF6EE; color:#1E5B34}
+  .type-CEL{background:#FBEFE0; color:#8A5A12}
+  .type-ACC{background:#F6E8F6; color:#7A2E82}
+  /* Left-edge accent on the card itself. Deliberately separate from
+     .type-QAI etc above -- those are also used on the small pill badge
+     inside the card, and giving the outer card the same class name would
+     tint its whole background instead of just the pill. */
+  .card-accent-QAI{border-left:3px solid #1B4FA0}
+  .card-accent-QAA{border-left:3px solid #1E5B34}
+  .card-accent-CEL{border-left:3px solid #8A5A12}
+  .card-accent-ACC{border-left:3px solid #7A2E82}
+  .card .community{color:var(--muted); margin-top:3px}
+  .card .time{color:var(--faint); font-size:11.5px; margin-top:2px}
+  .card .lockrow{display:flex; align-items:center; gap:4px; color:var(--lock); font-size:11px; margin-top:4px; font-weight:600}
+  .card .stagedfrom{font-size:11px; color:var(--navy); margin-top:4px; font-style:italic}
+  .card .warnline{font-size:11px; color:var(--red-ink); margin-top:4px; font-weight:600}
+  #pendingBar{
+    position:fixed; left:0; right:0; bottom:0; background:var(--card); border-top:1px solid var(--border);
+    padding:12px 20px; display:flex; align-items:center; gap:14px; box-shadow:0 -2px 10px rgba(0,0,0,.06);
+    z-index:60;
+  }
+  #pendingBar .count{font-weight:700}
+  #pendingList{flex:1; overflow-x:auto; white-space:nowrap; display:flex; gap:8px}
+  .pending-chip{
+    display:inline-flex; align-items:center; gap:6px; font-size:12px; background:#F5F1E9;
+    border:1px solid var(--border); border-radius:999px; padding:4px 10px; white-space:nowrap;
+  }
+  .pending-chip button{padding:0 4px; border:none; background:none; font-size:13px; line-height:1; color:var(--muted)}
+  .pending-chip.saving{background:#EEF1FA; border-color:#D9DFF3}
+  .pending-chip.done{background:var(--green-bg); border-color:var(--green-border); color:var(--green-ink)}
+  .pending-chip.error{background:var(--red-bg); border-color:var(--red-border); color:var(--red-ink)}
+  #addColWrap{display:flex; align-items:center; gap:6px}
+  .loading{padding:40px; text-align:center; color:var(--faint)}
+</style>
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>Walk Reassignment</h1>
+    <div class="sub">Drag walks between managers, then Submit. Nothing saves until you press Submit.</div>
+  </div>
+  <a class="back-link" href="/">&larr; All Views</a>
+</header>
+<div class="controls">
+  <label for="walkDate">Date</label>
+  <input type="date" id="walkDate">
+  <button id="btnLoad">Load</button>
+  <button id="btnRefresh" title="Re-fetch from Airtable">Refresh</button>
+  <div id="addColWrap" style="margin-left:auto">
+    <label for="addColSelect">Add manager column</label>
+    <select id="addColSelect"><option value="">Choose…</option></select>
+  </div>
+</div>
+<div id="banners"></div>
+<main>
+  <div id="board"><div class="loading">Loading…</div></div>
+</main>
+<div id="pendingBar" style="display:none">
+  <div class="count"><span id="pendingCount">0</span> pending change<span id="pendingPlural">s</span></div>
+  <div id="pendingList"></div>
+  <button id="btnClear">Clear all</button>
+  <button id="btnSubmit" class="primary">Submit changes</button>
+</div>
+<script>
+(function () {
+  'use strict';
+
+  /* ---- Constants -------------------------------------------------------- */
+  var API = '/api';
+  var SESSION_KEY = 'olh.session.v1';
+  var TZ = 'America/New_York';
+
+  // Mirrors netlify/functions/update-job.js WALK_TYPES / WALK_DURATION_MIN /
+  // DAILY_CAP_MIN. Keep in sync by hand if those ever change -- there is no
+  // single source of truth shared between the two.
+  var WALK_FIELD = {
+    QAI: { date: 'QAI Date',  manager: 'QAI Manager', lock: 'QAI Manager Lock', datetime: false, minutes: 120 },
+    QAA: { date: 'QAA Date',  manager: 'QAA Manager', lock: 'QAA Manager Lock', datetime: false, minutes: 60  },
+    CEL: { date: 'CEL Date',  manager: 'CEL Manager', lock: 'CEL Manager Lock', datetime: true,  minutes: 120 },
+    ACC: { date: 'ACC Date',  manager: 'ACC Manager', lock: 'ACC Manager Lock', datetime: true,  minutes: 60  }
+  };
+  var WALK_TYPES = ['QAI', 'QAA', 'CEL', 'ACC'];
+  var DAILY_CAP_MIN = 480;
+
+  /* ---- Auth (mirrors the shared OLHAuth module's session contract) ------ */
+  function getSession() {
+    try { var v = localStorage.getItem(SESSION_KEY); return v ? JSON.parse(v) : null; }
+    catch (e) { return null; }
+  }
+  function authHeaders(extra) {
+    var h = Object.assign({ Accept: 'application/json' }, extra || {});
+    var s = getSession();
+    var tok = s && s.token;
+    if (tok) {
+      h.Authorization = 'Bearer ' + tok;
+      h['X-OLH-Token'] = 'Bearer ' + tok; // survives Azure's Authorization overwrite
+    }
+    return h;
+  }
+
+  /* ---- State -------------------------------------------------------------
+     jobs: raw [{id, fields}] from /api/jobs, unfiltered.
+     managers: [{id, name, email, role, active}] from /api/jobs.
+     walks: derived per selected date -- rebuilt on load/refresh only.
+     pending: Map key "<recordId>:<walkType>" -> {
+       recordId, walkType, jobNumber, community, timeLabel,
+       fromManagerId, fromManagerName, toManagerId, toManagerName,
+       status: 'staged'|'saving'|'done'|'error', error
+     }
+     extraCols: manager ids added via the "Add manager column" picker that
+       have no walk of their own yet, so an empty column exists to drop onto.
+  --------------------------------------------------------------------------*/
+  var state = {
+    jobs: [], managers: [], walks: [], can: [], user: null,
+    pending: new Map(), extraCols: [], dateKey: '', loading: false
+  };
+
+  /* ---- Small helpers ------------------------------------------------------ */
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  function todayEastern() {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  }
+  function easternDateKey(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+  }
+  function easternTimeLabel(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' }).format(d);
+  }
+  function managerName(id) {
+    if (!id) return 'Unassigned';
+    var m = state.managers.find(function (x) { return x.id === id; });
+    return m ? m.name : '(unknown manager)';
+  }
+  function pendKey(recordId, walkType) { return recordId + ':' + walkType; }
+
+  function showBanner(kind, html) {
+    document.getElementById('banners').innerHTML =
+      '<div class="banner ' + kind + '">' + html + '</div>';
+  }
+  function clearBanner() { document.getElementById('banners').innerHTML = ''; }
+
+  /* ---- Data loading -------------------------------------------------------
+     Deliberately talks to the same two endpoints the rest of the suite uses
+     (/api/session to check who's signed in and what they can do, /api/jobs
+     for the raw records) and nothing else -- no separate backend, no direct
+     Airtable calls. Writes go through the existing /api/update-job, whose
+     five validation layers (session, permission, field whitelist, type
+     coercion, scheduling-conflict check) this page relies on rather than
+     re-implementing. */
+  function apiGet(path) {
+    return fetch(API + path, { headers: authHeaders() }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (body) {
+        if (res.status === 401) {
+          var e = new Error((body && body.error) || 'Your session has expired.');
+          e.status = 401; throw e;
+        }
+        if (!res.ok || !body) {
+          throw new Error((body && body.error) || (path + ' failed (' + res.status + ')'));
+        }
+        return body;
+      });
+    });
+  }
+
+  function loadSession() {
+    return apiGet('/session').then(function (data) {
+      state.user = data.user || null;
+      state.can = data.can || [];
+    });
+  }
+
+  function loadJobs() {
+    return apiGet('/jobs?refresh=1').then(function (data) {
+      state.jobs = Array.isArray(data.jobs) ? data.jobs : [];
+      state.managers = Array.isArray(data.managers) ? data.managers : [];
+      state.managers.sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+    });
+  }
+
+  /**
+   * Rebuild state.walks for state.dateKey (a YYYY-MM-DD string, interpreted
+   * in Eastern time). Mirrors the walk-review skill's Phase 1 filter:
+   *   - skip archived / manually-excluded rows
+   *   - QAI/QAA compare the plain date string directly (no timezone -- these
+   *     fields carry no clock time on the Jobs record)
+   *   - CEL/ACC are UTC datetimes; convert to Eastern before comparing days
+   *   - CEL/ACC walks only count if CEL Letter Sent is checked
+   */
+  function buildWalks() {
+    var out = [];
+    var dateKey = state.dateKey;
+    state.jobs.forEach(function (job) {
+      var f = job.fields || {};
+      if (f['Manual Archive - Do Not Resync']) return;
+      if (f['Record Status'] === 'Closed') return;
+
+      WALK_TYPES.forEach(function (type) {
+        var cfg = WALK_FIELD[type];
+        var raw = f[cfg.date];
+        if (!raw) return;
+        var dayKey = cfg.datetime ? easternDateKey(raw) : String(raw).slice(0, 10);
+        if (dayKey !== dateKey) return;
+        if ((type === 'CEL' || type === 'ACC') && !f['CEL Letter Sent']) return;
+
+        var link = f[cfg.manager];
+        var managerId = (Array.isArray(link) && link.length) ? link[0] : null;
+
+        out.push({
+          recordId: job.id,
+          jobNumber: f['Job #'] || '(no job #)',
+          community: f['Community'] || '',
+          address: [f['Street Address'], f['City']].filter(Boolean).join(', '),
+          walkType: type,
+          raw: raw,
+          timeLabel: cfg.datetime ? easternTimeLabel(raw) : null,
+          managerId: managerId,
+          locked: !!f[cfg.lock],
+          minutes: cfg.minutes
+        });
+      });
+    });
+    // Stable-ish sort: time first (untimed QAI/QAA before timed CEL/ACC reads
+    // oddly otherwise), then job number, so re-renders don't reshuffle cards.
+    out.sort(function (a, b) {
+      var ta = a.raw && WALK_FIELD[a.walkType].datetime ? a.raw : '';
+      var tb = b.raw && WALK_FIELD[b.walkType].datetime ? b.raw : '';
+      if (ta !== tb) return ta < tb ? -1 : 1;
+      return String(a.jobNumber).localeCompare(String(b.jobNumber));
+    });
+    state.walks = out;
+  }
+
+  /* ---- Derived view: effective manager per walk --------------------------
+     A walk's "effective" column is its staged destination if one is pending,
+     otherwise its original manager (or the Unassigned bucket). Nothing here
+     touches state.jobs/state.walks -- this is purely a rendering lens over
+     pending, so Clear/undo is instant and never needs a re-fetch. */
+  function effectiveManagerId(w) {
+    var p = state.pending.get(pendKey(w.recordId, w.walkType));
+    if (p) return p.toManagerId || null;
+    return w.managerId || null;
+  }
+
+  function columnWalks(managerId) {
+    return state.walks.filter(function (w) { return effectiveManagerId(w) === managerId; });
+  }
+
+  function columnMinutes(managerId) {
+    return columnWalks(managerId).reduce(function (sum, w) { return sum + w.minutes; }, 0);
+  }
+
+  /** CEL/ACC walks in this column sharing the exact same clock time -- a
+   *  physically-impossible double-booking. Client-side heads-up only; the
+   *  server's own check on submit is authoritative. */
+  function columnDuplicateTimes(managerId) {
+    var seen = {};
+    var dups = [];
+    columnWalks(managerId).forEach(function (w) {
+      if (!WALK_FIELD[w.walkType].datetime) return;
+      var k = w.raw;
+      if (seen[k]) dups.push(k);
+      seen[k] = (seen[k] || 0) + 1;
+    });
+    return dups;
+  }
+
+  function allColumnIds() {
+    var ids = {};
+    state.walks.forEach(function (w) { ids[effectiveManagerId(w) || ''] = true; });
+    state.extraCols.forEach(function (id) { ids[id] = true; });
+    var list = Object.keys(ids).filter(function (id) { return id !== ''; });
+    list.sort(function (a, b) { return managerName(a).localeCompare(managerName(b)); });
+    var hasUnassigned = Object.prototype.hasOwnProperty.call(ids, '');
+    return (hasUnassigned ? [''] : []).concat(list);
+  }
+
+  /* ---- Rendering ----------------------------------------------------------- */
+  function cardHtml(w) {
+    var eff = effectiveManagerId(w);
+    var key = pendKey(w.recordId, w.walkType);
+    var p = state.pending.get(key);
+    var staged = !!p;
+    var classes = 'card card-accent-' + w.walkType + (w.locked ? ' locked' : '') + (staged ? ' staged' : '');
+    var dup = false;
+    if (WALK_FIELD[w.walkType].datetime) {
+      dup = columnDuplicateTimes(eff).indexOf(w.raw) >= 0;
+    }
+    var overCap = columnMinutes(eff) > DAILY_CAP_MIN;
+    return '' +
+      '<div class="' + classes + '" draggable="' + (w.locked ? 'false' : 'true') + '" ' +
+      'data-record="' + esc(w.recordId) + '" data-type="' + w.walkType + '" data-current="' + esc(eff || '') + '">' +
+      '<div class="row1"><span class="job">#' + esc(w.jobNumber) + '</span>' +
+      '<span class="type type-' + w.walkType + '">' + w.walkType + '</span></div>' +
+      '<div class="community">' + esc(w.community || w.address || '(no community)') + '</div>' +
+      (w.timeLabel ? '<div class="time">' + esc(w.timeLabel) + ' ET</div>' : '<div class="time">No set time</div>') +
+      (w.locked ? '<div class="lockrow">&#128274; Locked &mdash; cannot reassign</div>' : '') +
+      (staged ? '<div class="stagedfrom">was: ' + esc(p.fromManagerName) + '</div>' : '') +
+      (dup ? '<div class="warnline">Same time as another walk on this manager</div>' : '') +
+      (overCap && !dup ? '<div class="warnline">Manager over ' + DAILY_CAP_MIN + '-min cap</div>' : '') +
+      '</div>';
+  }
+
+  function columnHtml(managerId) {
+    var name = managerId ? managerName(managerId) : 'Unassigned';
+    var walks = columnWalks(managerId);
+    var minutes = columnMinutes(managerId);
+    var overCap = minutes > DAILY_CAP_MIN;
+    var dupCount = managerId ? columnDuplicateTimes(managerId).length : 0;
+    var metaBits = [walks.length + ' walk' + (walks.length === 1 ? '' : 's')];
+    if (managerId) metaBits.push((overCap ? '<span class="cap-over">' : '') + minutes + ' min' + (overCap ? '</span>' : ''));
+    if (dupCount) metaBits.push('<span class="cap-over">' + dupCount + ' time clash</span>');
+    var body = walks.length
+      ? walks.map(cardHtml).join('')
+      : '<div class="col-empty">Drop a walk here</div>';
+    return '' +
+      '<div class="col" data-manager="' + esc(managerId || '') + '">' +
+      '<div class="col-head"><div class="name">' + esc(name) + '</div>' +
+      '<div class="meta">' + metaBits.join(' &middot; ') + '</div></div>' +
+      '<div class="col-body">' + body + '</div>' +
+      '</div>';
+  }
+
+  function renderBoard() {
+    var board = document.getElementById('board');
+    if (state.loading) { board.innerHTML = '<div class="loading">Loading…</div>'; return; }
+    var cols = allColumnIds();
+    if (!cols.length) {
+      board.innerHTML = '<div class="loading">No QAI/QAA/CEL/ACC walks found for ' + esc(state.dateKey) + '.</div>';
+    } else {
+      board.innerHTML = cols.map(function (id) { return columnHtml(id || null); }).join('');
+    }
+    wireDragAndDrop();
+  }
+
+  function renderAddColumnSelect() {
+    var sel = document.getElementById('addColSelect');
+    var current = allColumnIds().filter(Boolean);
+    var opts = ['<option value="">Choose…</option>'].concat(
+      state.managers
+        .filter(function (m) { return current.indexOf(m.id) < 0; })
+        .map(function (m) { return '<option value="' + esc(m.id) + '">' + esc(m.name) + '</option>'; })
+    );
+    sel.innerHTML = opts.join('');
+  }
+
+  function renderPendingBar() {
+    var bar = document.getElementById('pendingBar');
+    var entries = Array.from(state.pending.values());
+    if (!entries.length) { bar.style.display = 'none'; return; }
+    bar.style.display = 'flex';
+    document.getElementById('pendingCount').textContent = String(entries.length);
+    document.getElementById('pendingPlural').textContent = entries.length === 1 ? '' : 's';
+    var list = document.getElementById('pendingList');
+    list.innerHTML = entries.map(function (p) {
+      var key = pendKey(p.recordId, p.walkType);
+      var cls = 'pending-chip' + (p.status && p.status !== 'staged' ? ' ' + p.status : '');
+      var label = '#' + esc(p.jobNumber) + ' ' + p.walkType + ': ' + esc(p.fromManagerName) + ' &rarr; ' + esc(p.toManagerName);
+      var tail = p.status === 'saving' ? ' (saving…)'
+        : p.status === 'done' ? ' (saved)'
+        : p.status === 'error' ? ' (failed: ' + esc(p.error || 'unknown error') + ')'
+        : '';
+      var removeBtn = (!p.status || p.status === 'staged' || p.status === 'error')
+        ? '<button data-undo="' + esc(key) + '" title="Remove this change">&times;</button>' : '';
+      return '<span class="' + cls + '">' + label + tail + removeBtn + '</span>';
+    }).join('');
+    list.querySelectorAll('[data-undo]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        state.pending.delete(btn.getAttribute('data-undo'));
+        renderAll();
+      });
+    });
+  }
+
+  function renderAll() {
+    renderBoard();
+    renderAddColumnSelect();
+    renderPendingBar();
+  }
+
+  /* ---- Drag & drop ---------------------------------------------------------
+     Native HTML5 DnD, no library. Dropping a card onto a column only ever
+     updates state.pending -- it never touches state.jobs and never calls the
+     API. That is the whole point: nothing is committed until Submit. */
+  var dragPayload = null;
+
+  function wireDragAndDrop() {
+    document.querySelectorAll('.card[draggable="true"]').forEach(function (card) {
+      card.addEventListener('dragstart', function (ev) {
+        dragPayload = {
+          recordId: card.getAttribute('data-record'),
+          walkType: card.getAttribute('data-type'),
+          fromManagerId: card.getAttribute('data-current') || null
+        };
+        ev.dataTransfer.effectAllowed = 'move';
+        try { ev.dataTransfer.setData('text/plain', JSON.stringify(dragPayload)); } catch (e) {}
+      });
+      card.addEventListener('dragend', function () { dragPayload = null; });
+    });
+
+    document.querySelectorAll('.col').forEach(function (col) {
+      col.addEventListener('dragover', function (ev) {
+        ev.preventDefault();
+        ev.dataTransfer.dropEffect = 'move';
+        col.classList.add('dragover');
+      });
+      col.addEventListener('dragleave', function () { col.classList.remove('dragover'); });
+      col.addEventListener('drop', function (ev) {
+        ev.preventDefault();
+        col.classList.remove('dragover');
+        var payload = dragPayload;
+        if (!payload) {
+          try { payload = JSON.parse(ev.dataTransfer.getData('text/plain')); } catch (e) { return; }
+        }
+        if (!payload) return;
+        handleDrop(payload, col.getAttribute('data-manager') || null);
+      });
+    });
+  }
+
+  function handleDrop(payload, toManagerId) {
+    var w = state.walks.find(function (x) {
+      return x.recordId === payload.recordId && x.walkType === payload.walkType;
+    });
+    if (!w || w.locked) return;
+
+    var key = pendKey(w.recordId, w.walkType);
+    var effNow = effectiveManagerId(w);
+    if (effNow === (toManagerId || null)) return; // dropped on its own column, no-op
+
+    if ((w.managerId || null) === (toManagerId || null)) {
+      // Dropped back onto its original manager -- cancel the staged change
+      // rather than staging a same-to-same no-op.
+      state.pending.delete(key);
+    } else {
+      state.pending.set(key, {
+        recordId: w.recordId,
+        walkType: w.walkType,
+        jobNumber: w.jobNumber,
+        fromManagerId: w.managerId || null,
+        fromManagerName: managerName(w.managerId),
+        toManagerId: toManagerId || null,
+        toManagerName: managerName(toManagerId),
+        status: 'staged',
+        error: null
+      });
+    }
+    renderAll();
+  }
+
+  /* ---- Submit --------------------------------------------------------------
+     Sequential, not parallel: Airtable's own 5 req/s cap plus the fact that
+     /api/update-job re-reads the record's current fields for its conflict
+     check means overlapping writes to nearby records could race each other's
+     view of "today's load" for a manager who appears in more than one staged
+     change. One at a time is slower but never wrong. */
+  function submitPending() {
+    var entries = Array.from(state.pending.values()).filter(function (p) {
+      return !p.status || p.status === 'staged' || p.status === 'error';
+    });
+    if (!entries.length) return Promise.resolve();
+
+    var btn = document.getElementById('btnSubmit');
+    btn.disabled = true;
+
+    var chain = Promise.resolve();
+    entries.forEach(function (p) {
+      chain = chain.then(function () {
+        p.status = 'saving'; p.error = null; renderPendingBar();
+        var field = WALK_FIELD[p.walkType].manager;
+        var fields = {};
+        fields[field] = p.toManagerId ? [p.toManagerId] : [];
+        return fetch(API + '/update-job', {
+          method: 'POST',
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ recordId: p.recordId, fields: fields })
+        }).then(function (res) {
+          return res.json().catch(function () { return null; }).then(function (body) {
+            if (!res.ok) {
+              p.status = 'error';
+              p.error = (body && body.error) || ('HTTP ' + res.status);
+            } else {
+              p.status = 'done';
+              // Reflect the change locally so the board doesn't flicker back
+              // to the old assignment before the post-submit refresh lands.
+              var job = state.jobs.find(function (j) { return j.id === p.recordId; });
+              if (job) job.fields[field] = p.toManagerId ? [p.toManagerId] : [];
+            }
+          });
+        }).catch(function (err) {
+          p.status = 'error';
+          p.error = err && err.message ? err.message : 'Network error.';
+        }).then(function () { renderPendingBar(); });
+      });
+    });
+
+    return chain.then(function () {
+      var succeeded = entries.filter(function (p) { return p.status === 'done'; });
+      var failed = entries.filter(function (p) { return p.status === 'error'; });
+      succeeded.forEach(function (p) { state.pending.delete(pendKey(p.recordId, p.walkType)); });
+
+      // Optimistic local state is already updated (see above), but it can
+      // only reflect what THIS browser just wrote -- another tab, another
+      // person, or the server's own conflict-check side effects are not
+      // visible until we re-read. Re-fetch for real rather than trusting the
+      // local mutation as final. If the re-fetch itself fails, fall back to
+      // the optimistic view rather than leaving the board blank.
+      return loadJobs()
+        .then(function () { buildWalks(); })
+        .catch(function () { buildWalks(); })
+        .then(function () {
+          btn.disabled = state.can.indexOf('walk.schedule') < 0;
+          renderAll();
+          if (failed.length) {
+            showBanner('error',
+              '<strong>' + failed.length + ' change' + (failed.length === 1 ? '' : 's') + ' did not save.</strong> ' +
+              'They are still listed below with the reason -- fix and resubmit, or remove them.' +
+              (succeeded.length ? ' ' + succeeded.length + ' other change' + (succeeded.length === 1 ? '' : 's') + ' saved.' : ''));
+          } else {
+            showBanner('info', '<strong>Saved.</strong> ' + succeeded.length + ' walk' + (succeeded.length === 1 ? '' : 's') + ' reassigned.');
+          }
+        });
+    });
+  }
+
+  /* ---- Init / wiring ------------------------------------------------------- */
+  function setLoading(v) { state.loading = v; renderBoard(); }
+
+  function loadForDate(dateKey) {
+    if (state.pending.size) {
+      var ok = confirm('You have unsaved pending changes for the current date. Loading a new date will discard them. Continue?');
+      if (!ok) return Promise.resolve();
+      state.pending.clear();
+    }
+    state.dateKey = dateKey;
+    setLoading(true);
+    clearBanner();
+    return loadJobs().then(function () {
+      buildWalks();
+      setLoading(false);
+      renderAll();
+    }).catch(function (err) {
+      setLoading(false);
+      if (err && err.status === 401) {
+        showBanner('error', 'Your session has expired. <a href="/">Sign in again</a>, then reload this page.');
+      } else {
+        showBanner('error', 'Could not load walks: ' + esc(err && err.message ? err.message : String(err)));
+      }
+    });
+  }
+
+  function init() {
+    var dateInput = document.getElementById('walkDate');
+    dateInput.value = todayEastern();
+
+    var session = getSession();
+    if (!session || !session.token) {
+      showBanner('error', 'You are not signed in. <a href="/">Sign in at the OLH Tracker home page</a>, then reload this page.');
+      document.getElementById('board').innerHTML = '';
+      return;
+    }
+
+    loadSession().then(function () {
+      if (state.can.indexOf('walk.schedule') < 0) {
+        showBanner('warn',
+          'Your role can view this page but not reassign walks (needs the "Schedule walks" permission). ' +
+          'You can still see the schedule below, but Submit will be disabled.');
+      }
+      document.getElementById('btnSubmit').disabled = state.can.indexOf('walk.schedule') < 0;
+      return loadForDate(dateInput.value);
+    }).catch(function (err) {
+      if (err && err.status === 401) {
+        showBanner('error', 'Your session has expired. <a href="/">Sign in again</a>, then reload this page.');
+      } else {
+        showBanner('error', 'Could not verify your session: ' + esc(err && err.message ? err.message : String(err)));
+      }
+      document.getElementById('board').innerHTML = '';
+    });
+
+    document.getElementById('btnLoad').addEventListener('click', function () {
+      loadForDate(dateInput.value);
+    });
+    document.getElementById('btnRefresh').addEventListener('click', function () {
+      loadForDate(state.dateKey || dateInput.value);
+    });
+    document.getElementById('addColSelect').addEventListener('change', function () {
+      var id = this.value;
+      if (id && state.extraCols.indexOf(id) < 0) state.extraCols.push(id);
+      this.value = '';
+      renderAll();
+    });
+    document.getElementById('btnClear').addEventListener('click', function () {
+      if (!state.pending.size) return;
+      if (!confirm('Discard all ' + state.pending.size + ' pending change(s)? Nothing has been saved yet.')) return;
+      state.pending.clear();
+      renderAll();
+    });
+    document.getElementById('btnSubmit').addEventListener('click', function () {
+      var entries = Array.from(state.pending.values());
+      var actionable = entries.filter(function (p) { return !p.status || p.status === 'staged' || p.status === 'error'; });
+      if (!actionable.length) return;
+      if (!confirm('Save ' + actionable.length + ' walk reassignment(s) to Airtable now? This cannot be undone from this screen.')) return;
+      submitPending();
+    });
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
