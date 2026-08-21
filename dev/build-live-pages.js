@@ -1437,6 +1437,74 @@ const PAGES = {
        '    logEdit();\n' +
        "    this.flash('Saved locally');"],
 
+      /* loadLive ran before there was a session to authenticate with.
+       *
+       * componentDidMount did `this._wireAuth(0); this.loadLive();`, but
+       * _wireAuth only POLLS for OLHAuth and then calls restore()
+       * asynchronously. loadLive therefore fired with no Authorization header,
+       * 401'd, and -- being a one-shot with a silent catch -- left state.live
+       * false for the life of the page, which disables every edit.
+       *
+       * Until the honesty fix above that was invisible, because commit() fell
+       * through to flash('Saved'). Afterwards it correctly said "Not saved" on
+       * every edit, which is truthful but points at the wrong thing: the fault
+       * is that the page never loaded a session, not that the save failed.
+       *
+       * loadLive now hangs off restore(), the no-OLHAuth timeout still calls it
+       * once so the design preview is unchanged, and it no longer swallows the
+       * reason it failed. */
+      ['componentDidMount stops calling loadLive before auth exists',
+       '    this._wireAuth(0);\n    this.loadLive();\n',
+       '    this._wireAuth(0);\n'],
+
+      ['_wireAuth loads data once the session is restored',
+       '  _wireAuth(tries){\n' +
+       '    if(!window.OLHAuth){ if(tries < 120) this._authT = setTimeout(() => this._wireAuth(tries+1), 50); return; }\n' +
+       '    window.OLHAuth.configure(this.apiBase());\n' +
+       '    this._offAuth = window.OLHAuth.onChange(u => this.setState({user:u}));\n' +
+       '    window.OLHAuth.restore().then(u => this.setState({user:u}));\n' +
+       '  }',
+       '  _wireAuth(tries){\n' +
+       '    if(!window.OLHAuth){\n' +
+       '      if(tries < 120){ this._authT = setTimeout(() => this._wireAuth(tries+1), 50); return; }\n' +
+       '      this.loadLive();\n' +
+       '      return;\n' +
+       '    }\n' +
+       '    window.OLHAuth.configure(this.apiBase());\n' +
+       '    this._offAuth = window.OLHAuth.onChange(u => this.setState({user:u}));\n' +
+       '    window.OLHAuth.restore().then(u => { this.setState({user:u}); this.loadLive(); });\n' +
+       '  }'],
+
+      ['loadLive reports why it failed instead of returning quietly',
+       '  async loadLive(){\n' +
+       '    try{\n' +
+       "      const res = await fetch(this.apiBase() + '/jobs', {headers: this._authHeaders()});\n" +
+       '      const data = await res.json().catch(() => null);\n' +
+       '      if(!res.ok || !data || !Array.isArray(data.jobs)) return;\n' +
+       '      window.OLH_DATA = {jobs:data.jobs, managers:data.managers || [], today:new Date()};\n' +
+       '      this._mgr = null;\n' +
+       '      this.setState(s => ({live:true, tick:s.tick+1}));\n' +
+       '    }catch(e){}\n' +
+       '  }',
+       '  async loadLive(){\n' +
+       "    const authed = !!(window.OLHAuth && typeof window.OLHAuth.authHeaders === 'function');\n" +
+       '    try{\n' +
+       "      const res = await fetch(this.apiBase() + '/jobs', {headers: this._authHeaders()});\n" +
+       '      const data = await res.json().catch(() => null);\n' +
+       '      if(!res.ok || !data || !Array.isArray(data.jobs)){\n' +
+       "        throw new Error((data && data.error) || ('Request failed (' + res.status + ')'));\n" +
+       '      }\n' +
+       '      window.OLH_DATA = {jobs:data.jobs, managers:data.managers || [], today:new Date()};\n' +
+       '      this._mgr = null;\n' +
+       '      this.setState(s => ({live:true, tick:s.tick+1}));\n' +
+       '    }catch(err){\n' +
+       '      if(!authed) return;\n' +
+       "      this.toast('err', 'Homesite Data Not Loaded',\n" +
+       "        ((err && err.message) ? err.message + ' ' : '') +\n" +
+       "        'Edits are disabled until this page can reach the homesite service \\u2014 reload to retry.');\n" +
+       '    }\n' +
+       '  }'],
+
       /* mgrById() memoises into this._mgr on first render, which happens before
        * any data has arrived -- so it freezes an EMPTY map and every milestone
        * manager, buyer and person field renders blank for the life of the page.
