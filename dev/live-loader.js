@@ -217,5 +217,24 @@
     if (tries < 120) { setTimeout(function () { whenReady(tries + 1); }, 50); return; }
     boot();
   }
+
+  /* Refetch on tab focus (2026-08). Cheap insurance for the multi-tab /
+     multi-user staleness gap: every injected page only ever loaded its data
+     once, on initial mount, so a change made in another tab or by another
+     user stayed invisible here until a manual reload. 15s minimum gap so
+     alt-tabbing rapidly doesn't fire a fetch storm. This does not replace a
+     server-side guardrail for write endpoints (see update-job.js's
+     scheduling-conflict check) -- it only shrinks how often a stale-data
+     window gets hit in the common case. */
+  var lastVisibilityBoot = Date.now();
+  function onVisibilityChange() {
+    if (document.visibilityState !== 'visible') return;
+    var now = Date.now();
+    if (now - lastVisibilityBoot < 15000) return;
+    lastVisibilityBoot = now;
+    boot();
+  }
+  document.addEventListener('visibilitychange', onVisibilityChange);
+
   whenReady(0);
 })();
