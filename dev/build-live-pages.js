@@ -2004,6 +2004,50 @@ const PAGES = {
   'tracker.html': {
     data: true, inject: false, multiselect: true, caches: [],
     patches: [
+      /* Refetch when the tab comes back to the front.
+       *
+       * This is the one page built with inject:false, so dev/live-loader.js --
+       * and the visibilitychange refetch added to it in 2026-08 -- is never
+       * injected here. Every other page picked that up for free; the tracker
+       * silently did not. Its data arrived once from loadLive() on mount and
+       * then only via the Refresh button, so a walk saved on scheduler.html,
+       * or any edit by another person, stayed invisible in an already-open
+       * tracker tab until someone reloaded it. That is the second, independent
+       * reason a save "doesn't show up in the tracker" -- separate from the
+       * write-path bugs fixed in homesite.html and scheduler.html.
+       *
+       * force=true bypasses the 30s cache in jobs.js: the whole point is to
+       * show a change that was just made, and a cached pre-save payload would
+       * defeat it. announce=false keeps the toast for the explicit Refresh
+       * button. 15s floor so alt-tabbing is not a fetch storm. Guarded on
+       * state.live so the design preview never fetches.
+       *
+       * The component had no componentWillUnmount at all, so one is added
+       * rather than leaving a document-level listener behind. */
+      ['refetch on tab focus',
+       "    window.addEventListener('walk-ref', this._wr = () => { this._mgr = null; this.setState(s => ({tick:s.tick+1})); });\n" +
+       '    this.editRef = React.createRef();',
+       "    window.addEventListener('walk-ref', this._wr = () => { this._mgr = null; this.setState(s => ({tick:s.tick+1})); });\n" +
+       '    this._lastFocusLoad = Date.now();\n' +
+       '    this._onVis = () => {\n' +
+       "      if(document.visibilityState !== 'visible') return;\n" +
+       '      const now = Date.now();\n' +
+       '      if(now - this._lastFocusLoad < 15000) return;\n' +
+       '      this._lastFocusLoad = now;\n' +
+       '      if(this.state.live) this.loadLive(true, false);\n' +
+       '    };\n' +
+       "    document.addEventListener('visibilitychange', this._onVis);\n" +
+       '    this.editRef = React.createRef();'],
+
+      ['detach the visibility listener on unmount',
+       '  componentDidUpdate(){\n    this.syncSelects();',
+       '  componentWillUnmount(){\n' +
+       "    if(this._onVis) document.removeEventListener('visibilitychange', this._onVis);\n" +
+       '    if(this._settle) { clearInterval(this._settle); this._settle = null; }\n' +
+       '    if(this._offVp) this._offVp();\n' +
+       '  }\n' +
+       '  componentDidUpdate(){\n    this.syncSelects();'],
+
       /* The first load must WAIT for the auth module, and must announce when
        * it fails.
        *
