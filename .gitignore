@@ -101,3 +101,15 @@ production/
 # -- diffable, no data in it, and enough to answer "which export is prod on?"
 exports/*
 !exports/manifest.json
+
+# ---------------------------------------------------------------------------
+# dev/fix-backup/ is the scratch copies a page-patch script leaves behind before
+# it rewrites a page in place. Same character as the export rules above: each
+# file is a ~1.5 MB generated snapshot of a page we already have under version
+# control, so committing them doubles the repo for no recoverable information.
+# Untracked-but-not-ignored is the bad middle state -- they cluttered every
+# `git status` and were one `git add -A` away from being permanent.
+dev/fix-backup/
+
+# In-place edit backups (patch scripts write <file>.bak-<tag> before rewriting).
+*.bak-*
