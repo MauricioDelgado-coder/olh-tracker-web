@@ -1733,6 +1733,42 @@ const PAGES = {
   'walk-calendar.html': {
     data: true, inject: true, walkRef: true, optimizer: true, caches: [],
     patches: [
+      /* `msg` had six writers and NO binding anywhere in the markup: the
+       * manager-not-in-Managers-table guard, the _reassign failure catch,
+       * applyAll, persistDerivedDates and two summary paths all wrote it, and
+       * none of it ever reached the screen. A failed walk reassignment
+       * reported nothing whatsoever.
+       *
+       * Found by dev/check-error-visibility.js, which exists because this
+       * class of bug is invisible in a diff -- the assignment is correct, the
+       * page loads clean, and only the missing relation between writer and
+       * binding is wrong.
+       *
+       * Mirrors the `denied` banner directly above it so it reads as part of
+       * the page. NOTICE rather than an error label because msg also carries
+       * successes ("12 calculated dates saved"). */
+      ['render msg in a banner beside the existing denied banner',
+       '      <button sc-camel-on-click="{{ onDismissDenied }}" aria-label="Dismiss" style="margin-left:auto;width:24px;height:24px;border:1px solid #EFCFCF;border-radius:4px;background:#fff;color:#AA1F23;font-size:14px;line-height:1;cursor:pointer">\u00d7</button>\n' +
+       '    </div>\n' +
+       '  </sc-if>\n',
+       '      <button sc-camel-on-click="{{ onDismissDenied }}" aria-label="Dismiss" style="margin-left:auto;width:24px;height:24px;border:1px solid #EFCFCF;border-radius:4px;background:#fff;color:#AA1F23;font-size:14px;line-height:1;cursor:pointer">\u00d7</button>\n' +
+       '    </div>\n' +
+       '  </sc-if>\n' +
+       '\n' +
+       '  <sc-if value="{{ msg }}" hint-placeholder-val="{{ false }}">\n' +
+       '    <div style="display:flex;align-items:center;gap:12px;padding:11px 32px;background:#FBEDED;border-bottom:1px solid #EFCFCF">\n' +
+       '      <span style="height:19px;padding:0 9px;border-radius:999px;background:#fff;color:#AA1F23;font-size:9.5px;font-weight:700;line-height:19px;letter-spacing:.09em">NOTICE</span>\n' +
+       '      <span style="font-size:12.5px;font-weight:500;color:#AA1F23;text-wrap:pretty">{{ msg }}</span>\n' +
+       '      <button sc-camel-on-click="{{ onDismissMsg }}" aria-label="Dismiss" style="margin-left:auto;width:24px;height:24px;border:1px solid #EFCFCF;border-radius:4px;background:#fff;color:#AA1F23;font-size:14px;line-height:1;cursor:pointer">\u00d7</button>\n' +
+       '    </div>\n' +
+       '  </sc-if>\n'],
+
+      ['expose msg and its dismiss handler',
+       '      onDismissDenied: () => this.setState({ denied: "" }),',
+       '      onDismissDenied: () => this.setState({ denied: "" }),\n' +
+       '      msg: s.msg,\n' +
+       '      onDismissMsg: () => this.setState({ msg: "" }),'],
+
       ['invalidate the community index when reference data arrives',
        'this._h = () => this.setState({ ready: true });',
        'this._h = () => { this._byLen = null; this.setState({ ready: true }); };'],

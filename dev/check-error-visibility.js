@@ -56,7 +56,14 @@ const KNOWN_SAFE = {
    * mWarn is reachable only from inside that panel, so scoping the banner to it
    * is correct rather than a gap: there is no way to trigger these errors with
    * no homesite selected. */
-  'scheduler.html::mWarn': 'also rendered as panelWarn inside <sc-if sel>, which is where every writer of mWarn lives'
+  'scheduler.html::mWarn': 'also rendered as panelWarn inside <sc-if sel>, which is where every writer of mWarn lives',
+
+  /* dayOptMsg is written only by applyDayOpt/applyAllDayOpt, and renders as
+   * {{ day.opt.msg }} inside <sc-if day.opt> -- the same block that holds
+   * {{ day.opt.onApplyAll }} and the per-item apply controls. The message is
+   * gated on exactly the panel that owns the action, so it cannot fire while
+   * hidden. (The page's OTHER optimizer is separate and has its own optMsg.) */
+  'workload.html::dayOptMsg': 'rendered inside <sc-if day.opt>, the same panel that owns the apply controls that write it'
 };
 
 /** The page's JS + markup as one string (bundled pages store it JSON-encoded). */
@@ -166,14 +173,17 @@ for (const file of fs.readdirSync(PUBLIC_DIR).filter((f) => f.endsWith('.html'))
     let visible = false, firstGuard = null, anyBinding = false;
 
     for (const name of names) {
-      const binding = '{{ ' + name + ' }}';
-      let idx = src.indexOf(binding);
-      while (idx >= 0) {
+      /* Bindings may be nested: workload.html maps dayOptMsg onto a per-day
+         object and renders it as {{ day.opt.msg }}. Matching only the bare
+         name reported that as unrendered when it is on screen, so match any
+         dotted path ending in the name. */
+      const bindRe = new RegExp('\\{\\{\\s*(?:[A-Za-z_$][\\w$]*\\.)*' + name + '\\s*\\}\\}', 'g');
+      let bm;
+      while ((bm = bindRe.exec(src))) {
         anyBinding = true;
-        const chain = enclosingIfs(src, idx).filter((c) => !guardsItself(c, name));
+        const chain = enclosingIfs(src, bm.index).filter((c) => !guardsItself(c, name));
         if (!chain.length) { visible = true; break; }
         if (!firstGuard) firstGuard = chain.join(' > ');
-        idx = src.indexOf(binding, idx + 1);
       }
       if (visible) break;
     }

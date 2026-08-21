@@ -62,6 +62,20 @@ jobs:
         # catches something -- which is the entire point of it.
         run: bash dev/check-export-errors.sh public
 
+      - name: Assert every error message is reachable on screen
+        # The 08/21 cap bug was refused server-side and the scheduler showed
+        # nothing: the handler DID set a message, but that message was bound
+        # only inside a sub-panel that was closed at the time, so a refused
+        # save looked exactly like a successful one. walk-calendar.html was
+        # worse -- its `msg` had six writers and no binding at all.
+        #
+        # Nothing about that is visible in a diff. The assignment is correct,
+        # the binding exists, the page loads clean; what is wrong is the
+        # relation between where a message is written and where it is drawn,
+        # which is precisely what a machine can check. Blocking, because an
+        # error the user cannot see is the same as no error.
+        run: node dev/check-error-visibility.js public
+
       # The deploy action's own failure for a missing token is a 21-second docker
       # invocation followed by "An unknown exception has occurred", which reads
       # like the deploy broke rather than like a secret is unset. Checking first
