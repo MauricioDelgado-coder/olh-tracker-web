@@ -1417,12 +1417,17 @@ const PAGES = {
   },
 
   'scheduler.html': {
-    data: true, inject: true, walkRef: true, caches: ['_sites', '_byLen', '_unmapped'],
+    data: true, inject: true, walkRef: true, caches: ['_sites', '_byLen', '_unmapped', '_seed'],
     patches: [
-      ['add celLetterSent to the homesite record',
+      ['add celLetterSent + the Manager links to the homesite record',
        'celTime: f["CEL Date"] || null, accTime: f["ACC Date"] || null,\n',
        'celTime: f["CEL Date"] || null, accTime: f["ACC Date"] || null,\n' +
-       '        celLetterSent: !!f["CEL Letter Sent"],\n'],
+       '        celLetterSent: !!f["CEL Letter Sent"],\n' +
+       '        /* The Manager link arrays, so seed() can attribute a walk to the\n' +
+       '           person actually assigned to it instead of guessing. Raw Airtable\n' +
+       '           shape: an array of Managers-table record ids, or absent. */\n' +
+       '        qaiMgr: f["QAI Manager"] || [], qaaMgr: f["QAA Manager"] || [],\n' +
+       '        celMgr: f["CEL Manager"] || [], accMgr: f["ACC Manager"] || [],\n'],
 
       /* Reset used to wipe both CEL and ACC unconditionally, even after the
        * physical CEL letter had already gone out to the buyer with a specific
@@ -1474,7 +1479,119 @@ const PAGES = {
 
       ['manual-assign guard passes the chosen slot to isOff()',
        'if (this.isOff(p.id, k)) { this.setState({ mWarn: p.name + " is on time off that day." }); return; }',
-       'if (this.isOff(p.id, k, this.state.mSlot)) { this.setState({ mWarn: p.name + " is on time off " + (this.state.mSlot ? "during the " + this.state.mSlot + " slot." : "that day.") }); return; }']
+       'if (this.isOff(p.id, k, this.state.mSlot)) { this.setState({ mWarn: p.name + " is on time off " + (this.state.mSlot ? "during the " + this.state.mSlot + " slot." : "that day.") }); return; }'],
+
+      /* The availability engine read a snapshot taken at first render.
+       *
+       * slotTaken()/dayHours() -- the two functions that decide whether a slot
+       * is free -- both read bookings(), which is seed() plus this session's
+       * picks. seed() was memoized on `if (this._seed) return this._seed` and
+       * `this._seed` was assigned in one place and cleared in NONE: not by
+       * _commitPlan, not by resetWalks, not by the olh-data tick, not by the
+       * tab-focus refetch added in fb04567. So a slot that had just been booked
+       * -- here, on walk-calendar, or by another person -- stayed on offer for
+       * the life of the page, and the next homesite could be scheduled straight
+       * on top of it.
+       *
+       * Three linked fixes, which have to land together:
+       *
+       *  1. Cache on the homesites() array IDENTITY. homesites() returns a new
+       *     array whenever _sites is invalidated, so seed() recomputes exactly
+       *     when the data changed. This needs no matching `_seed = null` at
+       *     each write site, which is what let it drift in the first place.
+       *     ('_seed' is in `caches` above as well, for the tick path.)
+       *
+       *  2. Attribute a walk to its REAL manager. seed() round-robined every
+       *     homesite's walks onto a home QAM and never read the Manager fields,
+       *     so a walk charged the wrong person's day -- and immediately after a
+       *     save it moved to the home QAM instead of whoever was just picked.
+       *     The round-robin stays as the estimate for UNASSIGNED walks only, so
+       *     baseline load is unchanged where nobody is assigned yet. A homesite
+       *     with a real manager but no home QAM now counts (it was skipped
+       *     entirely before, by the `if (!pool.length) return`).
+       *
+       *  3. bookings() carries drafts ONLY. Once (1) is in, a committed walk
+       *     already arrives via seed() -- _commitPlan patches window.OLH_DATA
+       *     in place before returning -- so also adding state.assignments would
+       *     count it twice and over-block the assignee's day. */
+      ['seed(): self-invalidating cache + real-manager attribution',
+       '  seed() {\n' +
+       '    if (this._seed) return this._seed;\n' +
+       '    const out = [];\n' +
+       '    this.homesites().forEach((h, idx) => {\n' +
+       '      const pool = this.homeQams(h.community);\n' +
+       '      if (!pool.length) return;\n' +
+       '      const who = pool[idx % pool.length].id;\n' +
+       '      const add = (code, date, slot) => {\n' +
+       '        if (!date) return;\n' +
+       '        out.push({ personId: who, date: key(date), slot: slot || null, hours: HOURS[code], community: h.community, label: code + " \\u00b7 job " + h.job });\n' +
+       '      };\n' +
+       '      add("QAI", h.qai, null);\n' +
+       '      add("QAA", h.qaa, null);\n' +
+       '      add("CEL", h.cel, this.slotOf(h.celTime));\n' +
+       '      add("ACC", h.acc, this.slotOf(h.accTime));\n' +
+       '    });\n' +
+       '    this._seed = out;\n' +
+       '    return out;\n' +
+       '  }',
+       '  seed() {\n' +
+       '    /* Keyed on the homesites() array IDENTITY, not a bare truthiness\n' +
+       '       check -- see the note on this patch in dev/build-live-pages.js. */\n' +
+       '    const sites = this.homesites();\n' +
+       '    if (this._seed && this._seedFor === sites) return this._seed;\n' +
+       '    const out = [];\n' +
+       '    sites.forEach((h, idx) => {\n' +
+       '      const pool = this.homeQams(h.community);\n' +
+       '      const who = pool.length ? pool[idx % pool.length].id : null;\n' +
+       '      /* Prefer the manager actually assigned to THIS walk; `who` is only\n' +
+       '         an estimate for walks nobody has been given yet. */\n' +
+       '      const add = (code, date, slot, links) => {\n' +
+       '        if (!date) return;\n' +
+       '        const owner = this.rosterIdForLink(links) || who;\n' +
+       '        if (!owner) return;\n' +
+       '        out.push({ personId: owner, date: key(date), slot: slot || null, hours: HOURS[code], community: h.community, label: code + " \\u00b7 job " + h.job });\n' +
+       '      };\n' +
+       '      add("QAI", h.qai, null, h.qaiMgr);\n' +
+       '      add("QAA", h.qaa, null, h.qaaMgr);\n' +
+       '      add("CEL", h.cel, this.slotOf(h.celTime), h.celMgr);\n' +
+       '      add("ACC", h.acc, this.slotOf(h.accTime), h.accMgr);\n' +
+       '    });\n' +
+       '    this._seedFor = sites;\n' +
+       '    this._seed = out;\n' +
+       '    return out;\n' +
+       '  }'],
+
+      ['add rosterIdForLink() (inverse of resolveMgrId)',
+       '  homeQams(community) {',
+       '  /* Inverse of resolveMgrId(): a QAI/QAA/CEL/ACC Manager cell links to the\n' +
+       '     Managers table, but capacity is tracked against Walk Roster person ids.\n' +
+       '     Bridged by name, the same join resolveMgrId() uses in the other\n' +
+       '     direction. Returns null when the link is empty or the person is not on\n' +
+       '     the walk roster -- the caller then falls back to the home-QAM estimate\n' +
+       '     rather than dropping the load. */\n' +
+       '  rosterIdForLink(links) {\n' +
+       '    if (!Array.isArray(links) || !links.length) return null;\n' +
+       '    const mgrs = (window.OLH_DATA && window.OLH_DATA.managers) || [];\n' +
+       '    const m = mgrs.find(x => x.id === links[0]);\n' +
+       '    if (!m) return null;\n' +
+       '    const p = this.roster().find(r => r.name === m.name);\n' +
+       '    return p ? p.id : null;\n' +
+       '  }\n' +
+       '\n' +
+       '  homeQams(community) {'],
+
+      ['bookings(): only uncommitted drafts, so a saved walk is not counted twice',
+       '  bookings() {\n' +
+       '    const extra = [];\n' +
+       '    const jobs = new Set(Object.keys(this.state.assignments).concat(Object.keys(this.state.draft)));\n' +
+       '    jobs.forEach(job => {\n' +
+       '      const a = this.planFor(job);',
+       '  bookings() {\n' +
+       '    /* Drafts only -- a committed walk already arrives via seed(). */\n' +
+       '    const extra = [];\n' +
+       '    const jobs = new Set(Object.keys(this.state.draft));\n' +
+       '    jobs.forEach(job => {\n' +
+       '      const a = this.state.draft[job] || {};']
     ]
   },
 
