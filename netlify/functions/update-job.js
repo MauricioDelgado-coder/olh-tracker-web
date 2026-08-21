@@ -35,6 +35,152 @@ const RECORD_ID_RE = /^rec[A-Za-z0-9]{14}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
+ * Scheduling-conflict guard (added 2026-08). update-job's five layers above
+ * validate shape and permission, but say nothing about whether the write
+ * makes sense on the calendar -- a manager could be assigned two overlapping
+ * walks, or pushed over their daily cap, with no error at all. This block
+ * closes that gap for the one write that matters for it: reassigning a
+ * *Manager link field. It does not fire for miss-reason edits, notes, key
+ * status, etc. -- only when QAI/QAA/CEL/ACC Manager is present in `fields`.
+ *
+ * Constants mirror references/three-pass-algorithm.md in the walk-review
+ * skill. If that file's numbers ever change, change them here in the same
+ * commit (and vice versa) -- there is no single source of truth between an
+ * Airtable app and a Claude skill, so this has to be kept in sync by hand.
+ *
+ * Every manager, including Justin Essigmann, uses the same 480-min cap and
+ * the same full CEL/ACC eligibility -- there are no manager-specific
+ * exceptions in this app. If the walk-review skill's reference doc still
+ * lists a different rule for Justin, that doc is stale, not this file.
+ */
+const WALK_DURATION_MIN = Object.freeze({ QAI: 120, QAA: 60, CEL: 120, ACC: 60 });
+const DAILY_CAP_MIN = 480; // applies to every manager, no exceptions (incl. Justin Essigmann)
+
+const WALK_TYPES = Object.freeze({
+  QAI: { managerField: 'QAI Manager', dateField: 'QAI Date', isDatetime: false },
+  QAA: { managerField: 'QAA Manager', dateField: 'QAA Date', isDatetime: false },
+  CEL: { managerField: 'CEL Manager', dateField: 'CEL Date', isDatetime: true },
+  ACC: { managerField: 'ACC Manager', dateField: 'ACC Date', isDatetime: true }
+});
+
+function dayKeyOf(value, isDatetime) {
+  if (!value) return null;
+  return isDatetime ? String(value).slice(0, 10) : String(value).slice(0, 10);
+}
+
+/**
+ * Fetch every Jobs row that has any walk on `dayKey`, excluding `excludeId`.
+ * One query covers all four walk types since a manager's cap is summed
+ * across QAI/QAA/CEL/ACC together, not per type.
+ */
+async function fetchJobsOnDay(pat, dayKey, excludeId) {
+  const formula = `AND(
+    RECORD_ID() != "${excludeId}",
+    OR(
+      DATESTR({QAI Date}) = "${dayKey}",
+      DATESTR({QAA Date}) = "${dayKey}",
+      IS_SAME({CEL Date}, "${dayKey}T00:00:00.000Z", 'day'),
+      IS_SAME({ACC Date}, "${dayKey}T00:00:00.000Z", 'day')
+    )
+  )`;
+  const fieldsParam = ['QAI Manager', 'QAI Date', 'QAA Manager', 'QAA Date',
+    'CEL Manager', 'CEL Date', 'ACC Manager', 'ACC Date']
+    .map((f) => `fields%5B%5D=${encodeURIComponent(f)}`).join('&');
+  const url = `${AIRTABLE_API}/${BASE_ID}/${JOBS_TABLE}` +
+    `?filterByFormula=${encodeURIComponent(formula)}&${fieldsParam}&pageSize=100`;
+
+  const records = [];
+  let offset;
+  do {
+    const res = await fetch(offset ? `${url}&offset=${offset}` : url, {
+      headers: { Authorization: `Bearer ${pat}` }
+    });
+    if (!res.ok) {
+      const e = new Error(`Conflict check could not query Airtable (status ${res.status}).`);
+      e.statusCode = 502;
+      throw e;
+    }
+    const json = await res.json();
+    records.push(...(json.records || []));
+    offset = json.offset;
+  } while (offset);
+
+  return records;
+}
+
+/**
+ * currentFields: this record's existing values (fetched fresh, pre-write).
+ * clean: the coerced values this request is about to write.
+ * Returns { conflict: false } or { conflict: true, message }.
+ */
+async function checkSchedulingConflict(pat, recordId, currentFields, clean) {
+  const changedTypes = Object.keys(WALK_TYPES).filter(
+    (t) => Object.prototype.hasOwnProperty.call(clean, WALK_TYPES[t].managerField)
+  );
+  if (changedTypes.length === 0) return { conflict: false };
+
+  for (const type of changedTypes) {
+    const { managerField, dateField, isDatetime } = WALK_TYPES[type];
+    const managerLinks = clean[managerField];
+    if (!Array.isArray(managerLinks) || managerLinks.length === 0) continue; // clearing a walk is never a conflict
+    const managerId = managerLinks[0];
+
+    // The date for this walk: use the value being written if present, else
+    // whatever is already on the record. If neither exists there is nothing
+    // to schedule against yet.
+    const dateValue = Object.prototype.hasOwnProperty.call(clean, dateField)
+      ? clean[dateField]
+      : (currentFields[dateField] || null);
+    const dayKey = dayKeyOf(dateValue, isDatetime);
+    if (!dayKey) continue;
+
+    const dayRecords = await fetchJobsOnDay(pat, dayKey, recordId);
+
+    let loadMinutes = WALK_DURATION_MIN[type]; // this walk's own minutes
+    let hardOverlap = null;
+
+    for (const rec of dayRecords) {
+      const f = rec.fields || {};
+      for (const otherType of Object.keys(WALK_TYPES)) {
+        const otherDef = WALK_TYPES[otherType];
+        const links = f[otherDef.managerField];
+        if (!Array.isArray(links) || links.indexOf(managerId) < 0) continue;
+
+        loadMinutes += WALK_DURATION_MIN[otherType];
+
+        // Hard overlap: same manager, same exact clock time, on a
+        // datetime-bearing walk type (CEL/ACC only -- QAI/QAA carry no
+        // clock time on the Jobs record, so they can only ever collide via
+        // the cap check below, not a literal time clash).
+        if (isDatetime && otherDef.isDatetime && f[otherDef.dateField] === dateValue) {
+          hardOverlap = { jobNumber: f['Job #'], walkType: otherType };
+        }
+      }
+    }
+
+    if (hardOverlap) {
+      return {
+        conflict: true,
+        message:
+          `This manager is already scheduled for a ${hardOverlap.walkType} walk at the exact same ` +
+          `time (Job #${hardOverlap.jobNumber || 'unknown'}). Reassign one of the two before saving.`
+      };
+    }
+
+    if (loadMinutes > DAILY_CAP_MIN) {
+      return {
+        conflict: true,
+        message:
+          `This assignment would put the manager at ${loadMinutes} minutes for ${dayKey}, ` +
+          `over the ${DAILY_CAP_MIN}-minute daily cap.`
+      };
+    }
+  }
+
+  return { conflict: false };
+}
+
+/**
  * Allowed choices for every singleSelect field, keyed by field name.
  * These must match the option names in Airtable EXACTLY -- `typecast` is not
  * used, so Airtable will not create a missing option, and an unlisted value
@@ -383,6 +529,38 @@ exports.handler = async (event) => {
       return reply(400, { error: result.message, invalidField: key });
     }
     clean[key] = result.value;
+  }
+
+  // Scheduling-conflict guard. Only runs when a *Manager field is being
+  // written, and needs the record's current state to know the walk's date
+  // when only the manager (not the date) is changing.
+  const touchesManagerField = Object.keys(WALK_TYPES).some((t) =>
+    Object.prototype.hasOwnProperty.call(clean, WALK_TYPES[t].managerField)
+  );
+  if (touchesManagerField) {
+    let currentFields = {};
+    try {
+      const getUrl = `${AIRTABLE_API}/${BASE_ID}/${JOBS_TABLE}/${encodeURIComponent(recordId)}`;
+      const getRes = await fetch(getUrl, { headers: { Authorization: `Bearer ${pat}` } });
+      if (getRes.ok) {
+        const getJson = await getRes.json();
+        currentFields = getJson.fields || {};
+      }
+      // If the GET fails, fall through with currentFields = {} rather than
+      // blocking the save entirely on a transient read error -- the write
+      // itself still goes through Airtable's own validation.
+    } catch (_) { /* same rationale as above */ }
+
+    try {
+      const conflict = await checkSchedulingConflict(pat, recordId, currentFields, clean);
+      if (conflict.conflict) {
+        return reply(409, { error: conflict.message });
+      }
+    } catch (err) {
+      return reply(err.statusCode || 502, {
+        error: err.message || 'Could not verify this assignment does not conflict with another walk.'
+      });
+    }
   }
 
   // PATCH a single record by id. Airtable's single-record PATCH endpoint cannot
