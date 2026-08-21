@@ -1315,6 +1315,95 @@ const PAGES = {
   'homesite.html': {
     data: true, inject: true, walkRef: true, caches: [],
     patches: [
+      /* This page could not save AT ALL, and said "Saved" while failing.
+       *
+       * loadLive() and persist() both fetched /api with `{Accept:...}` and no
+       * Authorization header. /api/* is Bearer-only (olh-auth.js
+       * requireSession, no cookie fallback), so loadLive() 401s, state.live
+       * stays false, and commit()'s `if(this.state.live)` branch is never
+       * taken -- the edit is not merely rejected, it is never sent anywhere.
+       * The user sees flash('Saved') and the value stick, because commit() has
+       * already written it into the local rec.fields.
+       *
+       * The page still DISPLAYED data because the injected live-loader (outer
+       * file, not this component) fetches /jobs with auth and sets
+       * window.OLH_DATA -- which is why this read as a working page.
+       *
+       * The audit was also written before any of that, so the homesite history
+       * asserted edits that never reached Airtable. Confirmed on job
+       * 16447720100 (2026-08-21): three CEL/ACC Date entries logged from
+       * Homesite Detail, record empty. Logging now happens only after the
+       * PATCH is accepted, matching walk-calendar.html and qa-management.html. */
+      ['add _authHeaders() to the component',
+       '  /* Same contract as the tracker: GET {apiBase}/jobs. When the endpoint is not\n' +
+       '     reachable (design preview) the bundled dataset stays and edits stay local. */\n' +
+       '  async loadLive(){',
+       '  /* /api/* reads the session from an Authorization: Bearer header and has no\n' +
+       '     cookie fallback (olh-auth.js requireSession), so a request without this\n' +
+       '     is a guaranteed 401. Same helper every other writing page uses. Returns\n' +
+       '     plain headers when OLHAuth is absent so the design preview still renders\n' +
+       '     rather than throwing on mount. */\n' +
+       '  _authHeaders(extra){\n' +
+       "    const base = Object.assign({Accept:'application/json'}, extra || {});\n" +
+       "    if(window.OLHAuth && typeof window.OLHAuth.authHeaders === 'function')\n" +
+       '      return window.OLHAuth.authHeaders(base);\n' +
+       '    return base;\n' +
+       '  }\n' +
+       '\n' +
+       '  /* Same contract as the tracker: GET {apiBase}/jobs. When the endpoint is not\n' +
+       '     reachable (design preview) the bundled dataset stays and edits stay local. */\n' +
+       '  async loadLive(){'],
+
+      ['loadLive() sends the session header',
+       "      const res = await fetch(this.apiBase() + '/jobs', {headers:{Accept:'application/json'}});",
+       "      const res = await fetch(this.apiBase() + '/jobs', {headers: this._authHeaders()});"],
+
+      ['persist() sends the session header',
+       "        headers:{'Content-Type':'application/json', Accept:'application/json'},",
+       "        headers: this._authHeaders({'Content-Type':'application/json'}),"],
+
+      ['record the audit entry only after the save is confirmed',
+       '    if(window.OLHAudit){\n' +
+       '      window.OLHAudit.record({\n' +
+       "        recordId: rec.id, job: rec.fields['Job #'] || rec.id, field,\n" +
+       '        label: LABEL[field] || field, from: show(prev), to: show(value),\n' +
+       "        action: 'edit', page: 'Homesite Detail'\n" +
+       '      }).then(() => this.loadHistory(true)).catch(() => {});\n' +
+       '    }\n' +
+       '    rec.fields[field] = value;\n' +
+       "    this.setState(s => ({tick: s.tick + 1, save: 'Saving\\u2026'}));\n" +
+       '    if(this.state.live){ this.persist(rec, field, value, prev); return; }\n' +
+       "    this.flash('Saved');",
+       '    /* Logged only once the PATCH has actually succeeded -- /api/audit is\n' +
+       '       append-only, so logging first left the history asserting changes\n' +
+       '       that never reached Airtable. */\n' +
+       '    const logEdit = () => {\n' +
+       '      if(!window.OLHAudit) return;\n' +
+       '      window.OLHAudit.record({\n' +
+       "        recordId: rec.id, job: rec.fields['Job #'] || rec.id, field,\n" +
+       '        label: LABEL[field] || field, from: show(prev), to: show(value),\n' +
+       "        action: 'edit', page: 'Homesite Detail'\n" +
+       '      }).then(() => this.loadHistory(true)).catch(() => {});\n' +
+       '    };\n' +
+       '    rec.fields[field] = value;\n' +
+       "    this.setState(s => ({tick: s.tick + 1, save: 'Saving\\u2026'}));\n" +
+       '    if(this.state.live){ this.persist(rec, field, value, prev, logEdit); return; }\n' +
+       '    logEdit();\n' +
+       "    this.flash('Saved');"],
+
+      ['persist() takes the logger and fires it on success',
+       '  async persist(rec, field, value, prev){',
+       '  async persist(rec, field, value, prev, logEdit){'],
+
+      ['persist() logs after the response is accepted',
+       '      this.setState(s => ({tick: s.tick + 1}));\n' +
+       "      this.flash('Saved');\n" +
+       '    }catch(err){',
+       '      this.setState(s => ({tick: s.tick + 1}));\n' +
+       '      if(logEdit) logEdit();\n' +
+       "      this.flash('Saved');\n" +
+       '    }catch(err){'],
+
       /* mgrById() memoises into this._mgr on first render, which happens before
        * any data has arrived -- so it freezes an EMPTY map and every milestone
        * manager, buyer and person field renders blank for the life of the page.
