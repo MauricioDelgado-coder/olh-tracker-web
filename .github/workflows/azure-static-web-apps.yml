@@ -76,6 +76,19 @@ jobs:
         # error the user cannot see is the same as no error.
         run: node dev/check-error-visibility.js public
 
+      - name: Assert no page claims a save it did not make
+        # The other half of the same failure. homesite.html reported "Saved" on
+        # a branch that never called the API, because loadLive() 401'd and left
+        # state.live false -- so every edit was discarded silently while the
+        # page confirmed it, and the audit log recorded changes that never
+        # happened. A save that lies is worse than one that fails loudly: it
+        # costs trust in every other row on the page.
+        #
+        # Requires a success report to sit after an awaited write, or a .then()
+        # on one. Preview-only paths are in the script's KNOWN_SAFE with their
+        # reason.
+        run: node dev/check-success-honesty.js public
+
       # The deploy action's own failure for a missing token is a 21-second docker
       # invocation followed by "An unknown exception has occurred", which reads
       # like the deploy broke rather than like a secret is unset. Checking first

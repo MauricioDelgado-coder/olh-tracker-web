@@ -1404,6 +1404,39 @@ const PAGES = {
        "      this.flash('Saved');\n" +
        '    }catch(err){'],
 
+      /* The not-live branch claimed a save it had not made.
+       *
+       * commit() ended `if (this.state.live) { persist(); return; }
+       * this.flash('Saved')`. state.live comes from loadLive(), which 401'd on
+       * every call before the auth fix above -- so live was permanently false
+       * and every edit fell through to an unconditional "Saved" while writing
+       * nothing.
+       *
+       * Fixing the header makes loadLive succeed, but that only makes the lie
+       * unreachable, not wrong. Any future reason loadLive fails would put the
+       * page straight back to silently discarding edits, so the branch itself
+       * is made honest: on a real deployment it reverts and reports, exactly
+       * as persist()'s catch does. Only the design preview -- no OLHAuth, no
+       * API in existence -- keeps local-only behaviour, and it says "Saved
+       * locally" instead of borrowing the bare word.
+       *
+       * Enforced from here on by dev/check-success-honesty.js. */
+      ['not-live branch reverts and reports instead of flashing Saved',
+       '    if(this.state.live){ this.persist(rec, field, value, prev, logEdit); return; }\n' +
+       '    logEdit();\n' +
+       "    this.flash('Saved');",
+       '    if(this.state.live){ this.persist(rec, field, value, prev, logEdit); return; }\n' +
+       '    if(window.OLHAuth){\n' +
+       '      rec.fields[field] = prev;\n' +
+       '      this.setState(s => ({tick: s.tick + 1}));\n' +
+       "      this.flash('Not saved');\n" +
+       "      this.toast('err', '\\u201C' + field + '\\u201D Not Saved',\n" +
+       "        'The homesite service is not reachable, so nothing was written. The field was reverted \\u2014 reload and try again.');\n" +
+       '      return;\n' +
+       '    }\n' +
+       '    logEdit();\n' +
+       "    this.flash('Saved locally');"],
+
       /* mgrById() memoises into this._mgr on first render, which happens before
        * any data has arrived -- so it freezes an EMPTY map and every milestone
        * manager, buyer and person field renders blank for the life of the page.
