@@ -54,8 +54,13 @@ jobs:
         # The 08/01 export shipped a bundler-mangled `var mkField` that killed a
         # whole inline script and showed as a red SyntaxError banner across the
         # live site. Cheap to check, invisible if you don't.
+        #
+        # This blocks the deploy. It ran with continue-on-error until 08/21,
+        # which meant the one check written to catch that exact failure could
+        # only annotate the run while the broken page shipped anyway. All 19
+        # pages pass clean today, so making it a gate costs nothing until it
+        # catches something -- which is the entire point of it.
         run: bash dev/check-export-errors.sh public
-        continue-on-error: true
 
       # The deploy action's own failure for a missing token is a 21-second docker
       # invocation followed by "An unknown exception has occurred", which reads

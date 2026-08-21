@@ -27,6 +27,10 @@
     { "route": "/workload-visualizer", "rewrite": "/workload-visualizer.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
     { "route": "/admin", "rewrite": "/admin.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
     { "route": "/sync-history", "rewrite": "/sync-history.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
+    { "route": "/keys", "rewrite": "/keys.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
+    { "route": "/walks-to-schedule", "rewrite": "/walks-to-schedule.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
+    { "route": "/sync-conflicts", "rewrite": "/sync-conflicts.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
+    { "route": "/tracker-san-mpr", "rewrite": "/tracker-san-mpr.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
 
     { "route": "/*.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
 
