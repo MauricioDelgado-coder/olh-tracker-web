@@ -31,10 +31,19 @@ const iso = (v) => (v ? String(v).slice(0, 10) : '');
 
 /** Lift `const LOTS = …` through the end of `inScope` out of the built page. */
 function shippedScope() {
-  const lines = fs.readFileSync(PAGE, 'utf8').split('\n');
-  const i = lines.findIndex((l) => l.includes('<script type="__bundler/template">'));
-  if (i === -1) { console.error('no template block in ' + PAGE); process.exit(1); }
-  const tpl = JSON.parse(lines[i + 1]);
+  const raw = fs.readFileSync(PAGE, 'utf8');
+  const openTag = '<script type="__bundler/template">';
+  const start = raw.indexOf(openTag);
+  if (start === -1) { console.error('no template block in ' + PAGE); process.exit(1); }
+  // The JSON-encoded template string sits on the SAME line as the opening
+  // tag (immediately after it), not on the following line -- it runs from
+  // the first `"` after the tag to the matching closing `"` right before
+  // the literal `</script>` that ends this block.
+  const jsonStart = start + openTag.length;
+  const closeTag = '</script>';
+  const end = raw.indexOf(closeTag, jsonStart);
+  if (end === -1) { console.error('no closing </script> after template block in ' + PAGE); process.exit(1); }
+  const tpl = JSON.parse(raw.slice(jsonStart, end));
 
   const a = tpl.indexOf('const LOTS = {');
   const b = tpl.indexOf(';', tpl.indexOf('LOTS[(f[', a)) + 1;
