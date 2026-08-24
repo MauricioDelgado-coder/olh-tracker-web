@@ -99,6 +99,11 @@
   .card .lockrow{display:flex; align-items:center; gap:4px; color:var(--lock); font-size:11px; margin-top:4px; font-weight:600}
   .card .stagedfrom{font-size:11px; color:var(--navy); margin-top:4px; font-style:italic}
   .card .warnline{font-size:11px; color:var(--red-ink); margin-top:4px; font-weight:600}
+  .unassign-btn{
+    display:block; margin-top:6px; font:inherit; font-size:11px; font-weight:600;
+    padding:3px 8px; border-radius:6px; border:1px solid var(--border); background:#fff; color:var(--muted); cursor:pointer;
+  }
+  .unassign-btn:hover{background:var(--red-bg); color:var(--red-ink); border-color:var(--red-border)}
   #pendingBar{
     position:fixed; left:0; right:0; bottom:0; background:var(--card); border-top:1px solid var(--border);
     padding:12px 20px; display:flex; align-items:center; gap:14px; box-shadow:0 -2px 10px rgba(0,0,0,.06);
@@ -131,6 +136,7 @@
   <input type="date" id="walkDate">
   <button id="btnLoad">Load</button>
   <button id="btnRefresh" title="Re-fetch from Airtable">Refresh</button>
+  <button id="btnOptimize" title="Run the SOTV3 optimizer on the loaded schedule" disabled>Run SOTV3</button>
   <div id="addColWrap" style="margin-left:auto">
     <label for="addColSelect">Add manager column</label>
     <select id="addColSelect"><option value="">Choose…</option></select>
@@ -166,6 +172,7 @@
   };
   var WALK_TYPES = ['QAI', 'QAA', 'CEL', 'ACC'];
   var DAILY_CAP_MIN = 480;
+  var INITIAL_LEG_CAP_MIN = 45; // SOTV3: first walk of a manager's day must be <= this from home
 
   /* ---- Auth (mirrors the shared OLHAuth module's session contract) ------ */
   function getSession() {
@@ -363,8 +370,10 @@
     state.extraCols.forEach(function (id) { ids[id] = true; });
     var list = Object.keys(ids).filter(function (id) { return id !== ''; });
     list.sort(function (a, b) { return managerName(a).localeCompare(managerName(b)); });
-    var hasUnassigned = Object.prototype.hasOwnProperty.call(ids, '');
-    return (hasUnassigned ? [''] : []).concat(list);
+    // Unassigned is always shown, even with zero walks in it right now --
+    // it's the drop target for the Unassign button/drag-and-drop, so it has
+    // to be reachable before anything has actually been unassigned yet.
+    return [''].concat(list);
   }
 
   /* ---- Rendering ----------------------------------------------------------- */
@@ -390,6 +399,8 @@
       (staged ? '<div class="stagedfrom">was: ' + esc(p.fromManagerName) + '</div>' : '') +
       (dup ? '<div class="warnline">Same time as another walk on this manager</div>' : '') +
       (overCap && !dup ? '<div class="warnline">Manager over ' + DAILY_CAP_MIN + '-min cap</div>' : '') +
+      (!w.locked && eff ? '<button type="button" class="unassign-btn" data-unassign-record="' +
+        esc(w.recordId) + '" data-unassign-type="' + w.walkType + '">Unassign</button>' : '') +
       '</div>';
   }
 
@@ -416,12 +427,15 @@
   function renderBoard() {
     var board = document.getElementById('board');
     if (state.loading) { board.innerHTML = '<div class="loading">Loading…</div>'; return; }
-    var cols = allColumnIds();
-    if (!cols.length) {
+    // allColumnIds() always includes Unassigned now (it's a permanent drop
+    // target), so an empty day is detected off state.walks directly rather
+    // than off an empty column list.
+    if (!state.walks.length) {
       board.innerHTML = '<div class="loading">No QAI/QAA/CEL/ACC walks found for ' + esc(state.dateKey) + '.</div>';
-    } else {
-      board.innerHTML = cols.map(function (id) { return columnHtml(id || null); }).join('');
+      return;
     }
+    var cols = allColumnIds();
+    board.innerHTML = cols.map(function (id) { return columnHtml(id || null); }).join('');
     wireDragAndDrop();
   }
 
@@ -468,6 +482,8 @@
     renderBoard();
     renderAddColumnSelect();
     renderPendingBar();
+    var optBtn = document.getElementById('btnOptimize');
+    if (optBtn) optBtn.disabled = !state.walks.length || state.can.indexOf('walk.schedule') < 0;
   }
 
   /* ---- Drag & drop ---------------------------------------------------------
@@ -538,6 +554,352 @@
       });
     }
     renderAll();
+  }
+
+  /* ---- SOTV3 optimizer ------------------------------------------------------
+     Direct port of the SOTV3 ruleset (algorithm.md) -- feasibility, then a
+     clock-time-grouped bipartite assignment pass, then an untimed fill pass,
+     then a Phase-3 sanity check. Nothing here writes to Airtable: every
+     proposed change is fed through the exact same handleDrop() the drag-and-
+     drop UI uses, so it lands in state.pending and waits for Submit like any
+     manual reassignment.
+
+     Reference data (manager home communities, the community drive-time
+     matrix, the product-line -> core-community map, and today's time-off)
+     is NOT part of /api/jobs -- it's pulled from /api/walk-config and
+     /api/time-off, the same two endpoints walk-calendar.html and
+     workload.html already read for the same reason. Lazy-loaded on first
+     Run SOTV3 click per page load; not re-fetched on every click since it
+     changes far less often than the jobs themselves. */
+  var sotv3Ref = { loaded: false, roster: [], drive: {}, productMap: {}, communities: [], offToday: {} };
+
+  function loadSOTV3Reference(dateKey) {
+    return Promise.all([apiGet('/walk-config'), apiGet('/time-off')]).then(function (results) {
+      var cfg = results[0] || {}, off = results[1] || {};
+      sotv3Ref.roster = Array.isArray(cfg.roster) ? cfg.roster : [];
+      sotv3Ref.drive = cfg.drive || {};
+      sotv3Ref.productMap = cfg.productMap || {};
+      // Longest-name-first so a prefix match (Ranches 50GC -> Ranches)
+      // never gets shadowed by a shorter, unrelated community name.
+      sotv3Ref.communities = (Array.isArray(cfg.communities) ? cfg.communities.slice() : [])
+        .sort(function (a, b) { return b.length - a.length; });
+      sotv3Ref.offToday = {};
+      (Array.isArray(off.entries) ? off.entries : []).forEach(function (e) {
+        if (e.date === dateKey) sotv3Ref.offToday[e.personId] = true;
+      });
+      sotv3Ref.loaded = true;
+    });
+  }
+
+  function rosterEntry(managerId) {
+    var name = managerName(managerId);
+    return sotv3Ref.roster.find(function (r) { return r.name === name; }) || null;
+  }
+  function managerHome(managerId) {
+    var r = rosterEntry(managerId);
+    return (r && r.home) || null;
+  }
+  function isManagerOffToday(managerId) {
+    var r = rosterEntry(managerId);
+    return !!(r && sotv3Ref.offToday[r.id]);
+  }
+  /* Jobs' Community field holds a specific product line (e.g. "Ranches
+     50GC"), not the canonical community name the drive matrix is keyed by.
+     Resolve via the exact product map first, then a longest-prefix match
+     against known communities, mirroring walk-calendar.html's core(). */
+  function coreCommunity(rawCommunity) {
+    if (!rawCommunity) return null;
+    if (sotv3Ref.productMap[rawCommunity]) return sotv3Ref.productMap[rawCommunity];
+    var low = rawCommunity.toLowerCase();
+    for (var i = 0; i < sotv3Ref.communities.length; i++) {
+      var c = sotv3Ref.communities[i];
+      if (low.indexOf(c.toLowerCase()) === 0) return c;
+    }
+    if (/^ranches/i.test(rawCommunity)) return 'Ranches';
+    if (/^sanctuary at wellness|^wellness way/i.test(rawCommunity)) return 'Wellness Ridge';
+    return null;
+  }
+  function driveMinutes(a, b) {
+    if (!a || !b) return null;
+    if (a === b) return 0;
+    var row = sotv3Ref.drive[a];
+    var v = row && row[b];
+    return typeof v === 'number' ? v : null;
+  }
+  function homeDistance(managerId, community) {
+    var d = driveMinutes(managerHome(managerId), community);
+    return d === null ? Infinity : d; // missing data sorts last for tiebreak, per algorithm.md
+  }
+  function lotStatusOf(recordId) {
+    var job = state.jobs.find(function (j) { return j.id === recordId; });
+    return job ? String((job.fields || {})['Lot Status'] || '').trim().toUpperCase() : '';
+  }
+
+  /* Runs the full three-phase pass and returns a report; never mutates
+     state.walks/state.jobs itself -- computeSOTV3 works on its own scratch
+     copy of each manager's day (mgrDay below), and the caller
+     (applySOTV3Result) is what actually stages anything into state.pending. */
+  function computeSOTV3(walks, managers) {
+    var report = { deferred: [], flaggedNonSold: [], unresolved: [], proposals: [], duplicates: [], overCap: [] };
+
+    var activeIds = managers
+      .filter(function (m) { return m.active !== false && !isManagerOffToday(m.id); })
+      .map(function (m) { return m.id; });
+
+    var mgrDay = {}; // managerId -> { minutes, footprint:{community:true}, timedStops:[{time,community}] }
+    function dayOf(id) {
+      if (!mgrDay[id]) mgrDay[id] = { minutes: 0, footprint: {}, timedStops: [] };
+      return mgrDay[id];
+    }
+
+    // ---- Phase 1: feasibility -------------------------------------------
+    var eligible = [];
+    walks.forEach(function (w) {
+      var community = coreCommunity(w.community) || w.community;
+      var lot = lotStatusOf(w.recordId);
+      var isSold = lot === 'B';
+
+      if (w.locked) {
+        // Never reassigned, but still occupies the manager's capacity,
+        // footprint, and (if timed) sequence position for leg math.
+        if (w.managerId) {
+          var d = dayOf(w.managerId);
+          d.minutes += w.minutes;
+          d.footprint[community] = true;
+          if (WALK_FIELD[w.walkType].datetime) d.timedStops.push({ time: w.raw, community: community });
+        }
+        return;
+      }
+
+      if ((w.walkType === 'QAA' || w.walkType === 'ACC') && lot && !isSold) {
+        report.deferred.push({ walk: w, reason: 'Non-Sold lot (' + lot + ') \u2014 QAA/ACC deferred, not scheduled' });
+        return;
+      }
+      if (w.walkType === 'QAI' && lot && !isSold) {
+        report.flaggedNonSold.push(w); // flagged, but falls through -- stays in the working set
+      }
+      eligible.push(Object.assign({}, w, { community: community }));
+    });
+
+    var timed = eligible.filter(function (w) { return WALK_FIELD[w.walkType].datetime; })
+      .sort(function (a, b) { return a.raw < b.raw ? -1 : a.raw > b.raw ? 1 : 0; });
+    var untimed = eligible.filter(function (w) { return !WALK_FIELD[w.walkType].datetime; });
+
+    var groups = [];
+    timed.forEach(function (w) {
+      var g = groups.length && groups[groups.length - 1].time === w.raw ? groups[groups.length - 1] : null;
+      if (!g) { g = { time: w.raw, walks: [] }; groups.push(g); }
+      g.walks.push(w);
+    });
+
+    function lastStopBefore(managerId, time) {
+      var best = null;
+      dayOf(managerId).timedStops.forEach(function (s) {
+        if (s.time < time && (!best || s.time > best.time)) best = s;
+      });
+      return best ? best.community : null;
+    }
+    function legFor(managerId, walk) {
+      var prior = lastStopBefore(managerId, walk.raw);
+      var from = prior || managerHome(managerId);
+      return driveMinutes(from, walk.community);
+    }
+    function hasEarlierStop(managerId, time) {
+      return dayOf(managerId).timedStops.some(function (s) { return s.time < time; });
+    }
+
+    // ---- Phase 2: timed walks, earliest clock time first, whole group at once --
+    groups.forEach(function (g) {
+      var pool = activeIds.slice();
+      var remaining = g.walks.slice();
+      while (remaining.length) {
+        var pairs = [];
+        remaining.forEach(function (w) {
+          pool.forEach(function (mid) {
+            var d = dayOf(mid);
+            if (d.minutes + w.minutes > DAILY_CAP_MIN) return;
+            var leg = legFor(mid, w);
+            if (leg === null) return;
+            if (!hasEarlierStop(mid, w.raw) && leg > INITIAL_LEG_CAP_MIN) return;
+            pairs.push({ walk: w, managerId: mid, leg: leg, running: d.minutes });
+          });
+        });
+        if (!pairs.length) {
+          remaining.forEach(function (w) {
+            var ranked = pool.map(function (mid) {
+              var d = dayOf(mid);
+              if (d.minutes + w.minutes > DAILY_CAP_MIN) return null;
+              var leg = legFor(mid, w);
+              return leg === null ? null : { managerId: mid, name: managerName(mid), leg: leg };
+            }).filter(Boolean).sort(function (a, b) { return a.leg - b.leg; });
+            report.unresolved.push({
+              walk: w,
+              reason: ranked.length ? 'No candidate within the ' + INITIAL_LEG_CAP_MIN + '-min initial-leg cap'
+                : 'No eligible manager (daily cap, lock, or time off excludes everyone)',
+              candidates: ranked
+            });
+          });
+          remaining = [];
+          break;
+        }
+        pairs.sort(function (a, b) {
+          if (a.leg !== b.leg) return a.leg - b.leg;
+          if (a.running !== b.running) return a.running - b.running;
+          return homeDistance(a.managerId, a.walk.community) - homeDistance(b.managerId, b.walk.community);
+        });
+        var best = pairs[0];
+        var bestDist = homeDistance(best.managerId, best.walk.community);
+        var tied = pairs.filter(function (p) {
+          return p.walk === best.walk && p.managerId !== best.managerId &&
+            p.leg === best.leg && p.running === best.running &&
+            homeDistance(p.managerId, p.walk.community) === bestDist;
+        });
+        if (tied.length) {
+          report.unresolved.push({
+            walk: best.walk,
+            reason: 'Judgment call: genuine tie on leg minutes, running total, and home distance between ' +
+              [best].concat(tied).map(function (p) { return managerName(p.managerId); }).join(', '),
+            candidates: [best].concat(tied).map(function (p) { return { managerId: p.managerId, name: managerName(p.managerId), leg: p.leg }; })
+          });
+          remaining = remaining.filter(function (w) { return w !== best.walk; });
+          continue;
+        }
+        var d2 = dayOf(best.managerId);
+        d2.minutes += best.walk.minutes;
+        d2.footprint[best.walk.community] = true;
+        d2.timedStops.push({ time: best.walk.raw, community: best.walk.community });
+        report.proposals.push({ walk: best.walk, toManagerId: best.managerId });
+        remaining = remaining.filter(function (w) { return w !== best.walk; });
+        pool = pool.filter(function (id) { return id !== best.managerId; });
+      }
+    });
+
+    // ---- Untimed fill (QAI/QAA): same-community full-day footprint first --
+    var byCommunity = {};
+    untimed.forEach(function (w) { (byCommunity[w.community] = byCommunity[w.community] || []).push(w); });
+    Object.keys(byCommunity).forEach(function (community) {
+      byCommunity[community].forEach(function (w) {
+        var working = activeIds.filter(function (id) {
+          var d = dayOf(id);
+          return !!d.footprint[community] && d.minutes + w.minutes <= DAILY_CAP_MIN;
+        });
+        if (working.length) {
+          working.sort(function (a, b) {
+            var ma = dayOf(a).minutes, mb = dayOf(b).minutes;
+            if (ma !== mb) return ma - mb;
+            return homeDistance(a, community) - homeDistance(b, community);
+          });
+          var pick = working[0];
+          var dp = dayOf(pick);
+          dp.minutes += w.minutes; dp.footprint[community] = true;
+          report.proposals.push({ walk: w, toManagerId: pick });
+          return;
+        }
+        var ranked = activeIds.map(function (id) {
+          var d = dayOf(id);
+          if (d.minutes + w.minutes > DAILY_CAP_MIN) return null;
+          return { managerId: id, d: homeDistance(id, community) };
+        }).filter(Boolean).sort(function (a, b) { return a.d - b.d; });
+        if (!ranked.length) {
+          report.unresolved.push({ walk: w, reason: 'No manager has remaining capacity today for this untimed walk' });
+          return;
+        }
+        var chosen = ranked[0].managerId;
+        var dc = dayOf(chosen);
+        dc.minutes += w.minutes; dc.footprint[community] = true;
+        report.proposals.push({ walk: w, toManagerId: chosen });
+      });
+    });
+
+    // ---- Phase 3: sanity check ------------------------------------------
+    var finalByManager = {};
+    function record(managerId, walk) { (finalByManager[managerId] = finalByManager[managerId] || []).push(walk); }
+    walks.forEach(function (w) { if (w.locked && w.managerId) record(w.managerId, w); });
+    report.proposals.forEach(function (p) { record(p.toManagerId, p.walk); });
+
+    Object.keys(finalByManager).forEach(function (managerId) {
+      var byTime = {};
+      finalByManager[managerId].forEach(function (w) {
+        if (!WALK_FIELD[w.walkType].datetime) return;
+        (byTime[w.raw] = byTime[w.raw] || []).push(w);
+      });
+      Object.keys(byTime).forEach(function (t) {
+        if (byTime[t].length > 1) report.duplicates.push({ managerId: managerId, time: t, walks: byTime[t] });
+      });
+    });
+
+    Object.keys(mgrDay).forEach(function (id) {
+      if (mgrDay[id].minutes > DAILY_CAP_MIN) report.overCap.push({ managerId: id, minutes: mgrDay[id].minutes });
+    });
+
+    return report;
+  }
+
+  /* Stage every proposal that actually changes something (skip anything the
+     optimizer would leave right where it already is) through handleDrop, so
+     it behaves exactly like a manual drag -- staged, undoable, unsaved until
+     Submit -- then render a plain-language summary of everything else the
+     algorithm found. */
+  function applySOTV3Result(report) {
+    var applied = 0;
+    report.proposals.forEach(function (p) {
+      var w = state.walks.find(function (x) { return x.recordId === p.walk.recordId && x.walkType === p.walk.walkType; });
+      if (!w) return;
+      if (effectiveManagerId(w) === p.toManagerId) return;
+      handleDrop({ recordId: w.recordId, walkType: w.walkType, fromManagerId: effectiveManagerId(w) }, p.toManagerId);
+      applied++;
+    });
+
+    var parts = [];
+    parts.push('<strong>SOTV3 finished.</strong> ' + applied + ' change' + (applied === 1 ? '' : 's') +
+      ' staged below \u2014 review, then Submit. Nothing has been saved.');
+    if (report.flaggedNonSold.length) {
+      parts.push('<div><strong>' + report.flaggedNonSold.length + ' QAI walk' + (report.flaggedNonSold.length === 1 ? '' : 's') +
+        ' flagged</strong> (non-Sold lot, still scheduled): ' +
+        report.flaggedNonSold.map(function (w) { return '#' + esc(w.jobNumber); }).join(', ') + '</div>');
+    }
+    if (report.deferred.length) {
+      parts.push('<div><strong>' + report.deferred.length + ' walk' + (report.deferred.length === 1 ? '' : 's') +
+        ' deferred</strong> (non-Sold lot, not scheduled): ' +
+        report.deferred.map(function (d) { return '#' + esc(d.walk.jobNumber) + ' (' + d.walk.walkType + ')'; }).join(', ') + '</div>');
+    }
+    if (report.unresolved.length) {
+      parts.push('<div><strong>' + report.unresolved.length + ' walk' + (report.unresolved.length === 1 ? '' : 's') +
+        ' unresolved</strong> \u2014 left with its current manager: ' +
+        report.unresolved.map(function (u) { return '#' + esc(u.walk.jobNumber) + ': ' + esc(u.reason); }).join('; ') + '</div>');
+    }
+    parts.push('<div>Duplicate-booking check: ' + (report.duplicates.length
+      ? '<strong>' + report.duplicates.length + ' clash' + (report.duplicates.length === 1 ? '' : 'es') + ' found</strong> \u2014 ' +
+        report.duplicates.map(function (d) { return esc(managerName(d.managerId)) + ' at ' + esc(easternTimeLabel(d.time)) + ' ET'; }).join(', ')
+      : 'none found') + '.</div>');
+    if (report.overCap.length) {
+      parts.push('<div><strong>Over the ' + DAILY_CAP_MIN + '-min cap:</strong> ' +
+        report.overCap.map(function (o) { return esc(managerName(o.managerId)) + ' at ' + o.minutes + ' min'; }).join(', ') + '.</div>');
+    }
+    showBanner(report.unresolved.length || report.duplicates.length || report.overCap.length ? 'warn' : 'info', parts.join(''));
+    renderAll();
+  }
+
+  function runSOTV3() {
+    if (!state.walks.length || state.can.indexOf('walk.schedule') < 0) return;
+    var btn = document.getElementById('btnOptimize');
+    btn.disabled = true;
+    clearBanner();
+    showBanner('info', 'Running SOTV3\u2026');
+    // Time off is date-specific and the roster/drive/product-map refresh is
+    // cheap (server-cached 5 min), so this always re-fetches rather than
+    // trusting a load from a previous date.
+    loadSOTV3Reference(state.dateKey)
+      .then(function () {
+        var report = computeSOTV3(state.walks, state.managers);
+        applySOTV3Result(report);
+      })
+      .catch(function (err) {
+        showBanner('error', 'Could not run SOTV3: ' + esc(err && err.message ? err.message : String(err)));
+      })
+      .then(function () {
+        btn.disabled = !state.walks.length || state.can.indexOf('walk.schedule') < 0;
+      });
   }
 
   /* ---- Submit --------------------------------------------------------------
@@ -641,9 +1003,27 @@
     });
   }
 
+  /* Unassign button on each card. Delegated on #board once (rather than
+     re-wired every render) since it never moves in the DOM. Reuses
+     handleDrop() with toManagerId=null so an unassign click is IDENTICAL to
+     dragging the card onto the Unassigned column -- same staging, same undo
+     via the pending chip's x, nothing saved until Submit. */
+  function wireUnassignButtons() {
+    document.getElementById('board').addEventListener('click', function (ev) {
+      var btn = ev.target.closest && ev.target.closest('[data-unassign-record]');
+      if (!btn) return;
+      var recordId = btn.getAttribute('data-unassign-record');
+      var walkType = btn.getAttribute('data-unassign-type');
+      var w = state.walks.find(function (x) { return x.recordId === recordId && x.walkType === walkType; });
+      if (!w || w.locked) return;
+      handleDrop({ recordId: recordId, walkType: walkType, fromManagerId: effectiveManagerId(w) }, null);
+    });
+  }
+
   function init() {
     var dateInput = document.getElementById('walkDate');
     dateInput.value = todayEastern();
+    wireUnassignButtons();
 
     var session = getSession();
     if (!session || !session.token) {
@@ -674,6 +1054,9 @@
     });
     document.getElementById('btnRefresh').addEventListener('click', function () {
       loadForDate(state.dateKey || dateInput.value);
+    });
+    document.getElementById('btnOptimize').addEventListener('click', function () {
+      runSOTV3();
     });
     document.getElementById('addColSelect').addEventListener('change', function () {
       var id = this.value;
