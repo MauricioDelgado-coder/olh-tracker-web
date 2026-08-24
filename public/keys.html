@@ -282,6 +282,7 @@
 })();
 </script>
 
+<script src="vendor/exceljs.min.js"></script>
 <div style="min-height:100vh;display:flex;flex-direction:column;background:#FBF6F3">
 
   <header style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:14px 32px;background:#1B2A58">
@@ -314,6 +315,7 @@
       <button id="btnClearFilters" style="height:30px;padding:0 12px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;color:#6F6963;font-size:12.5px;font-weight:500;cursor:pointer">Clear Column Filters</button>
       <span style="margin-left:auto;font-size:12px;color:#908A82" id="countNote"></span>
       <button id="btnRefresh" style="height:30px;padding:0 12px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;color:#6F6963;font-size:12.5px;font-weight:500;cursor:pointer">Refresh</button>
+      <button id="btnExport" style="height:30px;padding:0 12px;border:1px solid #005DAA;border-radius:4px;background:#fff;color:#005DAA;font-size:12.5px;font-weight:600;cursor:pointer">Export to Excel</button>
     </div>
 
     <div style="border:1px solid #E4DED2;border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(27,42,88,.05);overflow:auto;max-height:70vh">
@@ -1396,7 +1398,10 @@
     }
   }
 
-  function render(){
+  /* Same filter + sort the table uses, factored out so the Excel export
+     always matches what's currently on screen rather than the full
+     unfiltered set. */
+  function getFilteredRows(){
     var q = (document.getElementById('q').value || '').trim().toLowerCase();
     var qJob = (document.getElementById('fJob').value || '').trim().toLowerCase();
     var qAddr = (document.getElementById('fAddr').value || '').trim().toLowerCase();
@@ -1425,8 +1430,6 @@
     // the table below, so the tile counts and the rows always agree.
     var LOTS = {B: 1, S: 1, W: 1};
     var activeAll = all.filter(function(r){ return !r.closed && LOTS[r.lotStatus]; });
-    document.getElementById('tilePendingCount').textContent = activeAll.filter(function(r){ return r.keyStatus === 'Pending'; }).length;
-    document.getElementById('tilePriorityCount').textContent = activeAll.filter(function(r){ return r.keyStatus === 'Priority'; }).length;
 
     var rows = all.filter(function(r){
       if(r.closed) return false;
@@ -1448,6 +1451,94 @@
     rows.sort(function(a,b){
       return a.community.localeCompare(b.community) || a.job.localeCompare(b.job);
     });
+
+    return { all: all, activeAll: activeAll, rows: rows };
+  }
+
+  /* Builds the workbook with ExcelJS (bundled at vendor/exceljs.min.js) and
+     triggers a browser download. Exports exactly the filtered/sorted rows
+     currently on screen -- if someone has narrowed to one community or
+     status, that's what lands in the spreadsheet. */
+  async function exportExcel(){
+    if(!window.ExcelJS){
+      toast('err', 'Could Not Export', 'The Excel library did not load. Reload the page and try again.');
+      return;
+    }
+    var rows = getFilteredRows().rows;
+    if(!rows.length){
+      toast('err', 'Nothing To Export', 'No homesites match the current filters.');
+      return;
+    }
+    var btn = document.getElementById('btnExport');
+    var prevText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Exporting\u2026';
+    try{
+      var wb = new window.ExcelJS.Workbook();
+      wb.creator = 'OLH Tracker';
+      wb.created = new Date();
+      var ws = wb.addWorksheet('Keys');
+      ws.columns = [
+        { header: 'Job #', key: 'job', width: 14 },
+        { header: 'Community', key: 'community', width: 24 },
+        { header: 'Street Address', key: 'address', width: 30 },
+        { header: 'City', key: 'city', width: 16 },
+        { header: 'ECOE', key: 'ecoe', width: 12 },
+        { header: 'Key Status', key: 'keyStatus', width: 18 },
+        { header: 'Key Delivery Notes', key: 'deliveredTo', width: 24 },
+        { header: 'Delivery Date', key: 'deliveryDate', width: 14 },
+        { header: 'Sale Date', key: 'saleDate', width: 12 },
+        { header: 'Scheduled Closing', key: 'closingDate', width: 16 }
+      ];
+      rows.forEach(function(r){
+        ws.addRow({
+          job: r.job || '',
+          community: r.community || '',
+          address: r.address || '',
+          city: r.city || '',
+          ecoe: fmtD(r.ecoe),
+          keyStatus: r.keyStatus || '',
+          deliveredTo: r.deliveredTo || '',
+          deliveryDate: fmtD(r.deliveryDate),
+          saleDate: fmtD(r.saleDate),
+          closingDate: fmtD(r.closingDate)
+        });
+      });
+      var headerRow = ws.getRow(1);
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1B2A58' } };
+      headerRow.alignment = { vertical: 'middle' };
+      ws.views = [{ state: 'frozen', ySplit: 1 }];
+      ws.autoFilter = { from: 'A1', to: String.fromCharCode(64 + ws.columns.length) + '1' };
+
+      var buf = await wb.xlsx.writeBuffer();
+      var blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      var today = new Date();
+      var stamp = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'Keys ' + stamp + '.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
+      toast('ok', 'Exported', rows.length + (rows.length === 1 ? ' homesite' : ' homesites') + ' saved to Excel.');
+    }catch(err){
+      toast('err', 'Could Not Export', (err && err.message) || String(err));
+    }finally{
+      btn.disabled = false;
+      btn.textContent = prevText;
+    }
+  }
+
+  function render(){
+    var filtered = getFilteredRows();
+    var all = filtered.all;
+    var activeAll = filtered.activeAll;
+    var rows = filtered.rows;
+
+    document.getElementById('tilePendingCount').textContent = activeAll.filter(function(r){ return r.keyStatus === 'Pending'; }).length;
+    document.getElementById('tilePriorityCount').textContent = activeAll.filter(function(r){ return r.keyStatus === 'Priority'; }).length;
 
     document.getElementById('countNote').textContent =
       rows.length + (rows.length === 1 ? ' homesite' : ' homesites');
@@ -1659,6 +1750,7 @@
     document.getElementById(id).addEventListener('change', render);
   });
   document.getElementById('btnRefresh').addEventListener('click', loadLive);
+  document.getElementById('btnExport').addEventListener('click', exportExcel);
   document.getElementById('btnClearFilters').addEventListener('click', function(){
     ['fJob', 'fAddr', 'fDelivered'].forEach(function(id){ document.getElementById(id).value = ''; });
     ['fComm', 'fCity', 'fStatus'].forEach(function(id){ document.getElementById(id).setValues([]); });
