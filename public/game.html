@@ -62,11 +62,22 @@
     display:flex; flex-direction:column; min-height:120px;
   }
   .col.dragover{border-color:var(--navy); box-shadow:0 0 0 2px rgba(27,42,88,.15) inset}
+  /* Unassigned is always the first column (see allColumnIds) -- pinning it
+     to the left of the horizontally-scrolling board makes it possible to
+     drag from it into a manager column scrolled out of view without losing
+     sight of what's still unplaced. It already has an opaque background
+     (--card) so scrolled-under cards don't show through. */
+  .col.unassigned{position:sticky; left:0; z-index:35; box-shadow:6px 0 10px -6px rgba(27,42,88,.18)}
+  .col.unassigned.dragover{box-shadow:6px 0 10px -6px rgba(27,42,88,.18), 0 0 0 2px rgba(27,42,88,.15) inset}
   .col-head{
     padding:10px 12px; border-bottom:1px solid var(--border); border-radius:10px 10px 0 0;
   }
   .col-head .name{font-weight:700; font-size:13.5px; color:var(--ink)}
-  .col-head .meta{font-size:11.5px; color:var(--faint); margin-top:2px; display:flex; gap:8px; flex-wrap:wrap}
+  .col-head .meta2{font-size:11.5px; color:var(--muted); font-weight:600; margin-top:3px}
+  .col-head select.sortpick{
+    display:block; width:100%; margin-top:7px; font-size:11px; padding:4px 7px; border-radius:6px;
+  }
+  .col-head .meta{font-size:11.5px; color:var(--faint); margin-top:6px; display:flex; gap:8px; flex-wrap:wrap}
   .col-head .meta .cap-over{color:var(--red-ink); font-weight:700}
   .col-body{padding:8px; display:flex; flex-direction:column; gap:7px; min-height:60px}
   .col-empty{font-size:12px; color:var(--faint); padding:8px 4px; text-align:center}
@@ -78,6 +89,7 @@
   .card.locked{cursor:not-allowed; background:#FAFAF8; opacity:.85}
   .card.staged{border-color:var(--navy); box-shadow:0 0 0 1px var(--navy) inset}
   .card .row1{display:flex; justify-content:space-between; gap:6px; align-items:baseline}
+  .card .row1 .badges{display:flex; align-items:center; gap:4px}
   .card .job{font-weight:700; color:var(--navy)}
   .card .type{
     font-size:10.5px; font-weight:700; padding:1px 6px; border-radius:999px; letter-spacing:.02em;
@@ -86,6 +98,10 @@
   .type-QAA{background:#EAF6EE; color:#1E5B34}
   .type-CEL{background:#FBEFE0; color:#8A5A12}
   .type-ACC{background:#F6E8F6; color:#7A2E82}
+  .pill-unsold{
+    font-size:10px; font-weight:700; padding:1px 6px; border-radius:999px; letter-spacing:.02em;
+    background:var(--amber-bg); color:var(--amber-ink); border:1px solid var(--amber-border);
+  }
   /* Left-edge accent on the card itself. Deliberately separate from
      .type-QAI etc above -- those are also used on the small pill badge
      inside the card, and giving the outer card the same class name would
@@ -201,10 +217,13 @@
      }
      extraCols: manager ids added via the "Add manager column" picker that
        have no walk of their own yet, so an empty column exists to drop onto.
+     unassignedSort: 'time' | 'type' | 'community' -- display-only ordering
+       for the Unassigned column, independent of every other column's order.
   --------------------------------------------------------------------------*/
   var state = {
     jobs: [], managers: [], walks: [], can: [], user: null,
-    pending: new Map(), extraCols: [], dateKey: '', loading: false
+    pending: new Map(), extraCols: [], dateKey: '', loading: false,
+    unassignedSort: 'time'
   };
 
   /* ---- Small helpers ------------------------------------------------------ */
@@ -315,7 +334,11 @@
           timeLabel: cfg.datetime ? easternTimeLabel(raw) : null,
           managerId: managerId,
           locked: !!f[cfg.lock],
-          minutes: cfg.minutes
+          minutes: cfg.minutes,
+          // Same field the no-COE report keys "Sold / committed" vs "Unsold"
+          // off of (Homesite_Status__c, synced here as "Homesite Status").
+          // 'Available' is the only unsold value; anything else counts sold.
+          unsold: f['Homesite Status'] === 'Available'
         });
       });
     });
@@ -364,6 +387,79 @@
     return dups;
   }
 
+  /* ---- Community count / drive-time estimate ------------------------------
+     Reuses the SOTV3 reference data below (sotv3Ref, managerHome,
+     coreCommunity, driveMinutes) rather than fetching or resolving anything
+     of its own -- same roster/drive-matrix/product-map, just summarized per
+     column instead of run through the optimizer. Resolves each walk's
+     Community to a drive-matrix community, then sums the home->first-stop
+     leg plus each consecutive stop-to-stop leg in the order the column
+     already displays them (time first, then job #). Unknown legs (no
+     drive-time row, or no known home community) are skipped rather than
+     guessed, and the total is marked "partial" so the UI can show it as a
+     lower bound. This is an at-a-glance estimate, not the optimizer's route. */
+  function columnCommunityCount(managerId) {
+    var seen = {};
+    columnWalks(managerId).forEach(function (w) {
+      seen[w.community || w.address || '(no community)'] = true;
+    });
+    return Object.keys(seen).length;
+  }
+
+  function columnDriveEstimate(managerId) {
+    var walks = columnWalks(managerId); // already time-then-job# ordered
+    var total = 0;
+    var partial = false;
+    var prev = managerHome(managerId);
+    if (!prev) partial = true;
+    walks.forEach(function (w) {
+      var b = coreCommunity(w.community) || w.community || null;
+      if (prev && b) {
+        var leg = driveMinutes(prev, b);
+        if (leg === null) partial = true; else total += leg;
+      } else {
+        partial = true;
+      }
+      if (b) prev = b;
+    });
+    return { minutes: total, partial: partial };
+  }
+
+  /* ---- Unassigned-column sort ---------------------------------------------
+     Display-only: reorders a copy of columnWalks(null) for rendering. Never
+     touches state.walks, so drag/drop, the Unassign button, cap math, and
+     duplicate-time checks (all of which key off the original array) are
+     unaffected. */
+  function sortedUnassignedWalks() {
+    var list = columnWalks(null).slice();
+    var mode = state.unassignedSort || 'time';
+    function timeKey(w) { return (WALK_FIELD[w.walkType].datetime && w.raw) ? w.raw : ''; }
+    list.sort(function (a, b) {
+      if (mode === 'type') {
+        var ta = WALK_TYPES.indexOf(a.walkType), tb = WALK_TYPES.indexOf(b.walkType);
+        if (ta !== tb) return ta - tb;
+      } else if (mode === 'community') {
+        var ca = (a.community || '').localeCompare(b.community || '');
+        if (ca !== 0) return ca;
+      }
+      var tka = timeKey(a), tkb = timeKey(b);
+      if (tka !== tkb) return tka < tkb ? -1 : 1;
+      return String(a.jobNumber).localeCompare(String(b.jobNumber));
+    });
+    return list;
+  }
+
+  function unassignedSortSelectHtml() {
+    var mode = state.unassignedSort || 'time';
+    function opt(v, label) {
+      return '<option value="' + v + '"' + (mode === v ? ' selected' : '') + '>' + esc(label) + '</option>';
+    }
+    return '' +
+      '<select class="sortpick" data-role="unassigned-sort" title="Sort the Unassigned column">' +
+      opt('time', 'Sort: Time') + opt('type', 'Sort: Walk type') + opt('community', 'Sort: Community') +
+      '</select>';
+  }
+
   function allColumnIds() {
     var ids = {};
     state.walks.forEach(function (w) { ids[effectiveManagerId(w) || ''] = true; });
@@ -388,11 +484,14 @@
       dup = columnDuplicateTimes(eff).indexOf(w.raw) >= 0;
     }
     var overCap = columnMinutes(eff) > DAILY_CAP_MIN;
+    var unsoldBadge = w.unsold
+      ? '<span class="pill-unsold" title="Homesite Status is Available -- this home is not yet sold">UNSOLD</span>'
+      : '';
     return '' +
       '<div class="' + classes + '" draggable="' + (w.locked ? 'false' : 'true') + '" ' +
       'data-record="' + esc(w.recordId) + '" data-type="' + w.walkType + '" data-current="' + esc(eff || '') + '">' +
       '<div class="row1"><span class="job">#' + esc(w.jobNumber) + '</span>' +
-      '<span class="type type-' + w.walkType + '">' + w.walkType + '</span></div>' +
+      '<span class="badges"><span class="type type-' + w.walkType + '">' + w.walkType + '</span>' + unsoldBadge + '</span></div>' +
       '<div class="community">' + esc(w.community || w.address || '(no community)') + '</div>' +
       (w.timeLabel ? '<div class="time">' + esc(w.timeLabel) + ' ET</div>' : '<div class="time">No set time</div>') +
       (w.locked ? '<div class="lockrow">&#128274; Locked &mdash; cannot reassign</div>' : '') +
@@ -405,8 +504,9 @@
   }
 
   function columnHtml(managerId) {
+    var isUnassigned = !managerId;
     var name = managerId ? managerName(managerId) : 'Unassigned';
-    var walks = columnWalks(managerId);
+    var walks = isUnassigned ? sortedUnassignedWalks() : columnWalks(managerId);
     var minutes = columnMinutes(managerId);
     var overCap = minutes > DAILY_CAP_MIN;
     var dupCount = managerId ? columnDuplicateTimes(managerId).length : 0;
@@ -416,9 +516,31 @@
     var body = walks.length
       ? walks.map(cardHtml).join('')
       : '<div class="col-empty">Drop a walk here</div>';
+
+    // Community count + drive-time estimate, directly under the name. Skips
+    // the summary line entirely on an empty column (nothing to summarize),
+    // skips the drive-time half for Unassigned (no manager to drive
+    // anywhere), and falls back to community-count-only if sotv3Ref hasn't
+    // loaded yet (lazy-loaded -- see loadSOTV3Reference below).
+    var meta2 = '';
+    if (walks.length) {
+      var commCount = columnCommunityCount(managerId);
+      var commLabel = commCount + ' communit' + (commCount === 1 ? 'y' : 'ies');
+      if (isUnassigned || !sotv3Ref.loaded) {
+        meta2 = commLabel;
+      } else {
+        var est = columnDriveEstimate(managerId);
+        meta2 = commLabel + ' &middot; ~' + est.minutes + ' min drive' + (est.partial ? '*' : '');
+      }
+    }
+
+    var sortControl = isUnassigned ? unassignedSortSelectHtml() : '';
+
     return '' +
-      '<div class="col" data-manager="' + esc(managerId || '') + '">' +
+      '<div class="col' + (isUnassigned ? ' unassigned' : '') + '" data-manager="' + esc(managerId || '') + '">' +
       '<div class="col-head"><div class="name">' + esc(name) + '</div>' +
+      (meta2 ? '<div class="meta2">' + meta2 + '</div>' : '') +
+      sortControl +
       '<div class="meta">' + metaBits.join(' &middot; ') + '</div></div>' +
       '<div class="col-body">' + body + '</div>' +
       '</div>';
@@ -437,6 +559,7 @@
     var cols = allColumnIds();
     board.innerHTML = cols.map(function (id) { return columnHtml(id || null); }).join('');
     wireDragAndDrop();
+    wireUnassignedSort();
   }
 
   function renderAddColumnSelect() {
@@ -448,6 +571,15 @@
         .map(function (m) { return '<option value="' + esc(m.id) + '">' + esc(m.name) + '</option>'; })
     );
     sel.innerHTML = opts.join('');
+  }
+
+  function wireUnassignedSort() {
+    var sel = document.querySelector('[data-role="unassigned-sort"]');
+    if (!sel) return;
+    sel.addEventListener('change', function () {
+      state.unassignedSort = this.value;
+      renderBoard();
+    });
   }
 
   function renderPendingBar() {
@@ -1031,6 +1163,12 @@
       document.getElementById('board').innerHTML = '';
       return;
     }
+
+    // Fire-and-forget, independent of the session/date-load chain below: the
+    // board is fully usable without it (meta2 just shows community count
+    // only until this resolves), so it shouldn't block or fail page load.
+    // This also means Run SOTV3 usually finds sotv3Ref already warm.
+    loadSOTV3Reference(dateInput.value).then(function () { renderBoard(); }).catch(function () {});
 
     loadSession().then(function () {
       if (state.can.indexOf('walk.schedule') < 0) {
