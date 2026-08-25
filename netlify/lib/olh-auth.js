@@ -301,9 +301,18 @@ const ALL_PAGES = [
 // page.qamgmt.
 const DEFAULT_ROLES = {
   admin: ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage', 'sandbox.edit'].concat(ALL_PAGES),
-  qam: ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply',
-    'page.home', 'page.tracker', 'page.completion', 'page.walks', 'page.qamgmt', 'page.missedwalks',
-    'page.scheduler', 'page.timeoff', 'page.workload', 'page.walkstoschedule'],
+  // Restricted 2026-08-25 to the My Walks self-service page only
+  // (public/my-walks.html, sandboxed/unlinked like game.html). QAMs no
+  // longer get the tracker, completion, scheduler, qa-management,
+  // missed-walks, time-off, workload, or walks-to-schedule pages --
+  // my-walks.html checks no page.* permission at all, only tracker.edit,
+  // so it keeps working under this reduced set. page.home is kept so
+  // sign-in still lands on a real page (an empty tile view) instead of
+  // erroring. Restore the previous line below if this ever needs undoing.
+  // qam: ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply',
+  //   'page.home', 'page.tracker', 'page.completion', 'page.walks', 'page.qamgmt', 'page.missedwalks',
+  //   'page.scheduler', 'page.timeoff', 'page.workload', 'page.walkstoschedule'],
+  qam: ['suite.view', 'tracker.edit', 'page.home'],
   cm: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.completion', 'page.walks'],
   ccr: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.walks', 'page.qamgmt', 'page.missedwalks',
     'page.walkstoschedule'],
