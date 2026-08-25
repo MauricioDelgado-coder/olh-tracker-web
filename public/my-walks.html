@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>My Walks — OLH Tracker</title>
+<style>
+  :root{
+    --navy:#1B2A58; --ink:#2B2620; --muted:#6F6963; --faint:#908A82;
+    --border:#E4DED2; --bg:#FBF8F3; --card:#ffffff;
+    --amber-bg:#FFF8E1; --amber-ink:#7C4A03; --amber-border:#F0DFAE;
+    --red-bg:#FDECEA; --red-ink:#7F1D1D; --red-border:#F3C6C2;
+    --green-bg:#EAF6EE; --green-ink:#1E5B34; --green-border:#C6E6D2;
+    /* Same milestone palette as scheduler.html / walk-calendar.html (CODE_COLOR) */
+    --qai:#005DAA; --qai-bg:#E9F1FA;
+    --qaa:#006368; --qaa-bg:#E5F1F1;
+    --cel:#83553C; --cel-bg:#F3EAE3;
+    --acc:#0D773C; --acc-bg:#E7F0E9;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  }
+  a{color:var(--navy)}
+  header.top{
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    padding:14px 20px; background:var(--navy); border-bottom:1px solid var(--border);
+    position:sticky; top:0; z-index:50; flex-wrap:wrap;
+  }
+  header.top h1{
+    margin:0; font:400 22px/1.2 Georgia,"Times New Roman",serif; color:#fff;
+    letter-spacing:-.01em;
+  }
+  .who{ font-size:12px; color:#C7BFB2; }
+  header.top a.home{
+    display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 13px;
+    border:1px solid rgba(255,255,255,.28); border-radius:4px; background:transparent;
+    color:#C7BFB2; font-size:13px; font-weight:500; text-decoration:none; white-space:nowrap;
+  }
+  header.top a.home:hover{ background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.45); color:#fff; }
+
+  main{ max-width:1040px; margin:0 auto; padding:22px 20px 80px; }
+
+  #banners{ margin-bottom:16px; }
+  .banner{ padding:12px 16px; border-radius:8px; font-size:13.5px; margin-bottom:8px; }
+  .banner.error{ background:var(--red-bg); color:var(--red-ink); border:1px solid var(--red-border); }
+  .banner.info{ background:var(--amber-bg); color:var(--amber-ink); border:1px solid var(--amber-border); }
+
+  .legend{
+    display:flex; gap:18px; flex-wrap:wrap; align-items:center;
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:12px 16px; margin-bottom:20px; font-size:12.5px; color:var(--muted);
+  }
+  .legend .dot{ width:9px; height:9px; border-radius:50%; display:inline-block; margin-right:6px; position:relative; top:-1px; }
+
+  .filters{ display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap; }
+  .chip{
+    font-size:12px; padding:7px 14px; border-radius:999px; border:1px solid var(--border);
+    background:var(--card); color:var(--muted); cursor:pointer;
+  }
+  .chip.active{ background:var(--navy); border-color:var(--navy); color:#fff; }
+
+  .section-head{ display:flex; align-items:baseline; justify-content:space-between; margin:30px 0 12px; }
+  .section-head h2{ margin:0; font:400 19px/1.2 Georgia,"Times New Roman",serif; color:var(--navy); }
+  .section-head .count{ font-size:12px; color:var(--muted); }
+
+  .walk{
+    background:var(--card); border:1px solid var(--border); border-left:4px solid var(--border);
+    border-radius:10px; padding:14px 16px; margin-bottom:10px;
+    display:flex; gap:14px; align-items:flex-start;
+  }
+  .walk.qai{ border-left-color:var(--qai); }
+  .walk.qaa{ border-left-color:var(--qaa); }
+  .walk.cel{ border-left-color:var(--cel); }
+  .walk.acc{ border-left-color:var(--acc); }
+  .walk.done{ opacity:.6; }
+  .walk.missed{ border-left-color:var(--red-ink); background:var(--red-bg); }
+
+  .walk-pipeline{ display:flex; flex-direction:column; align-items:center; gap:3px; padding-top:2px; flex-shrink:0; }
+  .pl-track{ display:flex; align-items:center; }
+  .pl-dot{ width:9px; height:9px; border-radius:50%; border:2px solid var(--border); background:#fff; }
+  .pl-dot.filled.qai{ background:var(--qai); border-color:var(--qai); }
+  .pl-dot.filled.qaa{ background:var(--qaa); border-color:var(--qaa); }
+  .pl-dot.filled.cel{ background:var(--cel); border-color:var(--cel); }
+  .pl-dot.filled.acc{ background:var(--acc); border-color:var(--acc); }
+  .pl-dot.current{ box-shadow:0 0 0 3px rgba(0,0,0,.06); }
+  .pl-seg{ width:12px; height:2px; background:var(--border); }
+
+  .walk-body{ flex:1; min-width:0; }
+  .walk-top{ display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .walk-addr{ font-weight:600; font-size:15px; }
+  .walk-meta{ font-size:12px; color:var(--muted); margin-top:2px; }
+  .badge{
+    font-size:10.5px; font-weight:700; letter-spacing:.05em; padding:3px 9px;
+    border-radius:6px; text-transform:uppercase; height:fit-content; white-space:nowrap;
+  }
+  .badge.qai{ color:var(--qai); background:var(--qai-bg); }
+  .badge.qaa{ color:var(--qaa); background:var(--qaa-bg); }
+  .badge.cel{ color:var(--cel); background:var(--cel-bg); }
+  .badge.acc{ color:var(--acc); background:var(--acc-bg); }
+  .badge.pub{ color:var(--green-ink); background:var(--green-bg); }
+  .badge.pot{ color:var(--amber-ink); background:var(--amber-bg); }
+
+  .walk-time{ font-size:13px; font-weight:600; color:var(--ink); white-space:nowrap; }
+
+  .walk-controls{ margin-top:10px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  .ctrl{ display:flex; align-items:center; gap:7px; font-size:13px; cursor:pointer; user-select:none; }
+  .ctrl input[type=checkbox]{ width:16px; height:16px; cursor:pointer; }
+  .miss-link{
+    font-size:12px; color:var(--red-ink); text-decoration:underline; cursor:pointer;
+    background:none; border:none; padding:0; font:inherit; margin-left:auto;
+  }
+  .status-note{ font-size:11.5px; color:var(--green-ink); }
+  .status-note.missed{ color:var(--red-ink); }
+  .saving-note{ font-size:11.5px; color:var(--muted); }
+
+  .miss-panel{ margin-top:10px; padding:12px; background:var(--red-bg); border:1px solid var(--red-border); border-radius:8px; display:none; }
+  .miss-panel.open{ display:block; }
+  .miss-panel select, .miss-panel textarea{
+    width:100%; font:inherit; font-size:13px; padding:8px 10px; border:1px solid var(--border);
+    border-radius:6px; margin-top:6px; background:#fff;
+  }
+  .miss-panel textarea{ resize:vertical; min-height:50px; }
+  .miss-panel label{ font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  .miss-actions{ margin-top:10px; display:flex; gap:8px; }
+  .btn{ font:inherit; font-size:12.5px; font-weight:600; padding:7px 14px; border-radius:6px; border:1px solid var(--border); background:#fff; cursor:pointer; }
+  .btn.primary{ background:var(--navy); color:#fff; border-color:var(--navy); }
+  .btn.primary:disabled{ background:var(--border); color:var(--faint); cursor:not-allowed; }
+  .btn.ghost{ background:transparent; }
+
+  .day-group{ margin-bottom:16px; }
+  .day-label{
+    display:flex; align-items:center; gap:10px;
+    font-size:11.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted);
+    margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid var(--border);
+  }
+  .up-row{ display:flex; align-items:center; gap:12px; padding:9px 4px; border-bottom:1px solid #F1EBE1; font-size:13.5px; }
+  .up-row:last-child{ border-bottom:none; }
+  .up-time{ font-size:12px; color:var(--muted); width:60px; flex-shrink:0; }
+  .up-addr{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .up-community{ color:var(--muted); font-size:12px; }
+
+  .empty{ text-align:center; padding:36px 20px; color:var(--muted); font-size:13.5px; border:1px dashed var(--border); border-radius:10px; }
+  .skeleton{ text-align:center; padding:40px 20px; color:var(--faint); font-size:13.5px; }
+
+  .viewas{ display:flex; align-items:center; gap:8px; }
+  .viewas label{ font-size:11px; color:#C7BFB2; font-weight:600; text-transform:uppercase; letter-spacing:.05em; }
+  .viewas select{
+    height:30px; padding:0 8px; border:1px solid rgba(255,255,255,.35); border-radius:4px;
+    background:rgba(255,255,255,.08); color:#fff; font-size:12.5px; cursor:pointer;
+  }
+  .viewas select option{ color:#000; }
+  .banner.impersonate{ background:var(--amber-bg); color:var(--amber-ink); border:1px solid var(--amber-border); font-weight:500; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div>
+    <h1>My Walks</h1>
+    <div class="who" id="whoLine">Loading…</div>
+  </div>
+  <div class="viewas" id="viewAsWrap" style="display:none">
+    <label for="viewAsSelect">Testing as</label>
+    <select id="viewAsSelect"><option value="">Myself</option></select>
+  </div>
+  <a class="home" href="/">All Views</a>
+</header>
+
+<main>
+  <div id="banners"></div>
+
+  <div class="legend">
+    <span><b>Pipeline</b></span>
+    <span><span class="dot" style="background:var(--qai)"></span>QAI Inspection</span>
+    <span><span class="dot" style="background:var(--qaa)"></span>QAA Acceptance</span>
+    <span><span class="dot" style="background:var(--cel)"></span>Celebration</span>
+    <span><span class="dot" style="background:var(--acc)"></span>Final Acceptance</span>
+    <span style="margin-left:auto"><span class="badge pub">Published</span> = day is locked on the schedule &nbsp; <span class="badge pot">Potential</span> = assigned, not yet locked</span>
+  </div>
+
+  <div class="filters" id="filters">
+    <button class="chip active" data-f="all">All</button>
+    <button class="chip" data-f="qai">QAI</button>
+    <button class="chip" data-f="qaa">QAA</button>
+    <button class="chip" data-f="cel">Celebration</button>
+    <button class="chip" data-f="acc">Acceptance</button>
+  </div>
+
+  <div id="content" class="skeleton">Loading your walks…</div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  var API = '/api';
+  var SESSION_KEY = 'olh.session.v1';
+  var TZ = 'America/New_York';
+
+  var WALK_FIELD = {
+    QAI: { date: 'QAI Date', manager: 'QAI Manager', complete: 'QAI Complete',
+      missed: 'QAI Missed', reason: 'QAI Miss Reason', note: 'QAI Miss Note', datetime: false, attend: null },
+    QAA: { date: 'QAA Date', manager: 'QAA Manager', complete: 'QAA Accepted',
+      missed: 'QAA Missed', reason: 'QAA Miss Reason', note: 'QAA Miss Note', datetime: false, attend: null },
+    CEL: { date: 'CEL Date', manager: 'CEL Manager', complete: 'CEL Completed',
+      missed: 'CEL Missed', reason: 'CEL Miss Reason', note: 'CEL Miss Note', datetime: true, attend: 'Buyer Attended CEL' },
+    ACC: { date: 'ACC Date', manager: 'ACC Manager', complete: 'ACC Completed',
+      missed: 'ACC Missed', reason: 'ACC Miss Reason', note: 'ACC Miss Note', datetime: true, attend: 'Buyer Attended ACC' }
+  };
+  var WALK_TYPES = ['QAI', 'QAA', 'CEL', 'ACC'];
+  var COMPLETE_LABEL = { QAI: 'Complete', QAA: 'Accepted', CEL: 'Completed', ACC: 'Completed' };
+  // Mirrors MISS_REASONS in netlify/functions/update-job.js and walk-miss-log.js.
+  var MISS_REASONS = ['Home not ready', 'Buyer no-show', 'Manager unavailable', 'Other'];
+
+  /* ---- Auth (mirrors game.html / the shared OLHAuth session contract) --- */
+  function getSession() {
+    try { var v = localStorage.getItem(SESSION_KEY); return v ? JSON.parse(v) : null; }
+    catch (e) { return null; }
+  }
+  function authHeaders(extra) {
+    var h = Object.assign({ Accept: 'application/json' }, extra || {});
+    var s = getSession();
+    var tok = s && s.token;
+    if (tok) {
+      h.Authorization = 'Bearer ' + tok;
+      h['X-OLH-Token'] = 'Bearer ' + tok;
+    }
+    return h;
+  }
+  function authedFetchHeaders(extra) {
+    if (!getSession() || !getSession().token) {
+      throw new Error('You are not signed in. Sign in at the OLH Tracker home page, then reload this page.');
+    }
+    return authHeaders(extra);
+  }
+
+  var state = {
+    user: null, can: [], managers: [], myManagerId: null, myManagerName: '',
+    viewAsId: '', viewAsName: '', /* admin-only: '' means viewing self */
+    jobs: [], walks: [], published: {}, /* dateKey -> true|false */
+    filter: 'all', loading: true, error: ''
+  };
+
+  /* roster.manage is locked to admin in DEFAULT_ROLES/ROLE_LOCKS (olh-auth.js)
+     -- the same gate the admin console itself relies on -- so it doubles as
+     a clean "is this session an admin" check without a new permission. */
+  function isAdmin() { return state.can.indexOf('roster.manage') >= 0; }
+
+  /* The manager whose walks are actually on screen: the admin's own pick
+     while testing, otherwise the signed-in person's own Managers record. */
+  function effectiveManager() {
+    if (isAdmin() && state.viewAsId) return { id: state.viewAsId, name: state.viewAsName };
+    return { id: state.myManagerId, name: state.myManagerName };
+  }
+  /* Human-readable tag for the Page field on /api/audit and /api/walk-miss-log
+     -- Changed By/Logged By always come from the real session server-side
+     (see audit.js, walk-miss-log.js), so this never misattributes WHO acted,
+     it just records whose queue they were acting on. */
+  function pageTag() {
+    var eff = effectiveManager();
+    return (isAdmin() && state.viewAsId) ? 'My Walks (testing as ' + eff.name + ')' : 'My Walks';
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  function todayEastern() {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  }
+  function easternDateKey(value, isDatetime) {
+    if (!value) return '';
+    if (!isDatetime) return String(value).slice(0, 10); // plain date field, no TZ conversion needed
+    var d = new Date(value);
+    if (isNaN(d.getTime())) return '';
+    return new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+  }
+  function easternTimeLabel(value, isDatetime) {
+    if (!isDatetime || !value) return null;
+    var d = new Date(value);
+    if (isNaN(d.getTime())) return null;
+    return new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' }).format(d);
+  }
+  function fmtDayLabel(dateKey) {
+    var p = dateKey.split('-');
+    var d = new Date(+p[0], +p[1] - 1, +p[2]);
+    return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+  }
+
+  function showBanner(kind, html) {
+    document.getElementById('banners').innerHTML = '<div class="banner ' + kind + '">' + html + '</div>';
+  }
+  function clearBanner() { document.getElementById('banners').innerHTML = ''; }
+
+  /* ---- Data loading ------------------------------------------------------
+     Talks only to the same endpoints the rest of the suite uses: /api/session,
+     /api/jobs, /api/publish-schedule (read-only, day-level lock check),
+     /api/update-job (writes), /api/walk-miss-log (append-only miss history).
+     No separate backend, no direct Airtable calls. */
+  function apiGet(path, opts) {
+    return fetch(API + path, { headers: authedFetchHeaders() }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (body) {
+        if (res.status === 401) {
+          var e = new Error((body && body.error) || 'Your session has expired.');
+          e.status = 401; throw e;
+        }
+        if (!res.ok || !body) throw new Error((body && body.error) || (path + ' failed (' + res.status + ')'));
+        return body;
+      });
+    });
+  }
+  function apiPost(path, payload) {
+    return fetch(API + path, {
+      method: 'POST',
+      headers: authedFetchHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload)
+    }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (body) {
+        if (!res.ok) throw new Error((body && body.error) || (path + ' failed (' + res.status + ')'));
+        return body;
+      });
+    });
+  }
+
+  function loadSession() {
+    return apiGet('/session').then(function (data) {
+      state.user = data.user || null;
+      state.can = data.can || [];
+    });
+  }
+  function loadJobs() {
+    return apiGet('/jobs?refresh=1').then(function (data) {
+      state.jobs = Array.isArray(data.jobs) ? data.jobs : [];
+      state.managers = Array.isArray(data.managers) ? data.managers : [];
+    });
+  }
+
+  function findMyManager() {
+    var email = (state.user && state.user.email || '').toLowerCase();
+    if (!email) return null;
+    return state.managers.find(function (m) { return String(m.email || '').toLowerCase() === email; }) || null;
+  }
+
+  /* Every job whose QAI/QAA/CEL/ACC Manager link includes the EFFECTIVE
+     manager's Managers-table record id becomes one walk entry -- a homesite
+     can contribute up to 4. Effective is normally "me"; an admin testing as
+     someone else swaps this without touching myManagerId/myManagerName, so
+     "Myself" in the picker always returns to the real signed-in person. */
+  function buildWalks() {
+    var mgrId = effectiveManager().id;
+    var out = [];
+    if (!mgrId) return out;
+    state.jobs.forEach(function (j) {
+      var f = j.fields || {};
+      WALK_TYPES.forEach(function (type) {
+        var cfg = WALK_FIELD[type];
+        var links = f[cfg.manager];
+        if (!Array.isArray(links) || links.indexOf(mgrId) < 0) return;
+        var dateVal = f[cfg.date];
+        if (!dateVal) return; // no date yet -- nothing to show on a schedule
+        var dateKey = easternDateKey(dateVal, cfg.datetime);
+        if (!dateKey) return;
+        out.push({
+          recordId: j.id,
+          job: f['Job #'] || '',
+          community: f.Community || '',
+          address: f['Street Address'] || '(no address on file)',
+          milestone: type,
+          dateKey: dateKey,
+          time: easternTimeLabel(dateVal, cfg.datetime), // null for QAI/QAA -- untimed
+          complete: !!f[cfg.complete],
+          hasAttend: !!cfg.attend,
+          attended: cfg.attend ? !!f[cfg.attend] : null,
+          missed: !!f[cfg.missed],
+          missReason: f[cfg.reason] || '',
+          missNote: f[cfg.note] || ''
+        });
+      });
+    });
+    return out;
+  }
+
+  /* Published Schedules is locked PER DAY, not per walk (see
+     netlify/functions/publish-schedule.js) -- so "published" for any walk on
+     that date just means the date's record is Locked. One GET per unique
+     date across the visible walks. */
+  function loadPublishedStatus(dateKeys) {
+    var unique = dateKeys.filter(function (v, i, a) { return a.indexOf(v) === i; });
+    return Promise.all(unique.map(function (dk) {
+      return apiGet('/publish-schedule?date=' + encodeURIComponent(dk))
+        .then(function (data) { state.published[dk] = !!(data.published && data.published.locked); })
+        .catch(function () { state.published[dk] = false; }); // advisory only
+    }));
+  }
+
+  /* ---- Writes -------------------------------------------------------- */
+  function patchJob(recordId, fields) {
+    return apiPost('/update-job', { recordId: recordId, fields: fields });
+  }
+  /* Fire-and-forget, same pattern game.html/scheduler.html use for
+     window.OLHAudit.record(): the Jobs write already succeeded by the time
+     this fires, so a failed audit call must never surface as a save error.
+     Changed By/Changed By Id/Changed By Role come from the session
+     server-side (audit.js) -- this can never misattribute WHO made the
+     change, even while testing as someone else; pageTag() only says whose
+     queue it happened on. */
+  function logAudit(w, label, from, to, action) {
+    apiPost('/audit', {
+      recordId: w.recordId, job: w.job, field: label, label: label,
+      from: String(from), to: String(to), action: action, page: pageTag()
+    }).catch(function () {});
+  }
+
+  function setComplete(w, checked) {
+    var cfg = WALK_FIELD[w.milestone];
+    var fields = {}; fields[cfg.complete] = checked;
+    patchJob(w.recordId, fields).then(function () {
+      logAudit(w, w.milestone + ' ' + COMPLETE_LABEL[w.milestone], !checked, checked, 'edit');
+      w.complete = checked;
+      render();
+    }).catch(function (err) {
+      showBanner('error', 'Could not save: ' + esc(err.message || String(err)));
+    });
+  }
+  function setAttended(w, checked) {
+    var cfg = WALK_FIELD[w.milestone];
+    var fields = {}; fields[cfg.attend] = checked;
+    patchJob(w.recordId, fields).then(function () {
+      logAudit(w, cfg.attend, !checked, checked, 'edit');
+      w.attended = checked;
+      render();
+    }).catch(function (err) {
+      showBanner('error', 'Could not save: ' + esc(err.message || String(err)));
+    });
+  }
+  function confirmMiss(w, reason, note) {
+    var cfg = WALK_FIELD[w.milestone];
+    var fields = {}; fields[cfg.missed] = true; fields[cfg.reason] = reason; fields[cfg.note] = note || '';
+    return patchJob(w.recordId, fields)
+      // Written alongside update-job, not instead of it -- same as every
+      // other page in the suite that logs a miss (see walk-miss-log.js).
+      .then(function () {
+        logAudit(w, w.milestone + ' Missed', 'No', 'Yes — ' + reason, 'edit');
+        return apiPost('/walk-miss-log', {
+          recordId: w.recordId, job: w.job, walkType: w.milestone,
+          missedDate: w.dateKey, reason: reason, note: note || '', page: pageTag()
+        }).catch(function () { /* the Jobs write is authoritative; log failure is non-fatal */ });
+      })
+      .then(function () {
+        w.missed = true; w.missReason = reason; w.missNote = note || '';
+        render();
+      });
+  }
+  function undoMiss(w) {
+    var cfg = WALK_FIELD[w.milestone];
+    var fields = {}; fields[cfg.missed] = false;
+    patchJob(w.recordId, fields).then(function () {
+      logAudit(w, w.milestone + ' Missed', 'Yes — ' + w.missReason, 'No — undone', 'edit');
+      w.missed = false;
+      render();
+    }).catch(function (err) {
+      showBanner('error', 'Could not save: ' + esc(err.message || String(err)));
+    });
+  }
+
+  /* ---- Rendering ------------------------------------------------------ */
+  function pipelineHTML(w) {
+    var idx = WALK_TYPES.indexOf(w.milestone);
+    return WALK_TYPES.map(function (m, i) {
+      var filled = i < idx || (i === idx && w.complete);
+      var seg = i < WALK_TYPES.length - 1 ? '<div class="pl-seg"></div>' : '';
+      return '<div class="pl-track"><div class="pl-dot ' + (filled ? 'filled ' + m.toLowerCase() : '') +
+        (i === idx ? ' current' : '') + '"></div>' + seg + '</div>';
+    }).join('');
+  }
+
+  function canEdit() { return state.can.indexOf('tracker.edit') >= 0; }
+
+  function walkCard(w) {
+    var m = w.milestone.toLowerCase();
+    var label = w.milestone === 'CEL' ? 'Celebration' : w.milestone === 'ACC' ? 'Acceptance' : w.milestone;
+    var published = !!state.published[w.dateKey];
+    var pubBadge = '<span class="badge ' + (published ? 'pub">Published' : 'pot">Potential') + '</span>';
+    var cls = 'walk ' + m + (w.complete ? ' done' : '') + (w.missed ? ' missed' : '');
+    var editable = canEdit();
+
+    var statusNote = '';
+    if (w.missed) {
+      statusNote = '<div class="status-note missed">Marked missed — ' + esc(w.missReason) +
+        (w.missNote ? ' · ' + esc(w.missNote) : '') + '</div>';
+    } else if (w.complete) {
+      var attendNote = w.hasAttend ? (w.attended === true ? ' · Buyer attended' : w.attended === false ? ' · Buyer did not attend' : '') : '';
+      statusNote = '<div class="status-note">' + COMPLETE_LABEL[w.milestone] + ' ✓' + attendNote + '</div>';
+    }
+
+    var controls = '';
+    if (!w.missed) {
+      controls = '<div class="walk-controls">' +
+        '<label class="ctrl"><input type="checkbox" ' + (w.complete ? 'checked' : '') + (editable ? '' : ' disabled') +
+          ' onchange="MyWalks.toggleComplete(\'' + w.recordId + '\',\'' + w.milestone + '\',this.checked)"> ' +
+          COMPLETE_LABEL[w.milestone] + '</label>' +
+        (w.hasAttend ? '<label class="ctrl"><input type="checkbox" ' + (w.attended ? 'checked' : '') + (editable ? '' : ' disabled') +
+          ' onchange="MyWalks.toggleAttend(\'' + w.recordId + '\',\'' + w.milestone + '\',this.checked)"> Buyer attended</label>' : '') +
+        (editable ? '<button class="miss-link" onclick="MyWalks.toggleMissPanel(\'' + w.recordId + w.milestone + '\')">Mark missed</button>' : '') +
+        '</div>';
+    } else {
+      controls = '<div class="walk-controls">' + statusNote +
+        (editable ? '<button class="miss-link" onclick="MyWalks.undoMiss(\'' + w.recordId + '\',\'' + w.milestone + '\')">Undo</button>' : '') +
+        '</div>';
+    }
+
+    var panelId = w.recordId + w.milestone;
+    var missPanel = editable ? (
+      '<div class="miss-panel" id="miss-' + panelId + '">' +
+        '<label>Reason</label>' +
+        '<select id="reason-' + panelId + '"><option value="">Select a reason…</option>' +
+          MISS_REASONS.map(function (r) { return '<option value="' + esc(r) + '">' + esc(r) + '</option>'; }).join('') +
+        '</select>' +
+        '<label style="margin-top:8px;display:block;">Note</label>' +
+        '<textarea id="note-' + panelId + '" placeholder="Optional detail…"></textarea>' +
+        '<div class="miss-actions">' +
+          '<button class="btn primary" onclick="MyWalks.submitMiss(\'' + w.recordId + '\',\'' + w.milestone + '\')">Confirm missed</button>' +
+          '<button class="btn ghost" onclick="MyWalks.toggleMissPanel(\'' + panelId + '\')">Cancel</button>' +
+        '</div>' +
+      '</div>'
+    ) : '';
+
+    return (
+      '<div class="' + cls + '" data-key="' + w.recordId + w.milestone + '">' +
+        '<div class="walk-pipeline">' + pipelineHTML(w) + '</div>' +
+        '<div class="walk-body">' +
+          '<div class="walk-top">' +
+            '<div><div class="walk-addr">' + esc(w.address) + '</div>' +
+            '<div class="walk-meta">' + esc(w.job) + ' · ' + esc(w.community) + '</div></div>' +
+            '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">' +
+              '<span class="badge ' + m + '">' + label + '</span>' + pubBadge +
+              (w.time ? '<span class="walk-time">' + esc(w.time) + '</span>' : '<span class="walk-time" style="color:var(--faint)">untimed</span>') +
+            '</div>' +
+          '</div>' +
+          controls +
+          (w.complete && !w.missed ? statusNote : '') +
+          missPanel +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  function render() {
+    var whoLine = document.getElementById('whoLine');
+    var eff = effectiveManager();
+    if (state.user) {
+      whoLine.textContent = state.user.name +
+        (isAdmin() && state.viewAsId ? ' · testing as ' + eff.name : (state.myManagerName ? ' · ' + state.myManagerName : ''));
+    }
+
+    if (isAdmin() && state.viewAsId) {
+      showBanner('impersonate',
+        'Testing as <b>' + esc(eff.name) + '</b> — this is a live preview against real records. ' +
+        'Any change you make here saves for real and is logged under your admin account, tagged "' + esc(pageTag()) + '".');
+    } else {
+      clearBanner();
+    }
+
+    var content = document.getElementById('content');
+    if (state.loading) { content.innerHTML = ''; return; }
+    if (state.error) {
+      content.innerHTML = '<div class="empty">' + esc(state.error) + '</div>';
+      return;
+    }
+    if (!eff.id) {
+      content.innerHTML = isAdmin() && !state.viewAsId
+        ? '<div class="empty">Pick someone from "Testing as" above to preview their walks — your own account has no matching Managers record.</div>'
+        : '<div class="empty">No Managers-table record matches your account email (' +
+          esc((state.user && state.user.email) || '') + '). Ask an admin to add or link one before walks can show here.</div>';
+      return;
+    }
+
+    var filtered = state.walks.filter(function (w) { return state.filter === 'all' || w.milestone.toLowerCase() === state.filter; });
+    var today = todayEastern();
+    var todayWalks = filtered.filter(function (w) { return w.dateKey === today; })
+      .sort(function (a, b) { return (a.time || '').localeCompare(b.time || ''); });
+    var upcoming = filtered.filter(function (w) { return w.dateKey > today; });
+
+    var html = '';
+    html += '<div class="section-head"><h2>Today</h2><span class="count">' + todayWalks.length + ' walk' + (todayWalks.length === 1 ? '' : 's') + '</span></div>';
+    html += todayWalks.length ? todayWalks.map(walkCard).join('') : '<div class="empty">Nothing on your schedule for today.</div>';
+
+    var groups = {};
+    upcoming.forEach(function (w) { (groups[w.dateKey] = groups[w.dateKey] || []).push(w); });
+    var dateKeys = Object.keys(groups).sort();
+    html += '<div class="section-head"><h2>Upcoming Schedule</h2><span class="count">' + upcoming.length + ' walk' + (upcoming.length === 1 ? '' : 's') + '</span></div>';
+    if (dateKeys.length) {
+      html += dateKeys.map(function (dk) {
+        var published = !!state.published[dk];
+        var rows = groups[dk].sort(function (a, b) { return (a.time || '').localeCompare(b.time || ''); }).map(function (w) {
+          var m = w.milestone.toLowerCase();
+          return '<div class="up-row"><span class="up-time">' + (w.time || '—') + '</span>' +
+            '<span class="badge ' + m + '">' + w.milestone + '</span>' +
+            '<span class="up-addr">' + esc(w.address) + ' <span class="up-community">· ' + esc(w.community) + '</span></span></div>';
+        }).join('');
+        return '<div class="day-group"><div class="day-label">' + fmtDayLabel(dk) +
+          '<span class="badge ' + (published ? 'pub">Published' : 'pot">Potential') + '</span></div>' + rows + '</div>';
+      }).join('');
+    } else {
+      html += '<div class="empty">No upcoming walks assigned to you.</div>';
+    }
+
+    content.innerHTML = html;
+  }
+
+  /* ---- Public handlers (called from inline onclick/onchange) ---------- */
+  window.MyWalks = {
+    toggleComplete: function (recordId, milestone, checked) {
+      var w = state.walks.find(function (x) { return x.recordId === recordId && x.milestone === milestone; });
+      if (w) setComplete(w, checked);
+    },
+    toggleAttend: function (recordId, milestone, checked) {
+      var w = state.walks.find(function (x) { return x.recordId === recordId && x.milestone === milestone; });
+      if (w) setAttended(w, checked);
+    },
+    toggleMissPanel: function (panelKey) {
+      var el = document.getElementById('miss-' + panelKey);
+      if (el) el.classList.toggle('open');
+    },
+    submitMiss: function (recordId, milestone) {
+      var panelId = recordId + milestone;
+      var reasonEl = document.getElementById('reason-' + panelId);
+      var noteEl = document.getElementById('note-' + panelId);
+      var reason = reasonEl ? reasonEl.value : '';
+      if (!reason) { alert('Select a reason.'); return; }
+      var w = state.walks.find(function (x) { return x.recordId === recordId && x.milestone === milestone; });
+      if (!w) return;
+      confirmMiss(w, reason, noteEl ? noteEl.value : '').catch(function (err) {
+        showBanner('error', 'Could not save: ' + esc(err.message || String(err)));
+      });
+    },
+    undoMiss: function (recordId, milestone) {
+      var w = state.walks.find(function (x) { return x.recordId === recordId && x.milestone === milestone; });
+      if (w) undoMiss(w);
+    }
+  };
+
+  document.getElementById('filters').addEventListener('click', function (e) {
+    if (e.target.classList.contains('chip')) {
+      Array.prototype.forEach.call(document.querySelectorAll('.chip'), function (c) { c.classList.remove('active'); });
+      e.target.classList.add('active');
+      state.filter = e.target.dataset.f;
+      render();
+    }
+  });
+
+  /* Admin-only. Rebuilds walks + re-checks publish status for whoever was
+     picked -- picking "Myself" (empty value) always drops back to the real
+     signed-in person via effectiveManager(), never a stale cached id. */
+  function switchViewAs(managerId) {
+    var m = managerId ? state.managers.find(function (x) { return x.id === managerId; }) : null;
+    state.viewAsId = m ? m.id : '';
+    state.viewAsName = m ? m.name : '';
+    state.loading = true;
+    render();
+    state.walks = buildWalks();
+    var dateKeys = state.walks.map(function (w) { return w.dateKey; });
+    loadPublishedStatus(dateKeys).then(function () {
+      state.loading = false;
+      render();
+    });
+  }
+
+  function populateViewAs() {
+    if (!isAdmin()) return;
+    var wrap = document.getElementById('viewAsWrap');
+    var sel = document.getElementById('viewAsSelect');
+    wrap.style.display = 'flex';
+    var active = state.managers.filter(function (m) { return m.active; })
+      .sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+    sel.innerHTML = '<option value="">Myself</option>' +
+      active.map(function (m) { return '<option value="' + esc(m.id) + '">' + esc(m.name) + '</option>'; }).join('');
+    sel.addEventListener('change', function () { switchViewAs(sel.value); });
+  }
+
+  /* ---- Boot ------------------------------------------------------------ */
+  var session = getSession();
+  if (!session || !session.token) {
+    document.getElementById('content').innerHTML =
+      '<div class="empty">You are not signed in. <a href="/">Sign in at the OLH Tracker home page</a>, then reload this page.</div>';
+    document.getElementById('whoLine').textContent = 'Not signed in';
+  } else {
+    loadSession()
+      .then(loadJobs)
+      .then(function () {
+        var mgr = findMyManager();
+        state.myManagerId = mgr ? mgr.id : null;
+        state.myManagerName = mgr ? mgr.name : '';
+        populateViewAs();
+        state.walks = buildWalks();
+        var dateKeys = state.walks.map(function (w) { return w.dateKey; });
+        return loadPublishedStatus(dateKeys);
+      })
+      .then(function () {
+        state.loading = false;
+        render();
+      })
+      .catch(function (err) {
+        state.loading = false;
+        if (err && err.status === 401) {
+          state.error = 'Your session has expired. Sign in again at the OLH Tracker home page, then reload this page.';
+        } else {
+          state.error = 'Could not load your walks: ' + (err && err.message ? err.message : String(err));
+        }
+        render();
+      });
+  }
+})();
+</script>
+</body>
+</html>
