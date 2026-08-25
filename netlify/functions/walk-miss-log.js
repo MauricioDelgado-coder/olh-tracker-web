@@ -70,7 +70,15 @@ function entryOf(rec) {
 
 async function append(event) {
   const session = await A.requireSession(event);
-  A.requirePerm(session, 'tracker.edit');
+  // Same OR as update-job.js's COMPLETION_ONLY_FIELDS gate: logging a miss is
+  // part of the completion workflow, so walk.complete alone is enough here --
+  // there's no field-shape distinction to make since this table has no
+  // whitelist of its own, just Job/Walk Type/Reason/Note.
+  if (session.can.indexOf('tracker.edit') < 0 && session.can.indexOf('walk.complete') < 0) {
+    const e = new Error(A.DENY['walk.complete']);
+    e.statusCode = 403;
+    throw e;
+  }
   const body = A.readJson(event);
 
   const recordId = str(body.recordId).trim();

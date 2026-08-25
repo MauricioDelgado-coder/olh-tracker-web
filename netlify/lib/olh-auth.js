@@ -304,15 +304,17 @@ const DEFAULT_ROLES = {
   // Restricted 2026-08-25 to the My Walks self-service page only
   // (public/my-walks.html, sandboxed/unlinked like game.html). QAMs no
   // longer get the tracker, completion, scheduler, qa-management,
-  // missed-walks, time-off, workload, or walks-to-schedule pages --
-  // my-walks.html checks no page.* permission at all, only tracker.edit,
-  // so it keeps working under this reduced set. page.home is kept so
-  // sign-in still lands on a real page (an empty tile view) instead of
-  // erroring. Restore the previous line below if this ever needs undoing.
+  // missed-walks, time-off, workload, or walks-to-schedule pages.
+  // Updated same day: tracker.edit swapped for the narrower walk.complete,
+  // added specifically so a My Walks completion write no longer implies
+  // the full tracker.edit capability (see WRITE_PERM/COMPLETION_ONLY_FIELDS
+  // in update-job.js and walk-miss-log.js). page.home is kept so sign-in
+  // still lands on a real page (an empty tile view) instead of erroring.
+  // Restore the previous line below if this ever needs undoing.
   // qam: ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply',
   //   'page.home', 'page.tracker', 'page.completion', 'page.walks', 'page.qamgmt', 'page.missedwalks',
   //   'page.scheduler', 'page.timeoff', 'page.workload', 'page.walkstoschedule'],
-  qam: ['suite.view', 'tracker.edit', 'page.home', 'page.mywalks'],
+  qam: ['suite.view', 'walk.complete', 'page.home', 'page.mywalks'],
   cm: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.completion', 'page.walks'],
   ccr: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.walks', 'page.qamgmt', 'page.missedwalks',
     'page.walkstoschedule'],
@@ -332,7 +334,7 @@ const DEFAULT_ROLES = {
   // whitelist shape.
   sandbox: ['suite.view', 'page.home', 'page.sanmpr', 'sandbox.edit']
 };
-const PERMS = ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage', 'sandbox.edit']
+const PERMS = ['suite.view', 'tracker.edit', 'walk.complete', 'walk.schedule', 'optimizer.apply', 'roster.manage', 'sandbox.edit']
   .concat(ALL_PAGES);
 const ROLE_LOCKS = { admin: ['suite.view', 'roster.manage', 'page.admin'] };
 
@@ -340,7 +342,7 @@ const ROLE_LOCKS = { admin: ['suite.view', 'roster.manage', 'page.admin'] };
    enforced here and not just in the grid, because the grid is a UI and this is
    the boundary. */
 const ADMIN_ONLY_PAGES = ['page.admin'];
-const IMPLIES_VIEW = ['tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage', 'sandbox.edit']
+const IMPLIES_VIEW = ['tracker.edit', 'walk.complete', 'walk.schedule', 'optimizer.apply', 'roster.manage', 'sandbox.edit']
   .concat(ALL_PAGES);
 
 /* An editing capability is meaningless without the page it edits, so granting
@@ -348,6 +350,7 @@ const IMPLIES_VIEW = ['tracker.edit', 'walk.schedule', 'optimizer.apply', 'roste
    fire. */
 const NEEDS_PAGE = {
   'tracker.edit': 'page.tracker',
+  'walk.complete': 'page.mywalks',
   'walk.schedule': 'page.walks',
   'optimizer.apply': 'page.scheduler',
   'roster.manage': 'page.admin',
@@ -576,6 +579,7 @@ const PAGE_LABEL = {
 const DENY = {
   'suite.view': 'Your account does not have access to the OLH Suite yet. Ask an admin to grant it.',
   'tracker.edit': 'Your role can view the tracker but not change it.',
+  'walk.complete': 'Your role can view My Walks but not mark walks complete.',
   'walk.schedule': 'Only QA Managers and admins can schedule or reassign walks.',
   'optimizer.apply': 'Only QA Managers and admins can apply optimizer suggestions.',
   'roster.manage': 'Only admins can change the roster.',

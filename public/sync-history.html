@@ -222,6 +222,7 @@
   var PERMS = [
     { key: "suite.view", label: "View the suite", note: "Sign in and read every page. Grant only this and the role is view only \u2014 nothing on any page can be changed." },
     { key: "tracker.edit", label: "Edit tracker fields", note: "Change dates, walk managers, notes and checkboxes on the QA & Closing Tracker." },
+    { key: "walk.complete", label: "Mark Walks Complete", note: "Complete or accept a walk, log buyer attendance, and mark a walk missed on the My Walks page. Narrower than Edit tracker fields -- does not open the tracker itself." },
     { key: "walk.schedule", label: "Schedule & reassign walks", note: "Book Celebration and Acceptance Walks and move them between QA Managers." },
     { key: "optimizer.apply", label: "Apply optimizer suggestions", note: "Accept the schedule optimizer's proposed moves, one at a time or all at once." },
     { key: "roster.manage", label: "Manage users & permissions", note: "Add and suspend users, change roles, and edit this grid." },
@@ -235,7 +236,7 @@
   var DEFAULT_ROLES = {
     admin: { label: "Admin", can: ["suite.view", "tracker.edit", "walk.schedule", "optimizer.apply", "roster.manage", "sandbox.edit"].concat(ALL_PAGES) },
     sandbox: { label: "Sandbox", can: ["suite.view", "page.home", "page.sanmpr", "sandbox.edit"] },
-    qam: { label: "QA Manager", can: ["suite.view", "tracker.edit", "page.home", "page.mywalks"] },
+    qam: { label: "QA Manager", can: ["suite.view", "walk.complete", "page.home", "page.mywalks"] },
     cm: { label: "Construction Manager", can: ["suite.view", "tracker.edit", "page.home", "page.tracker", "page.completion", "page.walks"] },
     ccr: { label: "Customer Care", can: ["suite.view", "tracker.edit", "page.home", "page.tracker", "page.walks", "page.qamgmt", "page.missedwalks", "page.walkstoschedule"] },
     leadership: { label: "Division Leadership", can: ["suite.view", "page.home", "page.tracker", "page.completion", "page.walks", "page.qamgmt", "page.missedwalks", "page.walkstoschedule", "page.scheduler", "page.timeoff", "page.workload", "page.keys", "page.synchistory"] },
@@ -246,9 +247,9 @@
   var ADMIN_ONLY_PAGES = ["page.admin"];
   /* Every capability implies being able to see the thing you are changing, so
      an editing permission drags "View the suite" along with it. */
-  var IMPLIES_VIEW = ["tracker.edit", "walk.schedule", "optimizer.apply", "roster.manage", "sandbox.edit"].concat(ALL_PAGES);
+  var IMPLIES_VIEW = ["tracker.edit", "walk.complete", "walk.schedule", "optimizer.apply", "roster.manage", "sandbox.edit"].concat(ALL_PAGES);
   /* An editing capability is meaningless without the page it edits. */
-  var NEEDS_PAGE = { "tracker.edit": "page.tracker", "walk.schedule": "page.walks", "optimizer.apply": "page.scheduler", "roster.manage": "page.admin", "sandbox.edit": "page.sanmpr" };
+  var NEEDS_PAGE = { "tracker.edit": "page.tracker", "walk.complete": "page.mywalks", "walk.schedule": "page.walks", "optimizer.apply": "page.scheduler", "roster.manage": "page.admin", "sandbox.edit": "page.sanmpr" };
   var ROLES_KEY = "olh.roles.v1";
 
   var ROLES = {};

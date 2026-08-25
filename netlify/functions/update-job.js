@@ -5,8 +5,13 @@
  * Defense-in-depth. Layer 0 was added in 2026-08 when the suite got real
  * accounts; the four layers under it predate that and still stand on their own,
  * because an authenticated user is not the same thing as a trusted one:
- *   0. A valid session is required, and the caller must hold tracker.edit.
- *      Reassigning a walk between managers additionally requires walk.schedule
+ *   0. A valid session is required, and the caller must hold tracker.edit --
+ *      OR, added 2026-08-25, walk.complete, but only for the narrower
+ *      COMPLETION_ONLY_FIELDS subset (see below): a My Walks QAM can mark a
+ *      walk complete, log buyer attendance, or record a miss without gaining
+ *      the tracker.edit capability that opens the tracker itself. Any field
+ *      outside that subset still requires full tracker.edit. Reassigning a
+ *      walk between managers additionally requires walk.schedule
  *      (see WRITE_PERM), so a Construction Manager can correct a date but cannot
  *      move someone else's walk.
  *   1. POST only. One record per call. PATCH only -- no create, delete, batch or schema access.
@@ -307,6 +312,19 @@ const WRITE_PERM = Object.freeze({
   'ACC Manager': 'walk.schedule'
 });
 
+/**
+ * The exact subset walk.complete alone is allowed to touch -- everything
+ * public/my-walks.html writes, and nothing else. A caller with walk.complete
+ * but not tracker.edit is rejected outright if the request names any field
+ * outside this set, even if that field is otherwise a legal EDITABLE key.
+ */
+const COMPLETION_ONLY_FIELDS = new Set([
+  'QAI Complete', 'QAI Missed', 'QAI Miss Reason', 'QAI Miss Note',
+  'QAA Accepted', 'QAA Missed', 'QAA Miss Reason', 'QAA Miss Note',
+  'CEL Completed', 'Buyer Attended CEL', 'CEL Missed', 'CEL Miss Reason', 'CEL Miss Note',
+  'ACC Completed', 'Buyer Attended ACC', 'ACC Missed', 'ACC Miss Reason', 'ACC Miss Note'
+]);
+
 const JSON_HEADERS = {
   'Content-Type': 'application/json; charset=utf-8',
   'Cache-Control': 'no-store',
@@ -445,10 +463,13 @@ exports.handler = async (event) => {
 
   // Layer 0. Resolved before the body is even read, so an unauthenticated caller
   // cannot use this endpoint's validation messages to probe the field whitelist.
+  // Only session validity is checked here now -- tracker.edit vs. walk.complete
+  // is a per-field-set decision that has to wait until `submitted` is known
+  // (see THE GATE below), since walk.complete alone is only good for
+  // COMPLETION_ONLY_FIELDS, never for the whole EDITABLE whitelist.
   let session;
   try {
     session = await A.requireSession(event);
-    A.requirePerm(session, 'tracker.edit');
   } catch (err) {
     return A.fail(err);
   }
@@ -523,6 +544,23 @@ exports.handler = async (event) => {
       rejectedFields: rejected,
       allowedFields: EDITABLE_KEYS
     });
+  }
+
+  // Base capability. Full tracker.edit clears this unconditionally. Without
+  // it, walk.complete is the only other door in, and only for
+  // COMPLETION_ONLY_FIELDS -- a My Walks QAM marking a walk complete never
+  // needs, and never gets, the capability that opens the tracker itself.
+  if (session.can.indexOf('tracker.edit') < 0) {
+    if (session.can.indexOf('walk.complete') < 0) {
+      return A.fail(Object.assign(new Error(A.DENY['tracker.edit']), { statusCode: 403 }));
+    }
+    const outOfScope = submitted.filter((key) => !COMPLETION_ONLY_FIELDS.has(key));
+    if (outOfScope.length) {
+      return reply(403, {
+        error: A.DENY['walk.complete'],
+        deniedFields: outOfScope
+      });
+    }
   }
 
   // Per-field capability check, after the allow-list so an unknown field is

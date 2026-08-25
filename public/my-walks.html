@@ -478,7 +478,7 @@
     }).join('');
   }
 
-  function canEdit() { return state.can.indexOf('tracker.edit') >= 0; }
+  function canEdit() { return state.can.indexOf('tracker.edit') >= 0 || state.can.indexOf('walk.complete') >= 0; }
 
   function walkCard(w) {
     var m = w.milestone.toLowerCase();
