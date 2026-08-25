@@ -413,6 +413,7 @@
      and capabilities share one grid, one save, and one Auth.can() check. */
   var PAGES = [
     { key: "page.home", label: "All Views (home)", href: "index.html", note: "The launcher. A role without this lands on the first page it can open." },
+    { key: "page.mywalks", label: "My Walks", href: "my-walks.html", note: "A QA Manager\u2019s own assigned QAI/QAA/CEL/ACC walks \u2014 mark them complete and log buyer attendance." },
     { key: "page.tracker", label: "QA & Closing Tracker", href: "tracker.html", note: "The homesite grid \u2014 walk dates, meters, keys and notes." },
     { key: "page.sanmpr", label: "SAN MPR (Sandbox)", href: "tracker-san-mpr.html", note: "San Antonio tracker sandbox on isolated data. Does not read or write the live OLH tracker." },
     { key: "page.completion", label: "Completion Report", href: "completion.html", note: "Homesites under construction with their projected completion and closing dates." },
@@ -444,7 +445,7 @@
   var DEFAULT_ROLES = {
     admin: { label: "Admin", can: ["suite.view", "tracker.edit", "walk.schedule", "optimizer.apply", "roster.manage", "sandbox.edit"].concat(ALL_PAGES) },
     sandbox: { label: "Sandbox", can: ["suite.view", "page.home", "page.sanmpr", "sandbox.edit"] },
-    qam: { label: "QA Manager", can: ["suite.view", "tracker.edit", "walk.schedule", "optimizer.apply", "page.home", "page.tracker", "page.completion", "page.walks", "page.qamgmt", "page.missedwalks", "page.walkstoschedule", "page.scheduler", "page.timeoff", "page.workload"] },
+    qam: { label: "QA Manager", can: ["suite.view", "tracker.edit", "page.home", "page.mywalks"] },
     cm: { label: "Construction Manager", can: ["suite.view", "tracker.edit", "page.home", "page.tracker", "page.completion", "page.walks"] },
     ccr: { label: "Customer Care", can: ["suite.view", "tracker.edit", "page.home", "page.tracker", "page.walks", "page.qamgmt", "page.missedwalks", "page.walkstoschedule"] },
     leadership: { label: "Division Leadership", can: ["suite.view", "page.home", "page.tracker", "page.completion", "page.walks", "page.qamgmt", "page.missedwalks", "page.walkstoschedule", "page.scheduler", "page.timeoff", "page.workload", "page.keys", "page.synchistory"] },

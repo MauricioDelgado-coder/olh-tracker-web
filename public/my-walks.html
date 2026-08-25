@@ -571,6 +571,14 @@
       content.innerHTML = '<div class="empty">' + esc(state.error) + '</div>';
       return;
     }
+    // Mirrors the wording DENY['page.*'] generates server-side (olh-auth.js)
+    // so a refusal reads the same whether it came from this page or the API
+    // behind it. page.mywalks is real now, not an open-to-anyone-signed-in
+    // page -- an admin always has it via DEFAULT_ROLES' ALL_PAGES concat.
+    if (state.can.indexOf('page.mywalks') < 0) {
+      content.innerHTML = '<div class="empty">Your role does not have access to the My Walks page.</div>';
+      return;
+    }
     if (!eff.id) {
       content.innerHTML = isAdmin() && !state.viewAsId
         ? '<div class="empty">Pick someone from "Testing as" above to preview their walks — your own account has no matching Managers record.</div>'

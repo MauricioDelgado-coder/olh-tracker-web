@@ -285,7 +285,7 @@ function readSession(token) {
  * matrix an admin sees is the matrix that gets stored.
  */
 const ALL_PAGES = [
-  'page.home', 'page.tracker', 'page.completion', 'page.walks',
+  'page.home', 'page.mywalks', 'page.tracker', 'page.completion', 'page.walks',
   'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload',
   'page.walkstoschedule', 'page.admin', 'page.keys', 'page.sanmpr', 'page.synchistory'
 ];
@@ -312,7 +312,7 @@ const DEFAULT_ROLES = {
   // qam: ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply',
   //   'page.home', 'page.tracker', 'page.completion', 'page.walks', 'page.qamgmt', 'page.missedwalks',
   //   'page.scheduler', 'page.timeoff', 'page.workload', 'page.walkstoschedule'],
-  qam: ['suite.view', 'tracker.edit', 'page.home'],
+  qam: ['suite.view', 'tracker.edit', 'page.home', 'page.mywalks'],
   cm: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.completion', 'page.walks'],
   ccr: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.walks', 'page.qamgmt', 'page.missedwalks',
     'page.walkstoschedule'],
@@ -558,6 +558,7 @@ async function requireSession(event) {
 /** Assert a capability, or throw a 403 carrying the frontend's own wording. */
 const PAGE_LABEL = {
   'page.home': 'All Views (home)',
+  'page.mywalks': 'My Walks',
   'page.tracker': 'QA & Closing Tracker',
   'page.completion': 'Completion Report',
   'page.walks': 'Walk Schedule',
