@@ -78,6 +78,20 @@
   .col.deferred{position:sticky; left:274px; z-index:34; box-shadow:6px 0 10px -6px rgba(27,42,88,.18)}
   .col.deferred.dragover{box-shadow:6px 0 10px -6px rgba(27,42,88,.18), 0 0 0 2px rgba(27,42,88,.15) inset}
   .col.deferred .col-head{background:var(--amber-bg); border-radius:10px 10px 0 0}
+  .col.deferred .name{display:flex; align-items:center; justify-content:space-between; gap:6px}
+  .col-min-btn{
+    font:inherit; font-size:11px; font-weight:700; border:none; background:none;
+    color:var(--amber-ink); cursor:pointer; white-space:nowrap; padding:2px 4px; border-radius:5px;
+  }
+  .col-min-btn:hover{background:#FCEFC7}
+  /* Minimized Deferred collapses to a slim vertical tab -- flex-basis only,
+     so it never disturbs Unassigned's own sticky offset or the manager
+     columns that follow, which just gain the reclaimed horizontal space. */
+  .col.deferred.minimized{flex:0 0 40px; min-height:80px}
+  .col.deferred.minimized .col-min-btn{
+    writing-mode:vertical-rl; text-orientation:mixed; height:100%; width:100%;
+    padding:12px 0; border-radius:10px;
+  }
   .col-head{
     padding:10px 12px; border-bottom:1px solid var(--border); border-radius:10px 10px 0 0;
   }
@@ -208,9 +222,10 @@
   <div id="board"><div class="loading">Loading…</div></div>
 </main>
 <div id="pendingBar" style="display:none">
-  <div class="count"><span id="pendingCount">0</span> pending change<span id="pendingPlural">s</span></div>
+  <div class="count" id="pendingCountLine">0 pending changes</div>
   <div id="pendingList"></div>
   <button id="btnClear">Clear all</button>
+  <button id="btnSaveDraft" title="Save these changes on this device only -- nothing is sent to Airtable">Save draft</button>
   <button id="btnSubmit" class="primary">Submit changes</button>
 </div>
 <script>
@@ -273,12 +288,16 @@
        the Deferred bucket via drag or the Defer button. Purely a local
        triage marker: it is never sent to Airtable (there is no such field
        on the Jobs table), and moving a walk into Deferred clears any staged
-       pending change for it, so Submit never touches a deferred walk.
+       pending change for it, so Submit never touches a deferred walk. Only
+       unsold homes (w.unsold) may be deferred -- see cardHtml/handleDrop.
+     deferredMinimized: collapses the Deferred column to a slim vertical tab.
+       Session-only (not saved with a draft) since it's a display choice,
+       not data.
   --------------------------------------------------------------------------*/
   var state = {
     jobs: [], managers: [], walks: [], can: [], user: null,
     pending: new Map(), extraCols: [], dateKey: '', loading: false,
-    unassignedSort: 'time', deferredSort: 'time', deferred: {}
+    unassignedSort: 'time', deferredSort: 'time', deferred: {}, deferredMinimized: false
   };
 
   /* ---- Small helpers ------------------------------------------------------ */
@@ -562,8 +581,11 @@
         actions =
           (eff ? '<button type="button" class="unassign-btn" data-unassign-record="' +
             esc(w.recordId) + '" data-unassign-type="' + w.walkType + '">Unassign</button>' : '') +
-          '<button type="button" class="defer-btn" data-defer-record="' +
-            esc(w.recordId) + '" data-defer-type="' + w.walkType + '">Defer</button>';
+          // Defer is only offered on unsold homes (Homesite Status ==
+          // "Available") -- a sold home's walk shouldn't be pulled off
+          // today's board via this local triage bucket.
+          (w.unsold ? '<button type="button" class="defer-btn" data-defer-record="' +
+            esc(w.recordId) + '" data-defer-type="' + w.walkType + '">Defer</button>' : '');
       }
     }
     return '' +
@@ -590,6 +612,19 @@
     var walks = isDeferred ? sortedTriageWalks(DEFERRED, state.deferredSort || 'time')
       : isUnassigned ? sortedTriageWalks(null, state.unassignedSort || 'time')
       : columnWalks(managerId);
+
+    // Minimized Deferred: collapse to a slim vertical tab showing just the
+    // count. Still a real ".col" with the same data-manager attribute, so
+    // wireDragAndDrop's generic ".col" drop wiring keeps working -- cards
+    // can still be dropped on the collapsed tab to defer them.
+    if (isDeferred && state.deferredMinimized) {
+      return '' +
+        '<div class="col deferred minimized" data-manager="' + esc(managerId || '') + '">' +
+        '<button type="button" class="col-min-btn" data-role="deferred-min" ' +
+        'title="Expand the Deferred column">Deferred (' + walks.length + ') &#9654;</button>' +
+        '</div>';
+    }
+
     var minutes = columnMinutes(managerId);
     var overCap = isRealManager && minutes > DAILY_CAP_MIN;
     var dupCount = isRealManager ? columnDuplicateTimes(managerId).length : 0;
@@ -622,11 +657,15 @@
       : isDeferred
       ? triageSortSelectHtml('deferred', state.deferredSort || 'time', 'Sort the Deferred column')
       : '';
+    var minimizeControl = isDeferred
+      ? '<button type="button" class="col-min-btn expanded" data-role="deferred-min" ' +
+        'title="Collapse the Deferred column">Minimize &#9664;</button>'
+      : '';
 
     return '' +
       '<div class="col' + (isUnassigned ? ' unassigned' : '') + (isDeferred ? ' deferred' : '') +
       '" data-manager="' + esc(managerId || '') + '">' +
-      '<div class="col-head"><div class="name">' + esc(name) + '</div>' +
+      '<div class="col-head"><div class="name">' + esc(name) + minimizeControl + '</div>' +
       (meta2 ? '<div class="meta2">' + meta2 + '</div>' : '') +
       sortControl +
       '<div class="meta">' + metaBits.join(' &middot; ') + '</div></div>' +
@@ -763,10 +802,12 @@
   function renderPendingBar() {
     var bar = document.getElementById('pendingBar');
     var entries = Array.from(state.pending.values());
-    if (!entries.length) { bar.style.display = 'none'; return; }
+    var deferredCount = Object.keys(state.deferred).length;
+    if (!entries.length && !deferredCount) { bar.style.display = 'none'; return; }
     bar.style.display = 'flex';
-    document.getElementById('pendingCount').textContent = String(entries.length);
-    document.getElementById('pendingPlural').textContent = entries.length === 1 ? '' : 's';
+    var countLine = entries.length + ' pending change' + (entries.length === 1 ? '' : 's');
+    if (deferredCount) countLine += ' &middot; ' + deferredCount + ' deferred';
+    document.getElementById('pendingCountLine').innerHTML = countLine;
     var list = document.getElementById('pendingList');
     list.innerHTML = entries.map(function (p) {
       var key = pendKey(p.recordId, p.walkType);
@@ -786,6 +827,9 @@
         renderAll();
       });
     });
+    var submitBtn = document.getElementById('btnSubmit');
+    var actionable = entries.filter(function (p) { return !p.status || p.status === 'staged' || p.status === 'error'; });
+    submitBtn.disabled = !actionable.length || state.can.indexOf('walk.schedule') < 0;
   }
 
   function renderAll() {
@@ -847,6 +891,13 @@
     if (effNow === (toManagerId || (toManagerId === DEFERRED ? DEFERRED : null))) return; // dropped on its own column, no-op
 
     if (toManagerId === DEFERRED) {
+      // Deferred is only for unsold homes (Homesite Status == "Available")
+      // -- reject a sold home's walk here even if it arrived via drag
+      // rather than the (already-hidden-for-sold-homes) Defer button.
+      if (!w.unsold) {
+        showBanner('warn', 'Only unsold homes can be deferred &mdash; #' + esc(w.jobNumber) + ' is sold.');
+        return;
+      }
       // Deferred is a local triage bucket only -- there is no Airtable
       // field for it, so any staged reassignment for this walk is dropped
       // and it just parks here (still showing its real current manager
@@ -1302,19 +1353,112 @@
   /* ---- Init / wiring ------------------------------------------------------- */
   function setLoading(v) { state.loading = v; renderBoard(); }
 
+  /* ---- Local draft save/restore ---------------------------------------------
+     "Save draft" persists the current pending reassignments + deferred set
+     to this browser's localStorage, keyed by date -- nothing is sent to
+     Airtable. It's a way to save work-in-progress triage without committing
+     it (that's what Submit is for). Restored automatically whenever that
+     date's walks are (re)loaded, so Load/Refresh always shows the last
+     locally saved draft for the date rather than a blank board. */
+  function draftStorageKey(dateKey) { return 'olh.game.draft.v1.' + dateKey; }
+
+  function saveDraftToLocal() {
+    var dateKey = state.dateKey;
+    if (!dateKey) return;
+    var pendingArr = Array.from(state.pending.values())
+      .filter(function (p) { return !p.status || p.status === 'staged' || p.status === 'error'; })
+      .map(function (p) { return { recordId: p.recordId, walkType: p.walkType, toManagerId: p.toManagerId }; });
+    var deferredArr = Object.keys(state.deferred);
+    if (!pendingArr.length && !deferredArr.length) {
+      try { localStorage.removeItem(draftStorageKey(dateKey)); } catch (e) {}
+      showBanner('info', 'Nothing to save right now &mdash; cleared any previously saved draft for this date.');
+      return;
+    }
+    try {
+      localStorage.setItem(draftStorageKey(dateKey), JSON.stringify({
+        savedAt: new Date().toISOString(),
+        pending: pendingArr,
+        deferred: deferredArr,
+        extraCols: state.extraCols.slice()
+      }));
+      showBanner('info', '<strong>Draft saved on this device.</strong> ' + pendingArr.length + ' pending change' +
+        (pendingArr.length === 1 ? '' : 's') + ' and ' + deferredArr.length + ' deferred walk' +
+        (deferredArr.length === 1 ? '' : 's') + ' saved locally &mdash; nothing was sent to Airtable.');
+    } catch (e) {
+      showBanner('error', 'Could not save draft locally: ' + esc(e && e.message ? e.message : String(e)));
+    }
+  }
+
+  /* Re-applies a locally saved draft (if any) for the just-loaded date on
+     top of the freshly-fetched walks. Anything that no longer makes sense
+     against the current Airtable data is silently skipped and counted --
+     a walk that's been deleted, reassigned by someone else to the same
+     manager already, locked since the draft was saved, or (for deferred
+     entries) sold since the draft was saved. */
+  function restoreDraft(dateKey) {
+    var result = { restoredPending: 0, restoredDeferred: 0, skipped: 0 };
+    var raw;
+    try { raw = localStorage.getItem(draftStorageKey(dateKey)); } catch (e) { raw = null; }
+    if (!raw) return result;
+    var draft;
+    try { draft = JSON.parse(raw); } catch (e) { return result; }
+
+    (draft.extraCols || []).forEach(function (id) {
+      if (state.managers.some(function (m) { return m.id === id; }) && state.extraCols.indexOf(id) < 0) {
+        state.extraCols.push(id);
+      }
+    });
+
+    (draft.deferred || []).forEach(function (key) {
+      var idx = key.indexOf(':');
+      if (idx < 0) { result.skipped++; return; }
+      var recordId = key.slice(0, idx), walkType = key.slice(idx + 1);
+      var w = state.walks.find(function (x) { return x.recordId === recordId && x.walkType === walkType; });
+      if (w && !w.locked && w.unsold) { state.deferred[key] = true; result.restoredDeferred++; }
+      else result.skipped++;
+    });
+
+    (draft.pending || []).forEach(function (p) {
+      var w = state.walks.find(function (x) { return x.recordId === p.recordId && x.walkType === p.walkType; });
+      if (!w || w.locked) { result.skipped++; return; }
+      var key = pendKey(w.recordId, w.walkType);
+      if (state.deferred[key]) return; // deferred wins; don't also stage a change
+      if ((w.managerId || null) === (p.toManagerId || null)) return; // already the current manager -- nothing to stage
+      state.pending.set(key, {
+        recordId: w.recordId, walkType: w.walkType, jobNumber: w.jobNumber,
+        fromManagerId: w.managerId || null, fromManagerName: managerName(w.managerId),
+        toManagerId: p.toManagerId || null, toManagerName: managerName(p.toManagerId),
+        status: 'staged', error: null
+      });
+      result.restoredPending++;
+    });
+
+    return result;
+  }
+
   function loadForDate(dateKey) {
-    if (state.pending.size) {
-      var ok = confirm('You have unsaved pending changes for the current date. Loading a new date will discard them. Continue?');
+    if (state.pending.size || Object.keys(state.deferred).length) {
+      var ok = confirm('You have unsaved pending changes or deferred walks for the current date. ' +
+        'Loading will discard them from this screen (use Save draft first if you want to keep them). Continue?');
       if (!ok) return Promise.resolve();
       state.pending.clear();
+      state.deferred = {};
     }
     state.dateKey = dateKey;
     setLoading(true);
     clearBanner();
     return loadJobs().then(function () {
       buildWalks();
+      var restored = restoreDraft(dateKey);
       setLoading(false);
       renderAll();
+      if (restored.restoredPending || restored.restoredDeferred) {
+        showBanner('info', 'Restored a locally saved draft for this date: ' + restored.restoredPending +
+          ' pending change' + (restored.restoredPending === 1 ? '' : 's') + ', ' + restored.restoredDeferred +
+          ' deferred walk' + (restored.restoredDeferred === 1 ? '' : 's') +
+          (restored.skipped ? ' (' + restored.skipped + ' skipped -- no longer matches today\u2019s schedule)' : '') +
+          '. Nothing has been sent to Airtable.');
+      }
     }).catch(function (err) {
       setLoading(false);
       if (err && err.status === 401) {
@@ -1336,6 +1480,12 @@
      fall back to the walk's real current manager. */
   function wireCardActionButtons() {
     document.getElementById('board').addEventListener('click', function (ev) {
+      var minBtn = ev.target.closest && ev.target.closest('[data-role="deferred-min"]');
+      if (minBtn) {
+        state.deferredMinimized = !state.deferredMinimized;
+        renderBoard();
+        return;
+      }
       var unassignBtn = ev.target.closest && ev.target.closest('[data-unassign-record]');
       if (unassignBtn) {
         var uRecordId = unassignBtn.getAttribute('data-unassign-record');
@@ -1416,10 +1566,18 @@
       renderAll();
     });
     document.getElementById('btnClear').addEventListener('click', function () {
-      if (!state.pending.size) return;
-      if (!confirm('Discard all ' + state.pending.size + ' pending change(s)? Nothing has been saved yet.')) return;
+      var deferredCount = Object.keys(state.deferred).length;
+      if (!state.pending.size && !deferredCount) return;
+      var parts = [];
+      if (state.pending.size) parts.push(state.pending.size + ' pending change(s)');
+      if (deferredCount) parts.push(deferredCount + ' deferred walk(s)');
+      if (!confirm('Discard ' + parts.join(' and ') + '? Nothing has been saved yet (use Save draft first to keep them locally).')) return;
       state.pending.clear();
+      state.deferred = {};
       renderAll();
+    });
+    document.getElementById('btnSaveDraft').addEventListener('click', function () {
+      saveDraftToLocal();
     });
     document.getElementById('btnSubmit').addEventListener('click', function () {
       var entries = Array.from(state.pending.values());
