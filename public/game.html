@@ -13,6 +13,7 @@
     --red-bg:#FDECEA; --red-ink:#7F1D1D; --red-border:#F3C6C2;
     --green-bg:#EAF6EE; --green-ink:#1E5B34; --green-border:#C6E6D2;
     --lock:#B08900;
+    --qai-tile:#F1F6FD; --qaa-tile:#F0FAF3; --cel-tile:#FDF6EA; --acc-tile:#FAF1FA;
   }
   *{box-sizing:border-box}
   body{
@@ -69,6 +70,14 @@
      (--card) so scrolled-under cards don't show through. */
   .col.unassigned{position:sticky; left:0; z-index:35; box-shadow:6px 0 10px -6px rgba(27,42,88,.18)}
   .col.unassigned.dragover{box-shadow:6px 0 10px -6px rgba(27,42,88,.18), 0 0 0 2px rgba(27,42,88,.15) inset}
+  /* Deferred sits immediately right of Unassigned, also pinned -- it's a
+     local triage bucket (see handleDrop), not something saved to Airtable,
+     so it needs to stay reachable while dragging cards out of far-right
+     manager columns just like Unassigned does. Left offset = Unassigned's
+     260px column width + the 14px #board gap. */
+  .col.deferred{position:sticky; left:274px; z-index:34; box-shadow:6px 0 10px -6px rgba(27,42,88,.18)}
+  .col.deferred.dragover{box-shadow:6px 0 10px -6px rgba(27,42,88,.18), 0 0 0 2px rgba(27,42,88,.15) inset}
+  .col.deferred .col-head{background:var(--amber-bg); border-radius:10px 10px 0 0}
   .col-head{
     padding:10px 12px; border-bottom:1px solid var(--border); border-radius:10px 10px 0 0;
   }
@@ -86,7 +95,7 @@
     cursor:grab; font-size:12.5px; position:relative;
   }
   .card:active{cursor:grabbing}
-  .card.locked{cursor:not-allowed; background:#FAFAF8; opacity:.85}
+  .card.locked{cursor:not-allowed; opacity:.85}
   .card.staged{border-color:var(--navy); box-shadow:0 0 0 1px var(--navy) inset}
   .card .row1{display:flex; justify-content:space-between; gap:6px; align-items:baseline}
   .card .row1 .badges{display:flex; align-items:center; gap:4px}
@@ -110,16 +119,30 @@
   .card-accent-QAA{border-left:3px solid #1E5B34}
   .card-accent-CEL{border-left:3px solid #8A5A12}
   .card-accent-ACC{border-left:3px solid #7A2E82}
+  /* Light full-tile tint by walk type, on top of the left-edge accent above.
+     Kept separate from .card.locked's opacity dimming and .card.staged's
+     box-shadow ring -- neither of those sets background, so the tint always
+     shows through regardless of those other states. */
+  .card-tile-QAI{background:var(--qai-tile)}
+  .card-tile-QAA{background:var(--qaa-tile)}
+  .card-tile-CEL{background:var(--cel-tile)}
+  .card-tile-ACC{background:var(--acc-tile)}
   .card .community{color:var(--muted); margin-top:3px}
   .card .time{color:var(--faint); font-size:11.5px; margin-top:2px}
   .card .lockrow{display:flex; align-items:center; gap:4px; color:var(--lock); font-size:11px; margin-top:4px; font-weight:600}
   .card .stagedfrom{font-size:11px; color:var(--navy); margin-top:4px; font-style:italic}
   .card .warnline{font-size:11px; color:var(--red-ink); margin-top:4px; font-weight:600}
-  .unassign-btn{
-    display:block; margin-top:6px; font:inherit; font-size:11px; font-weight:600;
-    padding:3px 8px; border-radius:6px; border:1px solid var(--border); background:#fff; color:var(--muted); cursor:pointer;
+  .card-actions{display:flex; gap:6px; margin-top:6px; flex-wrap:wrap}
+  .unassign-btn, .defer-btn, .restore-btn{
+    font:inherit; font-size:11px; font-weight:600;
+    padding:3px 8px; border-radius:6px; cursor:pointer;
   }
+  .unassign-btn{border:1px solid var(--border); background:#fff; color:var(--muted)}
   .unassign-btn:hover{background:var(--red-bg); color:var(--red-ink); border-color:var(--red-border)}
+  .defer-btn{border:1px solid var(--amber-border); background:var(--amber-bg); color:var(--amber-ink)}
+  .defer-btn:hover{background:#FCEFC7}
+  .restore-btn{border:1px solid #D9DFF3; background:#EEF1FA; color:var(--navy)}
+  .restore-btn:hover{background:#E1E7F8}
   #pendingBar{
     position:fixed; left:0; right:0; bottom:0; background:var(--card); border-top:1px solid var(--border);
     padding:12px 20px; display:flex; align-items:center; gap:14px; box-shadow:0 -2px 10px rgba(0,0,0,.06);
@@ -136,6 +159,23 @@
   .pending-chip.done{background:var(--green-bg); border-color:var(--green-border); color:var(--green-ink)}
   .pending-chip.error{background:var(--red-bg); border-color:var(--red-border); color:var(--red-ink)}
   #addColWrap{display:flex; align-items:center; gap:6px}
+  #searchWrap{display:flex; align-items:center; gap:6px}
+  #searchBox{
+    font:inherit; padding:6px 10px; border:1px solid var(--border); border-radius:7px;
+    background:#fff; color:var(--ink); min-width:220px;
+  }
+  #timeSlotCards{display:flex; gap:10px; flex-wrap:wrap; padding:0 20px 14px; margin:0 -20px 0}
+  .timecard{
+    background:var(--card); border:1px solid var(--border); border-radius:10px; padding:8px 16px;
+    min-width:84px; text-align:center; cursor:pointer;
+  }
+  .timecard:hover{border-color:var(--navy)}
+  .timecard .n{font-size:18px; font-weight:700; color:var(--navy); line-height:1.1}
+  .timecard .lbl{font-size:11px; color:var(--muted); font-weight:600; margin-top:2px; white-space:nowrap}
+  /* Search never hides cards -- it only rings matches and dims the rest, so
+     drag-and-drop targets never disappear out from under a search query. */
+  .card.search-dim{opacity:.3}
+  .card.search-match{box-shadow:0 0 0 2px #B08900 inset; position:relative}
   .loading{padding:40px; text-align:center; color:var(--faint)}
 </style>
 </head>
@@ -153,6 +193,10 @@
   <button id="btnLoad">Load</button>
   <button id="btnRefresh" title="Re-fetch from Airtable">Refresh</button>
   <button id="btnOptimize" title="Run the SOTV3 optimizer on the loaded schedule" disabled>Run SOTV3</button>
+  <div id="searchWrap">
+    <label for="searchBox">Search</label>
+    <input type="search" id="searchBox" placeholder="time, walk type, date, job #, community…">
+  </div>
   <div id="addColWrap" style="margin-left:auto">
     <label for="addColSelect">Add manager column</label>
     <select id="addColSelect"><option value="">Choose…</option></select>
@@ -160,6 +204,7 @@
 </div>
 <div id="banners"></div>
 <main>
+  <div id="timeSlotCards"></div>
   <div id="board"><div class="loading">Loading…</div></div>
 </main>
 <div id="pendingBar" style="display:none">
@@ -189,6 +234,10 @@
   var WALK_TYPES = ['QAI', 'QAA', 'CEL', 'ACC'];
   var DAILY_CAP_MIN = 480;
   var INITIAL_LEG_CAP_MIN = 45; // SOTV3: first walk of a manager's day must be <= this from home
+  // Sentinel "column id" for the Deferred bucket -- never a real Airtable
+  // manager-link id, so it can share the same effectiveManagerId/allColumnIds
+  // machinery as Unassigned (null) and real manager ids without colliding.
+  var DEFERRED = '__deferred__';
 
   /* ---- Auth (mirrors the shared OLHAuth module's session contract) ------ */
   function getSession() {
@@ -217,13 +266,19 @@
      }
      extraCols: manager ids added via the "Add manager column" picker that
        have no walk of their own yet, so an empty column exists to drop onto.
-     unassignedSort: 'time' | 'type' | 'community' -- display-only ordering
-       for the Unassigned column, independent of every other column's order.
+     unassignedSort / deferredSort: 'time' | 'type' | 'community' -- display-
+       only ordering for the Unassigned / Deferred columns, independent of
+       every other column's order.
+     deferred: { "<recordId>:<walkType>": true } -- walks manually parked in
+       the Deferred bucket via drag or the Defer button. Purely a local
+       triage marker: it is never sent to Airtable (there is no such field
+       on the Jobs table), and moving a walk into Deferred clears any staged
+       pending change for it, so Submit never touches a deferred walk.
   --------------------------------------------------------------------------*/
   var state = {
     jobs: [], managers: [], walks: [], can: [], user: null,
     pending: new Map(), extraCols: [], dateKey: '', loading: false,
-    unassignedSort: 'time'
+    unassignedSort: 'time', deferredSort: 'time', deferred: {}
   };
 
   /* ---- Small helpers ------------------------------------------------------ */
@@ -359,7 +414,9 @@
      touches state.jobs/state.walks -- this is purely a rendering lens over
      pending, so Clear/undo is instant and never needs a re-fetch. */
   function effectiveManagerId(w) {
-    var p = state.pending.get(pendKey(w.recordId, w.walkType));
+    var key = pendKey(w.recordId, w.walkType);
+    if (state.deferred[key]) return DEFERRED;
+    var p = state.pending.get(key);
     if (p) return p.toManagerId || null;
     return w.managerId || null;
   }
@@ -401,7 +458,7 @@
   function columnCommunityCount(managerId) {
     var seen = {};
     columnWalks(managerId).forEach(function (w) {
-      seen[w.community || w.address || '(no community)'] = true;
+      seen[coreCommunity(w.community) || w.community || w.address || '(no community)'] = true;
     });
     return Object.keys(seen).length;
   }
@@ -425,21 +482,24 @@
     return { minutes: total, partial: partial };
   }
 
-  /* ---- Unassigned-column sort ---------------------------------------------
-     Display-only: reorders a copy of columnWalks(null) for rendering. Never
-     touches state.walks, so drag/drop, the Unassign button, cap math, and
-     duplicate-time checks (all of which key off the original array) are
-     unaffected. */
-  function sortedUnassignedWalks() {
-    var list = columnWalks(null).slice();
-    var mode = state.unassignedSort || 'time';
+  /* ---- Unassigned/Deferred column sort -------------------------------------
+     Display-only: reorders a copy of columnWalks(managerId) for rendering.
+     Never touches state.walks, so drag/drop, the Unassign/Defer buttons, cap
+     math, and duplicate-time checks (all of which key off the original
+     array) are unaffected. Shared by both triage columns (Unassigned's
+     managerId is null, Deferred's is the DEFERRED sentinel) since they need
+     identical sort behavior, just with independent state (unassignedSort /
+     deferredSort) so changing one never reorders the other. */
+  function sortedTriageWalks(managerId, mode) {
+    var list = columnWalks(managerId).slice();
     function timeKey(w) { return (WALK_FIELD[w.walkType].datetime && w.raw) ? w.raw : ''; }
+    function commKey(w) { return coreCommunity(w.community) || w.community || ''; }
     list.sort(function (a, b) {
       if (mode === 'type') {
         var ta = WALK_TYPES.indexOf(a.walkType), tb = WALK_TYPES.indexOf(b.walkType);
         if (ta !== tb) return ta - tb;
       } else if (mode === 'community') {
-        var ca = (a.community || '').localeCompare(b.community || '');
+        var ca = commKey(a).localeCompare(commKey(b));
         if (ca !== 0) return ca;
       }
       var tka = timeKey(a), tkb = timeKey(b);
@@ -449,13 +509,12 @@
     return list;
   }
 
-  function unassignedSortSelectHtml() {
-    var mode = state.unassignedSort || 'time';
+  function triageSortSelectHtml(role, mode, title) {
     function opt(v, label) {
       return '<option value="' + v + '"' + (mode === v ? ' selected' : '') + '>' + esc(label) + '</option>';
     }
     return '' +
-      '<select class="sortpick" data-role="unassigned-sort" title="Sort the Unassigned column">' +
+      '<select class="sortpick" data-role="' + esc(role) + '-sort" title="' + esc(title) + '">' +
       opt('time', 'Sort: Time') + opt('type', 'Sort: Walk type') + opt('community', 'Sort: Community') +
       '</select>';
   }
@@ -464,54 +523,78 @@
     var ids = {};
     state.walks.forEach(function (w) { ids[effectiveManagerId(w) || ''] = true; });
     state.extraCols.forEach(function (id) { ids[id] = true; });
-    var list = Object.keys(ids).filter(function (id) { return id !== ''; });
+    var list = Object.keys(ids).filter(function (id) { return id !== '' && id !== DEFERRED; });
     list.sort(function (a, b) { return managerName(a).localeCompare(managerName(b)); });
-    // Unassigned is always shown, even with zero walks in it right now --
-    // it's the drop target for the Unassign button/drag-and-drop, so it has
-    // to be reachable before anything has actually been unassigned yet.
-    return [''].concat(list);
+    // Unassigned and Deferred are always shown, even with zero walks in them
+    // right now -- both are permanent drop targets (Unassign/Defer buttons
+    // and drag-and-drop), so they have to be reachable before anything has
+    // actually landed in either one yet.
+    return ['', DEFERRED].concat(list);
   }
 
   /* ---- Rendering ----------------------------------------------------------- */
   function cardHtml(w) {
     var eff = effectiveManagerId(w);
+    var isDeferred = eff === DEFERRED;
     var key = pendKey(w.recordId, w.walkType);
     var p = state.pending.get(key);
-    var staged = !!p;
-    var classes = 'card card-accent-' + w.walkType + (w.locked ? ' locked' : '') + (staged ? ' staged' : '');
+    var staged = !isDeferred && !!p;
+    var classes = 'card card-accent-' + w.walkType + ' card-tile-' + w.walkType +
+      (w.locked ? ' locked' : '') + (staged ? ' staged' : '');
     var dup = false;
-    if (WALK_FIELD[w.walkType].datetime) {
+    if (!isDeferred && WALK_FIELD[w.walkType].datetime) {
       dup = columnDuplicateTimes(eff).indexOf(w.raw) >= 0;
     }
-    var overCap = columnMinutes(eff) > DAILY_CAP_MIN;
+    var overCap = !isDeferred && columnMinutes(eff) > DAILY_CAP_MIN;
     var unsoldBadge = w.unsold
       ? '<span class="pill-unsold" title="Homesite Status is Available -- this home is not yet sold">UNSOLD</span>'
       : '';
+    // Core community name (e.g. "Ranches") instead of the specific product
+    // line Airtable stores (e.g. "Ranches 50GC") -- same resolution the
+    // drive-time estimate already uses, so the two never disagree.
+    var displayCommunity = coreCommunity(w.community) || w.community || w.address || '(no community)';
+    var actions = '';
+    if (!w.locked) {
+      if (isDeferred) {
+        actions = '<button type="button" class="restore-btn" data-restore-record="' +
+          esc(w.recordId) + '" data-restore-type="' + w.walkType + '">Restore</button>';
+      } else {
+        actions =
+          (eff ? '<button type="button" class="unassign-btn" data-unassign-record="' +
+            esc(w.recordId) + '" data-unassign-type="' + w.walkType + '">Unassign</button>' : '') +
+          '<button type="button" class="defer-btn" data-defer-record="' +
+            esc(w.recordId) + '" data-defer-type="' + w.walkType + '">Defer</button>';
+      }
+    }
     return '' +
       '<div class="' + classes + '" draggable="' + (w.locked ? 'false' : 'true') + '" ' +
       'data-record="' + esc(w.recordId) + '" data-type="' + w.walkType + '" data-current="' + esc(eff || '') + '">' +
       '<div class="row1"><span class="job">#' + esc(w.jobNumber) + '</span>' +
       '<span class="badges"><span class="type type-' + w.walkType + '">' + w.walkType + '</span>' + unsoldBadge + '</span></div>' +
-      '<div class="community">' + esc(w.community || w.address || '(no community)') + '</div>' +
+      '<div class="community">' + esc(displayCommunity) + '</div>' +
       (w.timeLabel ? '<div class="time">' + esc(w.timeLabel) + ' ET</div>' : '<div class="time">No set time</div>') +
       (w.locked ? '<div class="lockrow">&#128274; Locked &mdash; cannot reassign</div>' : '') +
-      (staged ? '<div class="stagedfrom">was: ' + esc(p.fromManagerName) + '</div>' : '') +
+      (isDeferred ? '<div class="stagedfrom">Deferred &mdash; no change staged</div>' :
+        (staged ? '<div class="stagedfrom">was: ' + esc(p.fromManagerName) + '</div>' : '')) +
       (dup ? '<div class="warnline">Same time as another walk on this manager</div>' : '') +
       (overCap && !dup ? '<div class="warnline">Manager over ' + DAILY_CAP_MIN + '-min cap</div>' : '') +
-      (!w.locked && eff ? '<button type="button" class="unassign-btn" data-unassign-record="' +
-        esc(w.recordId) + '" data-unassign-type="' + w.walkType + '">Unassign</button>' : '') +
+      (actions ? '<div class="card-actions">' + actions + '</div>' : '') +
       '</div>';
   }
 
   function columnHtml(managerId) {
     var isUnassigned = !managerId;
-    var name = managerId ? managerName(managerId) : 'Unassigned';
-    var walks = isUnassigned ? sortedUnassignedWalks() : columnWalks(managerId);
+    var isDeferred = managerId === DEFERRED;
+    var isRealManager = !isUnassigned && !isDeferred;
+    var name = isDeferred ? 'Deferred' : (isUnassigned ? 'Unassigned' : managerName(managerId));
+    var walks = isDeferred ? sortedTriageWalks(DEFERRED, state.deferredSort || 'time')
+      : isUnassigned ? sortedTriageWalks(null, state.unassignedSort || 'time')
+      : columnWalks(managerId);
     var minutes = columnMinutes(managerId);
-    var overCap = minutes > DAILY_CAP_MIN;
-    var dupCount = managerId ? columnDuplicateTimes(managerId).length : 0;
+    var overCap = isRealManager && minutes > DAILY_CAP_MIN;
+    var dupCount = isRealManager ? columnDuplicateTimes(managerId).length : 0;
     var metaBits = [walks.length + ' walk' + (walks.length === 1 ? '' : 's')];
-    if (managerId) metaBits.push((overCap ? '<span class="cap-over">' : '') + minutes + ' min' + (overCap ? '</span>' : ''));
+    if (isRealManager) metaBits.push((overCap ? '<span class="cap-over">' : '') + minutes + ' min' + (overCap ? '</span>' : ''));
     if (dupCount) metaBits.push('<span class="cap-over">' + dupCount + ' time clash</span>');
     var body = walks.length
       ? walks.map(cardHtml).join('')
@@ -519,14 +602,14 @@
 
     // Community count + drive-time estimate, directly under the name. Skips
     // the summary line entirely on an empty column (nothing to summarize),
-    // skips the drive-time half for Unassigned (no manager to drive
-    // anywhere), and falls back to community-count-only if sotv3Ref hasn't
-    // loaded yet (lazy-loaded -- see loadSOTV3Reference below).
+    // skips the drive-time half for Unassigned/Deferred (no manager to
+    // drive anywhere), and falls back to community-count-only if sotv3Ref
+    // hasn't loaded yet (lazy-loaded -- see loadSOTV3Reference below).
     var meta2 = '';
     if (walks.length) {
       var commCount = columnCommunityCount(managerId);
       var commLabel = commCount + ' communit' + (commCount === 1 ? 'y' : 'ies');
-      if (isUnassigned || !sotv3Ref.loaded) {
+      if (!isRealManager || !sotv3Ref.loaded) {
         meta2 = commLabel;
       } else {
         var est = columnDriveEstimate(managerId);
@@ -534,10 +617,15 @@
       }
     }
 
-    var sortControl = isUnassigned ? unassignedSortSelectHtml() : '';
+    var sortControl = isUnassigned
+      ? triageSortSelectHtml('unassigned', state.unassignedSort || 'time', 'Sort the Unassigned column')
+      : isDeferred
+      ? triageSortSelectHtml('deferred', state.deferredSort || 'time', 'Sort the Deferred column')
+      : '';
 
     return '' +
-      '<div class="col' + (isUnassigned ? ' unassigned' : '') + '" data-manager="' + esc(managerId || '') + '">' +
+      '<div class="col' + (isUnassigned ? ' unassigned' : '') + (isDeferred ? ' deferred' : '') +
+      '" data-manager="' + esc(managerId || '') + '">' +
       '<div class="col-head"><div class="name">' + esc(name) + '</div>' +
       (meta2 ? '<div class="meta2">' + meta2 + '</div>' : '') +
       sortControl +
@@ -546,20 +634,73 @@
       '</div>';
   }
 
+  /* ---- Time-slot summary strip ---------------------------------------------
+     Counts every loaded walk (regardless of which column it's currently in
+     -- dragging a card between managers never changes these totals, only
+     Load/Refresh does), grouped by clock time, with all untimed QAI/QAA
+     walks bucketed together under "No set time". Clicking a card drops its
+     label straight into the search box as a shortcut. */
+  function timeSlotSummary() {
+    var counts = {};
+    var order = [];
+    state.walks.forEach(function (w) {
+      var label = w.timeLabel || 'No set time';
+      if (!counts[label]) { counts[label] = 0; order.push({ label: label, raw: w.timeLabel ? w.raw : null }); }
+      counts[label]++;
+    });
+    // Untimed bucket first (matches the board's own time-then-job# sort,
+    // where untimed QAI/QAA walks sort ahead of timed CEL/ACC ones), then
+    // chronological by raw UTC timestamp.
+    order.sort(function (a, b) {
+      if (a.raw === null && b.raw === null) return 0;
+      if (a.raw === null) return -1;
+      if (b.raw === null) return 1;
+      return a.raw < b.raw ? -1 : (a.raw > b.raw ? 1 : 0);
+    });
+    return order.map(function (o) { return { label: o.label, count: counts[o.label] }; });
+  }
+
+  function renderTimeSlotCards() {
+    var wrap = document.getElementById('timeSlotCards');
+    if (!wrap) return;
+    var slots = timeSlotSummary();
+    if (!slots.length) { wrap.innerHTML = ''; return; }
+    wrap.innerHTML = slots.map(function (s) {
+      return '<div class="timecard" data-slot="' + esc(s.label) + '" title="Click to search this time slot">' +
+        '<div class="n">' + s.count + '</div><div class="lbl">' + esc(s.label) + '</div></div>';
+    }).join('');
+    wrap.querySelectorAll('.timecard').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var box = document.getElementById('searchBox');
+        if (!box) return;
+        box.value = el.getAttribute('data-slot') || '';
+        applySearchHighlight();
+      });
+    });
+  }
+
   function renderBoard() {
     var board = document.getElementById('board');
-    if (state.loading) { board.innerHTML = '<div class="loading">Loading…</div>'; return; }
-    // allColumnIds() always includes Unassigned now (it's a permanent drop
-    // target), so an empty day is detected off state.walks directly rather
-    // than off an empty column list.
-    if (!state.walks.length) {
-      board.innerHTML = '<div class="loading">No QAI/QAA/CEL/ACC walks found for ' + esc(state.dateKey) + '.</div>';
+    if (state.loading) {
+      board.innerHTML = '<div class="loading">Loading…</div>';
+      var slotWrap = document.getElementById('timeSlotCards');
+      if (slotWrap) slotWrap.innerHTML = '';
       return;
     }
+    // allColumnIds() always includes Unassigned and Deferred now (both are
+    // permanent drop targets), so an empty day is detected off state.walks
+    // directly rather than off an empty column list.
+    if (!state.walks.length) {
+      board.innerHTML = '<div class="loading">No QAI/QAA/CEL/ACC walks found for ' + esc(state.dateKey) + '.</div>';
+      renderTimeSlotCards();
+      return;
+    }
+    renderTimeSlotCards();
     var cols = allColumnIds();
     board.innerHTML = cols.map(function (id) { return columnHtml(id || null); }).join('');
     wireDragAndDrop();
-    wireUnassignedSort();
+    wireTriageSorts();
+    applySearchHighlight();
   }
 
   function renderAddColumnSelect() {
@@ -573,12 +714,49 @@
     sel.innerHTML = opts.join('');
   }
 
-  function wireUnassignedSort() {
-    var sel = document.querySelector('[data-role="unassigned-sort"]');
-    if (!sel) return;
-    sel.addEventListener('change', function () {
-      state.unassignedSort = this.value;
-      renderBoard();
+  function wireTriageSorts() {
+    var roleToStateKey = { unassigned: 'unassignedSort', deferred: 'deferredSort' };
+    Object.keys(roleToStateKey).forEach(function (role) {
+      var sel = document.querySelector('[data-role="' + role + '-sort"]');
+      if (!sel) return;
+      sel.addEventListener('change', function () {
+        state[roleToStateKey[role]] = this.value;
+        renderBoard();
+      });
+    });
+  }
+
+  /* ---- Search / highlight ---------------------------------------------------
+     Client-side only and never hides anything -- it rings matches and dims
+     the rest, so drag-and-drop targets never disappear out from under a
+     query mid-search. Matches against walk type, clock time (or "no set
+     time"), job #, community (both the raw Airtable value and its core
+     name), and the loaded date -- covers "time, walk type, or date" plus a
+     couple of free conveniences. Re-applied after every renderBoard() since
+     the board's innerHTML is rebuilt from scratch on each render. */
+  function walkMatchesQuery(w, q) {
+    var hay = [
+      w.walkType,
+      w.timeLabel || 'no set time',
+      String(w.jobNumber || ''),
+      w.community || '',
+      coreCommunity(w.community) || '',
+      state.dateKey || ''
+    ].join(' ').toLowerCase();
+    return hay.indexOf(q) >= 0;
+  }
+
+  function applySearchHighlight() {
+    var box = document.getElementById('searchBox');
+    var q = box ? box.value.trim().toLowerCase() : '';
+    document.querySelectorAll('#board .card').forEach(function (el) {
+      if (!q) { el.classList.remove('search-match', 'search-dim'); return; }
+      var recordId = el.getAttribute('data-record');
+      var walkType = el.getAttribute('data-type');
+      var w = state.walks.find(function (x) { return x.recordId === recordId && x.walkType === walkType; });
+      var match = !!w && walkMatchesQuery(w, q);
+      el.classList.toggle('search-match', match);
+      el.classList.toggle('search-dim', !match);
     });
   }
 
@@ -666,7 +844,19 @@
 
     var key = pendKey(w.recordId, w.walkType);
     var effNow = effectiveManagerId(w);
-    if (effNow === (toManagerId || null)) return; // dropped on its own column, no-op
+    if (effNow === (toManagerId || (toManagerId === DEFERRED ? DEFERRED : null))) return; // dropped on its own column, no-op
+
+    if (toManagerId === DEFERRED) {
+      // Deferred is a local triage bucket only -- there is no Airtable
+      // field for it, so any staged reassignment for this walk is dropped
+      // and it just parks here (still showing its real current manager
+      // underneath, see cardHtml) until it's dragged back out.
+      state.pending.delete(key);
+      state.deferred[key] = true;
+      renderAll();
+      return;
+    }
+    delete state.deferred[key];
 
     if ((w.managerId || null) === (toManagerId || null)) {
       // Dropped back onto its original manager -- cancel the staged change
@@ -1135,27 +1325,49 @@
     });
   }
 
-  /* Unassign button on each card. Delegated on #board once (rather than
-     re-wired every render) since it never moves in the DOM. Reuses
-     handleDrop() with toManagerId=null so an unassign click is IDENTICAL to
-     dragging the card onto the Unassigned column -- same staging, same undo
-     via the pending chip's x, nothing saved until Submit. */
-  function wireUnassignButtons() {
+  /* Unassign/Defer/Restore buttons on each card. Delegated on #board once
+     (rather than re-wired every render) since it never moves in the DOM.
+     Unassign and Defer reuse handleDrop() (toManagerId=null or DEFERRED)
+     so a button click is IDENTICAL to dragging the card onto that column --
+     same staging (or, for Defer, same local parking), same undo via the
+     pending chip's x or the Restore button, nothing saved until Submit.
+     Restore has no handleDrop equivalent since it isn't a column drop --
+     it just clears the local deferred flag and lets effectiveManagerId()
+     fall back to the walk's real current manager. */
+  function wireCardActionButtons() {
     document.getElementById('board').addEventListener('click', function (ev) {
-      var btn = ev.target.closest && ev.target.closest('[data-unassign-record]');
-      if (!btn) return;
-      var recordId = btn.getAttribute('data-unassign-record');
-      var walkType = btn.getAttribute('data-unassign-type');
-      var w = state.walks.find(function (x) { return x.recordId === recordId && x.walkType === walkType; });
-      if (!w || w.locked) return;
-      handleDrop({ recordId: recordId, walkType: walkType, fromManagerId: effectiveManagerId(w) }, null);
+      var unassignBtn = ev.target.closest && ev.target.closest('[data-unassign-record]');
+      if (unassignBtn) {
+        var uRecordId = unassignBtn.getAttribute('data-unassign-record');
+        var uWalkType = unassignBtn.getAttribute('data-unassign-type');
+        var uw = state.walks.find(function (x) { return x.recordId === uRecordId && x.walkType === uWalkType; });
+        if (!uw || uw.locked) return;
+        handleDrop({ recordId: uRecordId, walkType: uWalkType }, null);
+        return;
+      }
+      var deferBtn = ev.target.closest && ev.target.closest('[data-defer-record]');
+      if (deferBtn) {
+        var dRecordId = deferBtn.getAttribute('data-defer-record');
+        var dWalkType = deferBtn.getAttribute('data-defer-type');
+        var dw = state.walks.find(function (x) { return x.recordId === dRecordId && x.walkType === dWalkType; });
+        if (!dw || dw.locked) return;
+        handleDrop({ recordId: dRecordId, walkType: dWalkType }, DEFERRED);
+        return;
+      }
+      var restoreBtn = ev.target.closest && ev.target.closest('[data-restore-record]');
+      if (restoreBtn) {
+        var rRecordId = restoreBtn.getAttribute('data-restore-record');
+        var rWalkType = restoreBtn.getAttribute('data-restore-type');
+        delete state.deferred[pendKey(rRecordId, rWalkType)];
+        renderAll();
+      }
     });
   }
 
   function init() {
     var dateInput = document.getElementById('walkDate');
     dateInput.value = todayEastern();
-    wireUnassignButtons();
+    wireCardActionButtons();
 
     var session = getSession();
     if (!session || !session.token) {
@@ -1196,6 +1408,7 @@
     document.getElementById('btnOptimize').addEventListener('click', function () {
       runSOTV3();
     });
+    document.getElementById('searchBox').addEventListener('input', applySearchHighlight);
     document.getElementById('addColSelect').addEventListener('change', function () {
       var id = this.value;
       if (id && state.extraCols.indexOf(id) < 0) state.extraCols.push(id);
