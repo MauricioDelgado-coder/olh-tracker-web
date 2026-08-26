@@ -285,7 +285,7 @@ function readSession(token) {
  * matrix an admin sees is the matrix that gets stored.
  */
 const ALL_PAGES = [
-  'page.home', 'page.mywalks', 'page.tracker', 'page.completion', 'page.walks',
+  'page.home', 'page.mywalks', 'page.tracker', 'page.completion', 'page.walks', 'page.game',
   'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload',
   'page.walkstoschedule', 'page.admin', 'page.keys', 'page.sanmpr', 'page.synchistory'
 ];
@@ -565,6 +565,7 @@ const PAGE_LABEL = {
   'page.tracker': 'QA & Closing Tracker',
   'page.completion': 'Completion Report',
   'page.walks': 'Walk Schedule',
+  'page.game': 'Walk Reassignment',
   'page.qamgmt': 'QA Management',
   'page.missedwalks': 'Missed Walks',
   'page.scheduler': 'Schedule Optimizer',

@@ -24,8 +24,8 @@ const eq = (label, got, want) => {
   if (a === b) ok(label); else bad(label, 'got ' + a + ', wanted ' + b);
 };
 
-const PAGES = ['page.home', 'page.tracker', 'page.completion', 'page.walks',
-  'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload',
+const PAGES = ['page.home', 'page.mywalks', 'page.tracker', 'page.completion', 'page.walks',
+  'page.game', 'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload',
   'page.walkstoschedule', 'page.admin', 'page.keys', 'page.sanmpr', 'page.synchistory'];
 
 console.log('\n=== the catalog ===');
@@ -34,7 +34,7 @@ for (const p of PAGES) {
   else bad(p + ' is a known permission', 'missing from PERMS, so normalizeMatrix drops it');
 }
 eq('PERMS is capabilities then pages', A.PERMS, [
-  'suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage', 'sandbox.edit'
+  'suite.view', 'tracker.edit', 'walk.complete', 'walk.schedule', 'optimizer.apply', 'roster.manage', 'sandbox.edit'
 ].concat(PAGES));
 
 console.log('\n=== every page has a refusal message ===');
