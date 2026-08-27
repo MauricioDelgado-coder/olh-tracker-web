@@ -164,9 +164,19 @@ DATE_COLUMNS = {
 # investigation -- see git log for that date. The field itself still exists on
 # Homesite__c and the query still works; it was removed as a product decision,
 # not because the mapping went stale.
+#
+# Home Inspection Approved / Home Inspection Report Received / PHI Inspection
+# Date added 2026-08-26 -- direct Homesite__c fields (no relationship hop
+# needed, unlike Scheduled Closing Date / CCC Date above), added here rather
+# than to the no-COE workbook's own FIELDS/COLUMN_MAP so this sync stays the
+# single place new Salesforce columns get wired up without touching the
+# separately-maintained homesites-no-actual-coe skill.
 EXTRA_FIELDS = {
     'Scheduled Closing Date': ('Primary_Opportunity_ID__r.Scheduled_Closing_Date__c', 'date'),
     'CCC Date': ('Primary_Opportunity_ID__r.CCC_Date__c', 'date'),
+    'Home Inspection Approved': ('HomeInspectionApproved__c', 'boolean'),
+    'Home Inspection Report Received': ('HomeInspectionReportReceived__c', 'boolean'),
+    'PHI Inspection Date': ('PHI_Inspection_Date__c', 'date'),
 }
 
 # ---------------------------------------------------------------------------
@@ -417,7 +427,7 @@ def run_report(out, division, alias, script=None):
 
 
 def supplementary(division, alias):
-    """The two fields the workbook does not carry, joined on Job #."""
+    """The fields the workbook does not carry, joined on Job #."""
     cols = [spec[0] for spec in EXTRA_FIELDS.values()]
     q = ('SELECT Name, %s FROM Homesite__c WHERE DivisionCode__c = \'%s\' '
          "AND Actual_COE_Date_New__c = NULL AND (Homesite_Status__c != 'Available' "
@@ -436,8 +446,15 @@ def supplementary(division, alias):
         job = (r.get('Name') or '').strip()
         if not job:
             continue
-        out[job] = {air: (r.get(sf) or '').strip()
-                    for air, (sf, _kind) in EXTRA_FIELDS.items()}
+        rec = {}
+        for air, (sf, kind) in EXTRA_FIELDS.items():
+            raw = (r.get(sf) or '').strip()
+            # Salesforce's CSV export renders booleans as the literal strings
+            # "true"/"false" -- coerce to a real Python bool here, at the
+            # source, so a checkbox field is never handed a string downstream
+            # (the Airtable API wants JSON true/false, not "true").
+            rec[air] = (raw.lower() == 'true') if kind == 'boolean' else raw
+        out[job] = rec
     print('  %d rows' % len(out), flush=True)
     return out
 
@@ -511,6 +528,22 @@ def norm_text(v):
     return ' '.join(str(v).split())
 
 
+def norm_bool(v):
+    """Canonical True/False regardless of source shape.
+
+    `have` (from Airtable) arrives as a real Python bool, or is absent entirely
+    for an unchecked box (compare() already maps that absence to ''). `want`
+    (from supplementary()) is already a real bool by the time it gets here too
+    -- but this stays permissive of a stray "true"/"false" string so a future
+    caller that skips that conversion fails closed (unrecognised -> False)
+    rather than comparing a string to a bool and reporting a false change on
+    every single run, the same class of churn norm_text() exists to prevent.
+    """
+    if isinstance(v, bool):
+        return v
+    return str(v).strip().lower() in ('true', '1', 'yes')
+
+
 def read_workbook(path, division):
     import openpyxl
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
@@ -564,6 +597,8 @@ def normalise(field, v):
         return norm_date(v)
     if kind == 'datetime':
         return norm_datetime(v)
+    if kind == 'boolean':
+        return norm_bool(v)
     return norm_text(v)
 
 

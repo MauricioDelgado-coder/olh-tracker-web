@@ -102,6 +102,8 @@
   .badge.acc{ color:var(--acc); background:var(--acc-bg); }
   .badge.pub{ color:var(--green-ink); background:var(--green-bg); }
   .badge.pot{ color:var(--amber-ink); background:var(--amber-bg); }
+  .badge.insp-yes{ color:var(--green-ink); background:var(--green-bg); }
+  .badge.insp-no{ color:var(--muted); background:var(--border); }
 
   .walk-time{ font-size:13px; font-weight:600; color:var(--ink); white-space:nowrap; }
 
@@ -178,7 +180,7 @@
     <span><span class="dot" style="background:var(--qaa)"></span>QAA Acceptance</span>
     <span><span class="dot" style="background:var(--cel)"></span>Celebration</span>
     <span><span class="dot" style="background:var(--acc)"></span>Final Acceptance</span>
-    <span style="margin-left:auto"><span class="badge pub">Published</span> = day is locked on the schedule &nbsp; <span class="badge pot">Potential</span> = assigned, not yet locked</span>
+    <span style="margin-left:auto"><span class="badge pub">Published</span> = day is locked on the schedule &nbsp; <span class="badge pot">Potential</span> = assigned, not yet locked &nbsp; <span class="badge insp-yes">Insp. Approved</span> = Salesforce home inspection approved</span>
   </div>
 
   <div class="filters" id="filters">
@@ -377,7 +379,8 @@
           attended: cfg.attend ? !!f[cfg.attend] : null,
           missed: !!f[cfg.missed],
           missReason: f[cfg.reason] || '',
-          missNote: f[cfg.note] || ''
+          missNote: f[cfg.note] || '',
+          inspApproved: !!f['Home Inspection Approved']
         });
       });
     });
@@ -485,6 +488,7 @@
     var label = w.milestone === 'CEL' ? 'Celebration' : w.milestone === 'ACC' ? 'Acceptance' : w.milestone;
     var published = !!state.published[w.dateKey];
     var pubBadge = '<span class="badge ' + (published ? 'pub">Published' : 'pot">Potential') + '</span>';
+    var inspBadge = '<span class="badge ' + (w.inspApproved ? 'insp-yes">Insp. Approved' : 'insp-no">Insp. Pending') + '</span>';
     var cls = 'walk ' + m + (w.complete ? ' done' : '') + (w.missed ? ' missed' : '');
     var editable = canEdit();
 
@@ -537,7 +541,7 @@
             '<div><div class="walk-addr">' + esc(w.address) + '</div>' +
             '<div class="walk-meta">' + esc(w.job) + ' · ' + esc(w.community) + '</div></div>' +
             '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">' +
-              '<span class="badge ' + m + '">' + label + '</span>' + pubBadge +
+              '<span class="badge ' + m + '">' + label + '</span>' + pubBadge + inspBadge +
               (w.time ? '<span class="walk-time">' + esc(w.time) + '</span>' : '<span class="walk-time" style="color:var(--faint)">untimed</span>') +
             '</div>' +
           '</div>' +
