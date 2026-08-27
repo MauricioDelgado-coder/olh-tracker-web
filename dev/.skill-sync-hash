@@ -1,5 +1,6 @@
-ee7df5b19d801066d81890dbd897d596147429b96b1d4a69b4c82ded22ed36fe  dev/sync_coe_to_airtable.py
-# ^ sha256 of the sync_coe_to_airtable.py version last uploaded to the
-# olh-airtable-sync skill (scripts/sync_coe_to_airtable.py) on Claude.ai.
-# Update this after every re-upload: shasum -a 256 dev/sync_coe_to_airtable.py
+# sha256 of each file's version last uploaded to the olh-airtable-sync
+# skill on Claude.ai. Update after every re-upload by re-running:
+#   bash dev/check-skill-mirror.sh --mark
 # Checked by dev/check-skill-mirror.sh
+f9db47bb80aae75e9af334e6e398718c68af1cc9696abf3bb9c4d9193465524f  dev/sync_coe_to_airtable.py  (-> skill's scripts/sync_coe_to_airtable.py)
+40206d487be8d6bc560ebd7ddb6d10d22edb45563e40c5a0451128835b49e3ee  docs/skills/olh-airtable-sync-field-mapping.md  (-> skill's references/field-mapping.md)
