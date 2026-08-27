@@ -29,7 +29,8 @@ const TABLES = {
   audit: 'tblgiEqKXRbBHLg1i',
   roles: 'tblIhpTZyCupEaASH',
   walkMissLog: 'tblLA3n0SRgUA9A0z',
-  syncHistory: 'tblBHVI7HelUb6vyk'
+  syncHistory: 'tblBHVI7HelUb6vyk',
+  bonusSubmissions: 'tblfFcCeZGUHEvj4N'
 };
 
 /* ---- HTTP plumbing (shape matches the existing jobs.js) ------------------- */
@@ -287,7 +288,8 @@ function readSession(token) {
 const ALL_PAGES = [
   'page.home', 'page.mywalks', 'page.tracker', 'page.completion', 'page.walks', 'page.game',
   'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload',
-  'page.walkstoschedule', 'page.admin', 'page.keys', 'page.sanmpr', 'page.synchistory', 'page.redflags'
+  'page.walkstoschedule', 'page.admin', 'page.keys', 'page.sanmpr', 'page.synchistory', 'page.redflags',
+  'page.bonus'
 ];
 
 // Mirrors DEFAULT_ROLES in the frontend auth module. Used when the Roles table
@@ -317,7 +319,7 @@ const DEFAULT_ROLES = {
   qam: ['suite.view', 'walk.complete', 'page.home', 'page.mywalks'],
   cm: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.completion', 'page.walks', 'page.redflags'],
   ccr: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.walks', 'page.qamgmt', 'page.missedwalks',
-    'page.walkstoschedule'],
+    'page.walkstoschedule', 'page.bonus'],
   leadership: ['suite.view', 'page.home', 'page.tracker', 'page.completion',
     'page.walks', 'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload',
     'page.walkstoschedule', 'page.keys', 'page.synchistory', 'page.redflags'],
@@ -575,7 +577,8 @@ const PAGE_LABEL = {
   'page.admin': 'User Administration',
   'page.keys': 'Keys',
   'page.sanmpr': 'SAN MPR (Sandbox)',
-  'page.synchistory': 'Sync History'
+  'page.synchistory': 'Sync History',
+  'page.bonus': 'CCR Monthly Bonus'
 };
 const DENY = {
   'suite.view': 'Your account does not have access to the OLH Suite yet. Ask an admin to grant it.',

@@ -26,7 +26,8 @@ const eq = (label, got, want) => {
 
 const PAGES = ['page.home', 'page.mywalks', 'page.tracker', 'page.completion', 'page.walks',
   'page.game', 'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload',
-  'page.walkstoschedule', 'page.admin', 'page.keys', 'page.sanmpr', 'page.synchistory'];
+  'page.walkstoschedule', 'page.admin', 'page.keys', 'page.sanmpr', 'page.synchistory', 'page.redflags',
+  'page.bonus'];
 
 console.log('\n=== the catalog ===');
 for (const p of PAGES) {

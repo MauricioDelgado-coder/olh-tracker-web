@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>CCR Monthly Bonus — OLH Tracker</title>
+<style>
+  :root{
+    --navy:#1B2A58; --ink:#2B2620; --muted:#6F6963; --faint:#908A82;
+    --border:#E4DED2; --bg:#FBF8F3; --card:#ffffff;
+    --amber-bg:#FFF8E1; --amber-ink:#7C4A03; --amber-border:#F0DFAE;
+    --red-bg:#FDECEA; --red-ink:#7F1D1D; --red-border:#F3C6C2;
+    --green-bg:#EAF6EE; --green-ink:#1E5B34; --green-border:#C6E6D2;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  }
+  a{color:var(--navy)}
+  header.top{
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    padding:14px 20px; background:var(--navy); border-bottom:1px solid var(--border);
+    position:sticky; top:0; z-index:50; flex-wrap:wrap;
+  }
+  header.top h1{
+    margin:0; font:400 22px/1.2 Georgia,"Times New Roman",serif; color:#fff;
+    letter-spacing:-.01em;
+  }
+  .who{ font-size:12px; color:#C7BFB2; }
+  header.top a.home{
+    display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 13px;
+    border:1px solid rgba(255,255,255,.28); border-radius:4px; background:transparent;
+    color:#C7BFB2; font-size:13px; font-weight:500; text-decoration:none; white-space:nowrap;
+  }
+  header.top a.home:hover{ background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.45); color:#fff; }
+
+  main{ max-width:900px; margin:0 auto; padding:22px 20px 80px; }
+  #banners{ margin-bottom:16px; }
+  .banner{ padding:12px 16px; border-radius:8px; font-size:13.5px; margin-bottom:8px; }
+  .banner.error{ background:var(--red-bg); color:var(--red-ink); border:1px solid var(--red-border); }
+  .banner.ok{ background:var(--green-bg); color:var(--green-ink); border:1px solid var(--green-border); }
+
+  .card{ background:var(--card); border:1px solid var(--border); border-radius:10px; padding:20px 22px; margin-bottom:18px; }
+  .card h2{ margin:0 0 14px; font:400 18px/1.2 Georgia,"Times New Roman",serif; color:var(--navy); }
+  .grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  .grid.two{ grid-template-columns:repeat(2,1fr); }
+  label{ display:block; font-size:11.5px; font-weight:600; color:var(--muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:.03em; }
+  input, select{ width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:6px; font-size:14px; background:#fff; color:var(--ink); }
+  input:read-only{ background:var(--bg); color:var(--muted); }
+  input:focus, select:focus{ outline:2px solid var(--navy); outline-offset:1px; }
+  .hint{ font-size:11px; color:var(--faint); margin-top:3px; font-weight:400; text-transform:none; letter-spacing:0; }
+</style>
+
+  table.calc{ width:100%; border-collapse:collapse; font-size:14px; }
+  table.calc td{ padding:9px 2px; border-bottom:1px solid #EFE9DD; }
+  table.calc td:last-child{ text-align:right; font-weight:600; font-variant-numeric:tabular-nums; }
+  table.calc tr.total td{ border-top:2px solid var(--navy); border-bottom:none; font-size:16px; padding-top:14px; }
+  .pill{ display:inline-block; padding:2px 8px; border-radius:10px; font-size:10.5px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; }
+  .pill.ok{ background:var(--green-bg); color:var(--green-ink); }
+  .pill.no{ background:var(--red-bg); color:var(--red-ink); }
+
+  .actions{ display:flex; gap:10px; margin-top:18px; flex-wrap:wrap; }
+  button{ cursor:pointer; border:none; border-radius:6px; padding:10px 18px; font-size:14px; font-weight:600; }
+  button.primary{ background:var(--navy); color:#fff; }
+  button.primary:disabled{ background:var(--faint); cursor:not-allowed; }
+  button.secondary{ background:#fff; color:var(--navy); border:1px solid var(--navy); }
+  #status{ font-size:13px; margin-top:10px; }
+  #status.err{ color:var(--red-ink); } #status.ok{ color:var(--green-ink); }
+
+  table.history{ width:100%; border-collapse:collapse; font-size:13px; margin-top:8px; }
+  table.history th, table.history td{ text-align:left; padding:7px 8px; border-bottom:1px solid var(--border); }
+  table.history th{ font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); }
+  table.history td.num{ text-align:right; font-variant-numeric:tabular-nums; }
+  .badge-status{ font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:10px; text-transform:uppercase; }
+  .empty{ color:var(--muted); font-size:13px; padding:10px 2px; }
+
+  @media print{
+    header.top, .actions, #status, .no-print{ display:none !important; }
+    main{ margin:0; max-width:100%; padding:0; }
+    body{ background:#fff; }
+    .card{ border:none; box-shadow:none; padding:0 0 18px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div>
+    <h1>CCR Monthly Bonus</h1>
+    <div class="who" id="whoLine">Loading…</div>
+  </div>
+  <a class="home" href="/">All Views</a>
+</header>
+
+<main>
+  <div id="banners"></div>
+  <div id="content">Loading…</div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  var API = '/api';
+  var SESSION_KEY = 'olh.session.v1';
+
+  /* ---- Auth (mirrors game.html / my-walks.html's shared OLHAuth session contract) --- */
+  function getSession() {
+    try { var v = localStorage.getItem(SESSION_KEY); return v ? JSON.parse(v) : null; }
+    catch (e) { return null; }
+  }
+  function authHeaders(extra) {
+    var h = Object.assign({ Accept: 'application/json' }, extra || {});
+    var s = getSession();
+    var tok = s && s.token;
+    if (tok) {
+      h.Authorization = 'Bearer ' + tok;
+      h['X-OLH-Token'] = 'Bearer ' + tok;
+    }
+    return h;
+  }
+  function authedFetchHeaders(extra) {
+    if (!getSession() || !getSession().token) {
+      throw new Error('You are not signed in. Sign in at the OLH Tracker home page, then reload this page.');
+    }
+    return authHeaders(extra);
+  }
+  function apiGet(path) {
+    return fetch(API + path, { headers: authedFetchHeaders() }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (body) {
+        if (res.status === 401) {
+          var e = new Error((body && body.error) || 'Your session has expired.');
+          e.status = 401; throw e;
+        }
+        if (!res.ok || !body) throw new Error((body && body.error) || (path + ' failed (' + res.status + ')'));
+        return body;
+      });
+    });
+  }
+  function apiPost(path, payload) {
+    return fetch(API + path, {
+      method: 'POST',
+      headers: authedFetchHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload)
+    }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (body) {
+        if (!res.ok) throw new Error((body && body.error) || (path + ' failed (' + res.status + ')'));
+        return body;
+      });
+    });
+  }
+
+  var state = { user: null, can: [], loading: true, error: '', submissions: [], submitting: false, statusMsg: '', statusOk: false };
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  var fmt = function (n) { return '$' + (Math.round(n * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+
+  /* ---- Bonus math, per the CCR Bonus Agreement -- client-side PREVIEW only.
+     submit-bonus.js recomputes the same tiers server-side and that copy, not
+     this one, is what gets written to Airtable. */
+  function caseClosureBonus(casesClosed, avgCycle) {
+    var eligible = avgCycle < 10 && casesClosed >= 80;
+    if (!eligible) return { bonus: 0, eligible: false };
+    var rate = avgCycle <= 6 ? 20 : (avgCycle <= 8 ? 15 : 5);
+    return { bonus: rate * casesClosed, eligible: true };
+  }
+  function agedCaseBonus(agedCases, exceptions) {
+    var net = Math.max(0, agedCases - exceptions);
+    var bonus = net === 0 ? 750 : (net <= 2 ? 300 : 0);
+    return { bonus: bonus, net: net };
+  }
+  function serviceConsistencyBonus(pct) {
+    if (pct >= 80) return 1000;
+    if (pct >= 75) return 750;
+    if (pct >= 70) return 300;
+    return 0;
+  }
+  var CEL_RATE = 60, ACC_RATE = 40;
+
+  function readForm() {
+    var val = function (id) { var el = document.getElementById(id); return el ? parseFloat(el.value) || 0 : 0; };
+    return {
+      bonusMonth: (document.getElementById('bonusMonth') || {}).value || '',
+      region: (document.getElementById('region') || {}).value || '',
+      casesClosed: val('casesClosed'),
+      avgCycle: val('avgCycle'),
+      pctWithin7: val('pctWithin7'),
+      agedCases: val('agedCases'),
+      agedExceptions: val('agedExceptions'),
+      celWalks: val('celWalks'),
+      accWalks: val('accWalks')
+    };
+  }
+
+  function calc(f) {
+    var closure = caseClosureBonus(f.casesClosed, f.avgCycle);
+    var aged = agedCaseBonus(f.agedCases, f.agedExceptions);
+    var consistency = serviceConsistencyBonus(f.pctWithin7);
+    var celBonus = f.celWalks * CEL_RATE;
+    var accBonus = f.accWalks * ACC_RATE;
+    var total = closure.bonus + aged.bonus + consistency + celBonus + accBonus;
+    return { closure: closure, aged: aged, consistency: consistency, celBonus: celBonus, accBonus: accBonus, total: total };
+  }
+
+  function statusPill(field, text) { return field ? '<span class="pill ok">' + esc(text || 'eligible') + '</span>' : '<span class="pill no">' + esc(text || 'not eligible') + '</span>'; }
+
+  function historyRows() {
+    if (!state.submissions.length) return '<div class="empty">No submissions yet this year.</div>';
+    var rows = state.submissions.map(function (s) {
+      var statusColor = s.status === 'Rejected' ? 'var(--red-ink)' : (s.status === 'Paid' || s.status === 'Approved' ? 'var(--green-ink)' : 'var(--amber-ink)');
+      var statusBg = s.status === 'Rejected' ? 'var(--red-bg)' : (s.status === 'Paid' || s.status === 'Approved' ? 'var(--green-bg)' : 'var(--amber-bg)');
+      return '<tr><td>' + esc(s.bonusMonth) + '</td><td class="num">' + s.casesClosed + '</td>' +
+        '<td class="num">' + fmt(s.total) + '</td>' +
+        '<td><span class="badge-status" style="color:' + statusColor + ';background:' + statusBg + '">' + esc(s.status) + '</span></td></tr>';
+    }).join('');
+    return '<table class="history"><thead><tr><th>Month</th><th>Cases</th><th>Total</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function formHtml() {
+    var now = new Date();
+    var defaultMonth = now.toISOString().slice(0, 7);
+    return '' +
+      '<div class="card no-print">' +
+        '<h2>Associate &amp; Period</h2>' +
+        '<div class="grid">' +
+          '<div><label>Associate Name</label><input value="' + esc(state.user.name) + '" readonly></div>' +
+          '<div><label>Division</label><input value="' + esc(state.user.division || '') + '" readonly></div>' +
+          '<div><label for="region">Region</label><input id="region" type="text" placeholder="e.g. OLH South"></div>' +
+        '</div>' +
+        '<div class="grid" style="margin-top:14px;max-width:220px">' +
+          '<div><label for="bonusMonth">Bonus Month</label><input id="bonusMonth" type="month" value="' + defaultMonth + '"></div>' +
+        '</div>' +
+      '</div>' +
+
+      '<div class="card no-print">' +
+        '<h2>Case Metrics</h2>' +
+        '<div class="grid">' +
+          '<div><label for="casesClosed">Cases Closed</label><input id="casesClosed" type="number" min="0" step="1" placeholder="0">' +
+            '<div class="hint">Excludes touchpoint cases.</div></div>' +
+          '<div><label for="avgCycle">Average Cycle Time (days)</label><input id="avgCycle" type="number" min="0" step="0.1" placeholder="0.0">' +
+            '<div class="hint">Average age at closure this month.</div></div>' +
+          '<div><label for="pctWithin7">% Closed in 7 Days or Less</label><input id="pctWithin7" type="number" min="0" max="100" step="0.1" placeholder="0.0">' +
+            '<div class="hint">Drives the Service Consistency tier.</div></div>' +
+        '</div>' +
+        '<div class="grid two" style="margin-top:14px">' +
+          '<div><label for="agedCases">Aged Cases Closed (21+ Days)</label><input id="agedCases" type="number" min="0" step="1" placeholder="0"></div>' +
+          '<div><label for="agedExceptions">Aged Case Exceptions Approved</label><input id="agedExceptions" type="number" min="0" step="1" placeholder="0">' +
+            '<div class="hint">Approved exceptions offset the aged-case count.</div></div>' +
+        '</div>' +
+      '</div>' +
+
+      '<div class="card no-print">' +
+        '<h2>Walks Completed</h2>' +
+        '<div class="grid two">' +
+          '<div><label for="celWalks">CEL Walks Completed <span style="text-transform:none;font-weight:400">($60 each)</span></label><input id="celWalks" type="number" min="0" step="1" placeholder="0"></div>' +
+          '<div><label for="accWalks">ACC Walks Completed <span style="text-transform:none;font-weight:400">($40 each)</span></label><input id="accWalks" type="number" min="0" step="1" placeholder="0"></div>' +
+        '</div>' +
+      '</div>' +
+
+      '<div class="card" id="calcCard"></div>' +
+
+      '<div class="card no-print">' +
+        '<h2>Past Submissions</h2>' +
+        '<div id="historyBox">' + historyRows() + '</div>' +
+      '</div>';
+  }
+
+  function calcHtml() {
+    var f = readForm();
+    var c = calc(f);
+    return '<h2>Bonus Calculation</h2>' +
+      '<table class="calc">' +
+        '<tr><td>Case Closure Bonus ' + statusPill(c.closure.eligible, c.closure.eligible ? 'eligible' : 'needs <10 day cycle & 80+ cases') + '</td><td>' + fmt(c.closure.bonus) + '</td></tr>' +
+        '<tr><td>Aged Case Bonus <span class="hint" style="text-transform:none">(net aged cases: ' + c.aged.net + ')</span></td><td>' + fmt(c.aged.bonus) + '</td></tr>' +
+        '<tr><td>Service Consistency Bonus</td><td>' + fmt(c.consistency) + '</td></tr>' +
+        '<tr><td>CEL Walk Bonus</td><td>' + fmt(c.celBonus) + '</td></tr>' +
+        '<tr><td>ACC Walk Bonus</td><td>' + fmt(c.accBonus) + '</td></tr>' +
+        '<tr class="total"><td>Total Bonus</td><td>' + fmt(c.total) + '</td></tr>' +
+      '</table>' +
+      '<div class="actions no-print">' +
+        '<button class="primary" id="submitBtn"' + (state.submitting ? ' disabled' : '') + '>' + (state.submitting ? 'Submitting…' : 'Submit for the Month') + '</button>' +
+        '<button class="secondary" id="exportBtn">Export to PDF</button>' +
+      '</div>' +
+      (state.statusMsg ? '<div id="status" class="' + (state.statusOk ? 'ok' : 'err') + '">' + esc(state.statusMsg) + '</div>' : '');
+  }
+
+  function recalc() {
+    var el = document.getElementById('calcCard');
+    if (el) el.innerHTML = calcHtml();
+    wireCalcCard();
+  }
+
+  function wireCalcCard() {
+    var submitBtn = document.getElementById('submitBtn');
+    if (submitBtn) submitBtn.addEventListener('click', submitBonus);
+    var exportBtn = document.getElementById('exportBtn');
+    if (exportBtn) exportBtn.addEventListener('click', function () { window.print(); });
+  }
+
+  function wireInputs() {
+    ['casesClosed', 'avgCycle', 'pctWithin7', 'agedCases', 'agedExceptions', 'celWalks', 'accWalks'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener('input', recalc);
+    });
+  }
+
+  function submitBonus() {
+    var f = readForm();
+    if (!f.bonusMonth) {
+      state.statusOk = false; state.statusMsg = 'Select the bonus month first.'; recalc(); return;
+    }
+    state.submitting = true; state.statusMsg = ''; recalc();
+    apiPost('/submit-bonus', {
+      submissionId: 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+      bonusMonth: f.bonusMonth, region: f.region, casesClosed: f.casesClosed, avgCycle: f.avgCycle,
+      pctWithin7: f.pctWithin7, agedCases: f.agedCases, agedExceptions: f.agedExceptions,
+      celWalks: f.celWalks, accWalks: f.accWalks
+    }).then(function (data) {
+      state.submitting = false;
+      state.statusOk = true;
+      state.statusMsg = data.duplicate
+        ? 'Already submitted for this month.'
+        : 'Submitted. Leadership can review it in the CCR Bonus Submissions table.';
+      return loadHistory();
+    }).then(function () {
+      recalc();
+      var box = document.getElementById('historyBox');
+      if (box) box.innerHTML = historyRows();
+    }).catch(function (err) {
+      state.submitting = false;
+      state.statusOk = false;
+      state.statusMsg = 'Submit failed: ' + (err && err.message ? err.message : String(err));
+      recalc();
+    });
+  }
+
+  function loadSession() {
+    return apiGet('/session').then(function (data) {
+      state.user = data.user || null;
+      state.can = data.can || [];
+    });
+  }
+  function loadHistory() {
+    return apiGet('/submit-bonus').then(function (data) {
+      state.submissions = Array.isArray(data.submissions) ? data.submissions : [];
+    });
+  }
+
+  function render() {
+    document.getElementById('whoLine').textContent = state.user
+      ? (state.user.name + (state.user.division ? ' · ' + state.user.division : ''))
+      : 'Not signed in';
+
+    var content = document.getElementById('content');
+    if (state.loading) { content.innerHTML = ''; return; }
+    if (state.error) {
+      content.innerHTML = '<div class="empty">' + esc(state.error) + '</div>';
+      return;
+    }
+    // Mirrors the wording DENY['page.*'] generates server-side (olh-auth.js)
+    // so a refusal reads the same whether it came from this page or the API
+    // behind it. Admins always have it via DEFAULT_ROLES' ALL_PAGES concat.
+    if (state.can.indexOf('page.bonus') < 0) {
+      content.innerHTML = '<div class="empty">Your role does not have access to the CCR Monthly Bonus page.</div>';
+      return;
+    }
+
+    content.innerHTML = formHtml();
+    wireInputs();
+    recalc();
+  }
+
+  /* ---- Boot ------------------------------------------------------------ */
+  var session = getSession();
+  if (!session || !session.token) {
+    document.getElementById('content').innerHTML =
+      '<div class="empty">You are not signed in. <a href="/">Sign in at the OLH Tracker home page</a>, then reload this page.</div>';
+    document.getElementById('whoLine').textContent = 'Not signed in';
+  } else {
+    loadSession()
+      .then(loadHistory)
+      .then(function () {
+        state.loading = false;
+        render();
+      })
+      .catch(function (err) {
+        state.loading = false;
+        if (err && err.status === 401) {
+          state.error = 'Your session has expired. Sign in again at the OLH Tracker home page, then reload this page.';
+        } else {
+          state.error = 'Could not load this page: ' + (err && err.message ? err.message : String(err));
+        }
+        render();
+      });
+  }
+})();
+</script>
+</body>
+</html>

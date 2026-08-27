@@ -115,7 +115,10 @@ const ROUTES = [
   ['updateJobSandboxSan', 'update-job-sandbox-san', 'update-job-sandbox-san'],
 
   // ---- Sync History (read-only log of daily Airtable sync runs) -> sync-history.js
-  ['syncHistory', 'sync-history', 'sync-history']
+  ['syncHistory', 'sync-history', 'sync-history'],
+
+  // ---- CCR monthly bonus self-reporting -> submit-bonus.js (page.bonus)
+  ['submitBonus', 'submit-bonus', 'submit-bonus']
 ];
 
 for (const [name, route, netlifyFunction] of ROUTES) {

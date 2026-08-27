@@ -57,7 +57,8 @@ const FUNCTIONS = [
   'resolve-conflict.js',
   'jobs-sandbox-san.js',
   'update-job-sandbox-san.js',
-  'sync-history.js'
+  'sync-history.js',
+  'submit-bonus.js'
 ];
 
 /** Shared helpers. Kept outside functions/ on Netlify so it is never itself an
