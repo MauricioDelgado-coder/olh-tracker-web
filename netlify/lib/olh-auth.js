@@ -578,6 +578,7 @@ const PAGE_LABEL = {
   'page.keys': 'Keys',
   'page.sanmpr': 'SAN MPR (Sandbox)',
   'page.synchistory': 'Sync History',
+  'page.redflags': 'Red Flags',
   'page.bonus': 'CCR Monthly Bonus'
 };
 const DENY = {

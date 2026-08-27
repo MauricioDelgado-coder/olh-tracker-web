@@ -42,6 +42,12 @@ console.log('\n=== every page has a refusal message ===');
 for (const p of PAGES) {
   if (A.DENY[p] && /does not have access to the .+ page\.$/.test(A.DENY[p])) ok(p);
   else bad(p, 'DENY message is ' + JSON.stringify(A.DENY[p]));
+  // The regex above matches "the undefined page." just as happily as a real
+  // label -- that shape of bug (a page present in ALL_PAGES but missing from
+  // PAGE_LABEL) shipped silently once already. Catch it explicitly.
+  if (A.DENY[p] && /\bundefined\b/.test(A.DENY[p])) {
+    bad(p + ' DENY message has no label', A.DENY[p]);
+  }
 }
 
 console.log('\n=== shipped defaults ===');

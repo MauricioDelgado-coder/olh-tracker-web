@@ -396,6 +396,8 @@
     { key: "page.workload", label: "Workload Predictor", href: "workload.html", note: "Forecast walk volume per QA Manager." },
     { key: "page.keys", label: "Keys", href: "keys.html", note: "Job #, community, address and key handover status, editable. Admin and Division Leadership only." },
     { key: "page.synchistory", label: "Sync History", href: "sync-history.html", note: "Every daily Airtable sync run \u2014 success, failure, and row counts." },
+    { key: "page.redflags", label: "Red Flags", href: "red-flags.html", note: "Homesites with a walk or inspection concern that needs attention before it becomes a missed date." },
+    { key: "page.bonus", label: "CCR Monthly Bonus", href: "bonus.html", note: "Customer Care monthly bonus calculation and submission." },
     { key: "page.admin", label: "User Administration", href: "admin.html", note: "This console \u2014 the roster and this grid." }
   ];
 
@@ -417,9 +419,9 @@
     admin: { label: "Admin", can: ["suite.view", "tracker.edit", "walk.schedule", "optimizer.apply", "roster.manage", "sandbox.edit"].concat(ALL_PAGES) },
     sandbox: { label: "Sandbox", can: ["suite.view", "page.home", "page.sanmpr", "sandbox.edit"] },
     qam: { label: "QA Manager", can: ["suite.view", "walk.complete", "page.home", "page.mywalks"] },
-    cm: { label: "Construction Manager", can: ["suite.view", "tracker.edit", "page.home", "page.tracker", "page.completion", "page.walks"] },
-    ccr: { label: "Customer Care", can: ["suite.view", "tracker.edit", "page.home", "page.tracker", "page.walks", "page.qamgmt", "page.missedwalks", "page.walkstoschedule"] },
-    leadership: { label: "Division Leadership", can: ["suite.view", "page.home", "page.tracker", "page.completion", "page.walks", "page.qamgmt", "page.missedwalks", "page.walkstoschedule", "page.scheduler", "page.timeoff", "page.workload", "page.keys", "page.synchistory"] },
+    cm: { label: "Construction Manager", can: ["suite.view", "tracker.edit", "page.home", "page.tracker", "page.completion", "page.walks", "page.redflags"] },
+    ccr: { label: "Customer Care", can: ["suite.view", "tracker.edit", "page.home", "page.tracker", "page.walks", "page.qamgmt", "page.missedwalks", "page.walkstoschedule", "page.bonus"] },
+    leadership: { label: "Division Leadership", can: ["suite.view", "page.home", "page.tracker", "page.completion", "page.walks", "page.qamgmt", "page.missedwalks", "page.walkstoschedule", "page.scheduler", "page.timeoff", "page.workload", "page.keys", "page.synchistory", "page.redflags"] },
     concierge: { label: "Concierge", can: ["suite.view", "page.home", "page.tracker", "page.scheduler"] }
   };
   var ROLE_LOCKS = { admin: ["suite.view", "roster.manage", "page.admin"] };

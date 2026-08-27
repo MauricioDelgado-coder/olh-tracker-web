@@ -50,6 +50,25 @@ jobs:
       - name: Assert the staged copy matches netlify/
         run: node dev/build-azure-api.js --check
 
+      - name: Assert server and client permission rules agree
+        # check-page-perms.js only ran ad hoc before this line existed, which is
+        # exactly how the server's own PAGE_LABEL fell out of sync with its
+        # ALL_PAGES list (page.redflags silently rendered as "the undefined
+        # page." in the refusal message) and how the shared client auth module
+        # embedded in 11 pages went a full release cycle missing page.redflags
+        # and page.bonus entirely. A check nobody is required to run is a check
+        # that only fires when someone remembers -- this makes remembering not
+        # the thing standing between a drift and a blocked deploy.
+        run: node dev/check-page-perms.js
+
+      - name: Assert no page carries a stale copy of the shared auth module
+        # check-page-perms.js above only validates netlify/lib/olh-auth.js
+        # against itself; it cannot see the 11 pages that each carry their own
+        # embedded copy of the same rules for client-side nav/redirect. This is
+        # the check that would have caught page.redflags and page.bonus missing
+        # from all of them.
+        run: node dev/patch-stale-auth-module.js --check
+
       - name: Assert no page throws on load
         # The 08/01 export shipped a bundler-mangled `var mkField` that killed a
         # whole inline script and showed as a red SyntaxError banner across the

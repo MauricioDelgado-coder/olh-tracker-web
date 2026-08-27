@@ -22,9 +22,12 @@
  * user landing there directly still could not edit and would be labeled
  * "Division Leadership".
  *
- *   node dev/patch-stale-auth-module.js [--apply]
+ *   node dev/patch-stale-auth-module.js [--apply|--check]
  *
- * With no --apply, only reports what it would change (dry run).
+ * With no flag, only reports what it would change (dry run, always exits 0).
+ * --check is the same dry run but exits 1 if anything is stale -- the CI gate
+ * that this script did not have for the entire time the shared module was
+ * drifting: a report nobody is required to read catches nothing on its own.
  */
 'use strict';
 
@@ -34,6 +37,7 @@ const zlib = require('zlib');
 
 const PUB = path.join(__dirname, '..', 'public');
 const APPLY = process.argv.includes('--apply');
+const CHECK = process.argv.includes('--check');
 
 const GOOD_SOURCE_PAGE = 'missed-walks.html';
 const START_MARKER = '/* OLH shared authentication + change tracking.';
@@ -54,7 +58,10 @@ function extractGoodModule() {
   if (scriptOpenIdx === -1 || scriptCloseIdx === -1) throw new Error(GOOD_SOURCE_PAGE + ': could not bound the script block');
   const body = content.slice(bodyStart, scriptCloseIdx);
   // Sanity: this must be the CURRENT module, not another stale one.
-  for (const must of ['"sandbox": "sandbox"', 'page.sanmpr', 'sandbox.edit', 'page.keys', 'page.synchistory']) {
+  // page.redflags/page.bonus were added 2026-08 and this list itself went
+  // stale for a while without anything catching it -- the module can drift
+  // out from under its own "good source" page just as easily as any target.
+  for (const must of ['"sandbox": "sandbox"', 'page.sanmpr', 'sandbox.edit', 'page.keys', 'page.synchistory', 'page.redflags', 'page.bonus']) {
     if (!body.includes(must)) throw new Error(GOOD_SOURCE_PAGE + ' is missing "' + must + '" -- it is not the source of truth either. Aborting.');
   }
   if (!body.includes('"concierge": "concierge"')) {
@@ -97,7 +104,8 @@ for (const page of TARGET_PAGES) {
   if (!asset) { console.log(page.padEnd(28) + 'SKIP -- no embedded OLHAuth asset found (plain page?)'); skipped++; continue; }
 
   if (asset.oldText.includes('"sandbox": "sandbox"') && asset.oldText.includes('page.sanmpr') && asset.oldText.includes('sandbox.edit')
-      && asset.oldText.includes('"concierge": "concierge"')) {
+      && asset.oldText.includes('"concierge": "concierge"')
+      && asset.oldText.includes('page.redflags') && asset.oldText.includes('page.bonus')) {
     console.log(page.padEnd(28) + 'OK -- already current (uuid ' + asset.uuid + ')');
     alreadyOk++;
     continue;
@@ -119,7 +127,7 @@ for (const page of TARGET_PAGES) {
     // Verify: re-read, re-parse, re-decompress, confirm it now matches.
     const verifyContent = fs.readFileSync(filePath, 'utf8');
     const verifyAsset = findAuthAsset(verifyContent);
-    if (!verifyAsset || !verifyAsset.oldText.includes('"sandbox": "sandbox"')) {
+    if (!verifyAsset || !verifyAsset.oldText.includes('"sandbox": "sandbox"') || !verifyAsset.oldText.includes('page.redflags')) {
       throw new Error(page + ': verification FAILED after write -- manual review needed.');
     }
     console.log(''.padEnd(28) + '-> patched and verified.');
@@ -129,3 +137,7 @@ for (const page of TARGET_PAGES) {
 
 console.log('\n' + changed + ' stale, ' + alreadyOk + ' already current, ' + skipped + ' skipped (plain pages).');
 if (!APPLY && changed) console.log('Dry run only. Re-run with --apply to write changes.');
+if (CHECK && changed) {
+  console.log(changed + ' page(s) carry a stale copy of the shared auth module. Run with --apply to fix.');
+  process.exit(1);
+}
