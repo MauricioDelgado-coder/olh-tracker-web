@@ -289,7 +289,7 @@ const ALL_PAGES = [
   'page.home', 'page.mywalks', 'page.tracker', 'page.completion', 'page.walks', 'page.game',
   'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload',
   'page.walkstoschedule', 'page.admin', 'page.keys', 'page.sanmpr', 'page.synchistory', 'page.redflags',
-  'page.bonus'
+  'page.bonus', 'page.bonusapproval'
 ];
 
 // Mirrors DEFAULT_ROLES in the frontend auth module. Used when the Roles table
@@ -322,7 +322,7 @@ const DEFAULT_ROLES = {
     'page.walkstoschedule', 'page.bonus'],
   leadership: ['suite.view', 'page.home', 'page.tracker', 'page.completion',
     'page.walks', 'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload',
-    'page.walkstoschedule', 'page.keys', 'page.synchistory', 'page.redflags'],
+    'page.walkstoschedule', 'page.keys', 'page.synchistory', 'page.redflags', 'page.bonusapproval'],
   // View-only: the tracker grid, the schedule optimizer, and homesite.html
   // (which has no permission of its own -- it checks only suite.view and is
   // reached by drilling into a record from the tracker). No tracker.edit,
@@ -579,7 +579,8 @@ const PAGE_LABEL = {
   'page.sanmpr': 'SAN MPR (Sandbox)',
   'page.synchistory': 'Sync History',
   'page.redflags': 'Red Flags',
-  'page.bonus': 'CCR Monthly Bonus'
+  'page.bonus': 'CCR Monthly Bonus',
+  'page.bonusapproval': 'CCR Bonus Approval'
 };
 const DENY = {
   'suite.view': 'Your account does not have access to the OLH Suite yet. Ask an admin to grant it.',

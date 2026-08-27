@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>CCR Bonus Approval — OLH Tracker</title>
+<style>
+  :root{
+    --navy:#1B2A58; --ink:#2B2620; --muted:#6F6963; --faint:#908A82;
+    --border:#E4DED2; --bg:#FBF8F3; --card:#ffffff;
+    --amber-bg:#FFF8E1; --amber-ink:#7C4A03; --amber-border:#F0DFAE;
+    --red-bg:#FDECEA; --red-ink:#7F1D1D; --red-border:#F3C6C2;
+    --green-bg:#EAF6EE; --green-ink:#1E5B34; --green-border:#C6E6D2;
+    --blue-bg:#EAF1FB; --blue-ink:#1B3E7C; --blue-border:#C6D8F3;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  }
+  a{color:var(--navy)}
+  header.top{
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    padding:14px 20px; background:var(--navy); border-bottom:1px solid var(--border);
+    position:sticky; top:0; z-index:50; flex-wrap:wrap;
+  }
+  header.top h1{
+    margin:0; font:400 22px/1.2 Georgia,"Times New Roman",serif; color:#fff;
+    letter-spacing:-.01em;
+  }
+  .who{ font-size:12px; color:#C7BFB2; }
+  header.top a.home{
+    display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 13px;
+    border:1px solid rgba(255,255,255,.28); border-radius:4px; background:transparent;
+    color:#C7BFB2; font-size:13px; font-weight:500; text-decoration:none; white-space:nowrap;
+  }
+  header.top a.home:hover{ background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.45); color:#fff; }
+
+  main{ max-width:1000px; margin:0 auto; padding:22px 20px 80px; }
+  #banners{ margin-bottom:16px; }
+  .banner{ padding:12px 16px; border-radius:8px; font-size:13.5px; margin-bottom:8px; }
+  .banner.error{ background:var(--red-bg); color:var(--red-ink); border:1px solid var(--red-border); }
+  .banner.ok{ background:var(--green-bg); color:var(--green-ink); border:1px solid var(--green-border); }
+
+  .card{ background:var(--card); border:1px solid var(--border); border-radius:10px; padding:20px 22px; margin-bottom:18px; }
+  .card h2{ margin:0 0 14px; font:400 18px/1.2 Georgia,"Times New Roman",serif; color:var(--navy); }
+
+  .toolbar{ display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end; margin-bottom:4px; }
+  .toolbar label{ display:block; font-size:11px; font-weight:600; color:var(--muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:.03em; }
+  .toolbar select, .toolbar input{ padding:7px 9px; border:1px solid var(--border); border-radius:6px; font-size:13.5px; background:#fff; color:var(--ink); }
+  .toolbar .chk{ display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); padding-bottom:8px; }
+
+  .reports-strip{ display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+  .report-chip{ display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border-radius:999px; font-size:12px; border:1px solid var(--border); background:#fff; }
+  .report-chip .dot{ width:7px; height:7px; border-radius:50%; }
+  .report-chip.has .dot{ background:var(--green-ink); }
+  .report-chip.missing .dot{ background:var(--faint); }
+
+  .subm{ border:1px solid var(--border); border-radius:10px; margin-bottom:12px; overflow:hidden; }
+  .subm summary{ list-style:none; cursor:pointer; padding:14px 16px; display:flex; align-items:center; gap:12px; justify-content:space-between; flex-wrap:wrap; }
+  .subm summary::-webkit-details-marker{ display:none; }
+  .subm-who{ font-weight:600; }
+  .subm-meta{ font-size:12px; color:var(--muted); }
+  .subm-total{ font-weight:700; font-variant-numeric:tabular-nums; }
+  .subm-body{ padding:0 16px 16px; border-top:1px solid #EFE9DD; }
+
+  .badge-status{ font-size:10.5px; font-weight:700; padding:2px 9px; border-radius:10px; text-transform:uppercase; letter-spacing:.02em; }
+
+  table.calc{ width:100%; border-collapse:collapse; font-size:13.5px; margin-top:12px; }
+  table.calc td{ padding:7px 2px; border-bottom:1px solid #EFE9DD; }
+  table.calc td:last-child{ text-align:right; font-weight:600; font-variant-numeric:tabular-nums; }
+  table.calc tr.total td{ border-top:2px solid var(--navy); border-bottom:none; font-size:15px; padding-top:10px; }
+
+  textarea{ width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:6px; font-size:13.5px; font-family:inherit; resize:vertical; min-height:56px; margin-top:6px; }
+  label.notes-label{ display:block; font-size:11px; font-weight:600; color:var(--muted); margin-top:14px; text-transform:uppercase; letter-spacing:.03em; }
+
+  .actions{ display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+  button{ cursor:pointer; border:none; border-radius:6px; padding:8px 14px; font-size:13px; font-weight:600; }
+  button.approve{ background:var(--green-ink); color:#fff; }
+  button.reject{ background:var(--red-ink); color:#fff; }
+  button.review{ background:#fff; color:var(--navy); border:1px solid var(--navy); }
+  button.paid{ background:var(--blue-ink); color:#fff; }
+  button:disabled{ opacity:.5; cursor:not-allowed; }
+  .row-status{ font-size:12.5px; margin-top:8px; }
+  .row-status.err{ color:var(--red-ink); } .row-status.ok{ color:var(--green-ink); }
+
+  .empty{ color:var(--muted); font-size:13px; padding:14px 2px; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div>
+    <h1>CCR Bonus Approval</h1>
+    <div class="who" id="whoLine">Loading…</div>
+  </div>
+  <a class="home" href="/">All Views</a>
+</header>
+
+<main>
+  <div id="banners"></div>
+  <div id="content">Loading…</div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  var API = '/api';
+  var SESSION_KEY = 'olh.session.v1';
+  var STATUSES = ['Submitted', 'Under Review', 'Approved', 'Rejected', 'Paid'];
+
+  function getSession() {
+    try { var v = localStorage.getItem(SESSION_KEY); return v ? JSON.parse(v) : null; }
+    catch (e) { return null; }
+  }
+  function authHeaders(extra) {
+    var h = Object.assign({ Accept: 'application/json' }, extra || {});
+    var s = getSession();
+    var tok = s && s.token;
+    if (tok) { h.Authorization = 'Bearer ' + tok; h['X-OLH-Token'] = 'Bearer ' + tok; }
+    return h;
+  }
+  function authedFetchHeaders(extra) {
+    if (!getSession() || !getSession().token) {
+      throw new Error('You are not signed in. Sign in at the OLH Tracker home page, then reload this page.');
+    }
+    return authHeaders(extra);
+  }
+  function apiGet(path) {
+    return fetch(API + path, { headers: authedFetchHeaders() }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (body) {
+        if (res.status === 401) { var e = new Error((body && body.error) || 'Your session has expired.'); e.status = 401; throw e; }
+        if (!res.ok || !body) throw new Error((body && body.error) || (path + ' failed (' + res.status + ')'));
+        return body;
+      });
+    });
+  }
+  function apiPost(path, payload) {
+    return fetch(API + path, {
+      method: 'POST', headers: authedFetchHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(payload)
+    }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (body) {
+        if (!res.ok) throw new Error((body && body.error) || (path + ' failed (' + res.status + ')'));
+        return body;
+      });
+    });
+  }
+
+  var state = {
+    user: null, can: [], loading: true, error: '',
+    submissions: [], reports: [], isAdmin: false, viewingAll: false,
+    filterStatus: '', filterMonth: '', viewAll: false,
+    rowState: {} // recordId -> {saving, msg, ok}
+  };
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  var fmt = function (n) { return '$' + (Math.round(n * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+
+  function statusColors(status) {
+    if (status === 'Approved') return { bg: 'var(--green-bg)', ink: 'var(--green-ink)' };
+    if (status === 'Paid') return { bg: 'var(--blue-bg)', ink: 'var(--blue-ink)' };
+    if (status === 'Rejected') return { bg: 'var(--red-bg)', ink: 'var(--red-ink)' };
+    if (status === 'Under Review') return { bg: 'var(--amber-bg)', ink: 'var(--amber-ink)' };
+    return { bg: '#F1EBE1', ink: '#6F6963' }; // Submitted
+  }
+
+  function toolbarHtml() {
+    var monthOpts = Array.from(new Set(state.submissions.map(function (s) { return s.bonusMonth; }))).sort().reverse();
+    return '' +
+      '<div class="card">' +
+        '<div class="toolbar">' +
+          '<div><label for="fStatus">Status</label><select id="fStatus">' +
+            '<option value="">All</option>' +
+            STATUSES.map(function (s) { return '<option value="' + esc(s) + '"' + (state.filterStatus === s ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') +
+          '</select></div>' +
+          '<div><label for="fMonth">Bonus Month</label><select id="fMonth">' +
+            '<option value="">All</option>' +
+            monthOpts.map(function (m) { return '<option value="' + esc(m) + '"' + (state.filterMonth === m ? ' selected' : '') + '>' + esc(m) + '</option>'; }).join('') +
+          '</select></div>' +
+          (state.isAdmin ? '<div class="chk"><label style="margin:0;display:flex;gap:6px;align-items:center;text-transform:none;font-weight:400;color:var(--ink)"><input type="checkbox" id="fAll"' + (state.viewAll ? ' checked' : '') + '> View all CCR submissions (Admin)</label></div>' : '') +
+        '</div>' +
+        (!state.viewingAll ? reportsStripHtml() : '') +
+      '</div>';
+  }
+
+  function reportsStripHtml() {
+    if (!state.reports.length) {
+      return '<div class="empty" style="margin-top:10px">No direct reports are linked to you yet. Ask an admin to set the Manager field for your team on the Users table.</div>';
+    }
+    var monthsSeen = {};
+    state.submissions.forEach(function (s) { monthsSeen[String(s.associateEmail || '').toLowerCase() + '|' + s.bonusMonth] = true; });
+    var month = state.filterMonth;
+    var chips = state.reports.map(function (r) {
+      var has = month ? !!monthsSeen[r.email + '|' + month] : state.submissions.some(function (s) { return String(s.associateEmail || '').toLowerCase() === r.email; });
+      return '<span class="report-chip ' + (has ? 'has' : 'missing') + '"><span class="dot"></span>' + esc(r.name) +
+        (has ? '' : (month ? ' — no submission for ' + esc(month) : ' — no submissions yet')) + '</span>';
+    }).join('');
+    return '<div class="reports-strip">' + chips + '</div>';
+  }
+
+  function filteredSubmissions() {
+    return state.submissions.filter(function (s) {
+      if (state.filterStatus && s.status !== state.filterStatus) return false;
+      if (state.filterMonth && s.bonusMonth !== state.filterMonth) return false;
+      return true;
+    });
+  }
+
+  function submissionHtml(s) {
+    var colors = statusColors(s.status);
+    var rs = state.rowState[s.recordId] || {};
+    return '' +
+      '<details class="subm">' +
+        '<summary>' +
+          '<div>' +
+            '<div class="subm-who">' + esc(s.associateName) + '<span class="subm-meta"> · ' + esc(s.division || '\u2014') + (s.region ? ' · ' + esc(s.region) : '') + '</span></div>' +
+            '<div class="subm-meta">' + esc(s.bonusMonth) + ' · ' + s.casesClosed + ' cases</div>' +
+          '</div>' +
+          '<div style="display:flex;align-items:center;gap:12px">' +
+            '<span class="subm-total">' + fmt(s.total) + '</span>' +
+            '<span class="badge-status" style="color:' + colors.ink + ';background:' + colors.bg + '">' + esc(s.status) + '</span>' +
+          '</div>' +
+        '</summary>' +
+        '<div class="subm-body">' +
+          '<table class="calc">' +
+            '<tr><td>Case Closure Bonus' + (s.closureEligible ? '' : ' <span style="color:var(--faint)">(not eligible)</span>') + '</td><td>' + fmt(s.closureBonus) + '</td></tr>' +
+            '<tr><td>Aged Case Bonus <span style="color:var(--faint)">(net ' + s.netAgedCases + ')</span></td><td>' + fmt(s.agedBonus) + '</td></tr>' +
+            '<tr><td>Service Consistency Bonus <span style="color:var(--faint)">(' + s.pctWithin7 + '% within 7 days)</span></td><td>' + fmt(s.consistencyBonus) + '</td></tr>' +
+            '<tr><td>CEL Walk Bonus <span style="color:var(--faint)">(' + s.celWalks + ' walks)</span></td><td>' + fmt(s.celBonus) + '</td></tr>' +
+            '<tr><td>ACC Walk Bonus <span style="color:var(--faint)">(' + s.accWalks + ' walks)</span></td><td>' + fmt(s.accBonus) + '</td></tr>' +
+            '<tr class="total"><td>Total Bonus</td><td>' + fmt(s.total) + '</td></tr>' +
+          '</table>' +
+          '<div class="subm-meta" style="margin-top:10px">Submitted by ' + esc(s.submittedBy) + (s.submittedAt ? ' · ' + esc(new Date(s.submittedAt).toLocaleString()) : '') + '</div>' +
+          (s.reviewedBy ? '<div class="subm-meta">Last reviewed by ' + esc(s.reviewedBy) + (s.reviewedAt ? ' · ' + esc(new Date(s.reviewedAt).toLocaleString()) : '') + '</div>' : '') +
+          '<label class="notes-label" for="notes-' + s.recordId + '">Leadership Notes</label>' +
+          '<textarea id="notes-' + s.recordId + '" data-record="' + s.recordId + '">' + esc(s.notes) + '</textarea>' +
+          '<div class="actions">' +
+            '<button class="review" data-action="Under Review" data-record="' + s.recordId + '"' + (rs.saving ? ' disabled' : '') + '>Mark Under Review</button>' +
+            '<button class="approve" data-action="Approved" data-record="' + s.recordId + '"' + (rs.saving ? ' disabled' : '') + '>Approve</button>' +
+            '<button class="reject" data-action="Rejected" data-record="' + s.recordId + '"' + (rs.saving ? ' disabled' : '') + '>Reject</button>' +
+            '<button class="paid" data-action="Paid" data-record="' + s.recordId + '"' + (rs.saving ? ' disabled' : '') + '>Mark Paid</button>' +
+          '</div>' +
+          (rs.msg ? '<div class="row-status ' + (rs.ok ? 'ok' : 'err') + '">' + esc(rs.msg) + '</div>' : '') +
+        '</div>' +
+      '</details>';
+  }
+
+  function listHtml() {
+    var rows = filteredSubmissions();
+    if (!rows.length) return '<div class="card"><div class="empty">No bonus submissions match these filters.</div></div>';
+    return rows.map(submissionHtml).join('');
+  }
+
+  function render() {
+    document.getElementById('whoLine').textContent = state.user
+      ? (state.user.name + (state.user.division ? ' · ' + state.user.division : ''))
+      : 'Not signed in';
+
+    var content = document.getElementById('content');
+    if (state.loading) { content.innerHTML = ''; return; }
+    if (state.error) { content.innerHTML = '<div class="empty">' + esc(state.error) + '</div>'; return; }
+
+    if (state.can.indexOf('page.bonusapproval') < 0) {
+      content.innerHTML = '<div class="empty">Your role does not have access to the CCR Bonus Approval page.</div>';
+      return;
+    }
+
+    content.innerHTML = toolbarHtml() + listHtml();
+    wireControls();
+  }
+
+  function wireControls() {
+    var fStatus = document.getElementById('fStatus');
+    if (fStatus) fStatus.addEventListener('change', function () { state.filterStatus = fStatus.value; render(); });
+    var fMonth = document.getElementById('fMonth');
+    if (fMonth) fMonth.addEventListener('change', function () { state.filterMonth = fMonth.value; render(); });
+    var fAll = document.getElementById('fAll');
+    if (fAll) fAll.addEventListener('change', function () { state.viewAll = fAll.checked; state.loading = true; render(); load().then(function () { state.loading = false; render(); }); });
+
+    Array.prototype.forEach.call(document.querySelectorAll('button[data-action]'), function (btn) {
+      btn.addEventListener('click', function () { doReview(btn.getAttribute('data-record'), btn.getAttribute('data-action')); });
+    });
+  }
+
+  function doReview(recordId, status) {
+    var ta = document.getElementById('notes-' + recordId);
+    var notes = ta ? ta.value : undefined;
+    state.rowState[recordId] = { saving: true };
+    render();
+    apiPost('/bonus-approvals', { recordId: recordId, status: status, notes: notes }).then(function (data) {
+      var idx = state.submissions.findIndex(function (s) { return s.recordId === recordId; });
+      if (idx >= 0 && data.submission) state.submissions[idx] = data.submission;
+      state.rowState[recordId] = { saving: false, ok: true, msg: 'Set to ' + status + '.' };
+      render();
+    }).catch(function (err) {
+      state.rowState[recordId] = { saving: false, ok: false, msg: 'Failed: ' + (err && err.message ? err.message : String(err)) };
+      render();
+    });
+  }
+
+  function loadSession() {
+    return apiGet('/session').then(function (data) {
+      state.user = data.user || null;
+      state.can = data.can || [];
+    });
+  }
+  function load() {
+    var qs = state.viewAll ? '?all=1' : '';
+    return apiGet('/bonus-approvals' + qs).then(function (data) {
+      state.submissions = Array.isArray(data.submissions) ? data.submissions : [];
+      state.reports = Array.isArray(data.reports) ? data.reports : [];
+      state.isAdmin = !!data.isAdmin;
+      state.viewingAll = !!data.viewingAll;
+    });
+  }
+
+  /* ---- Boot ------------------------------------------------------------ */
+  var session = getSession();
+  if (!session || !session.token) {
+    document.getElementById('content').innerHTML =
+      '<div class="empty">You are not signed in. <a href="/">Sign in at the OLH Tracker home page</a>, then reload this page.</div>';
+    document.getElementById('whoLine').textContent = 'Not signed in';
+  } else {
+    loadSession()
+      .then(load)
+      .then(function () { state.loading = false; render(); })
+      .catch(function (err) {
+        state.loading = false;
+        if (err && err.status === 401) {
+          state.error = 'Your session has expired. Sign in again at the OLH Tracker home page, then reload this page.';
+        } else {
+          state.error = 'Could not load this page: ' + (err && err.message ? err.message : String(err));
+        }
+        render();
+      });
+  }
+})();
+</script>
+</body>
+</html>

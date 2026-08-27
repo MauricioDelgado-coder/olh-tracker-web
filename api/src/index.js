@@ -118,7 +118,10 @@ const ROUTES = [
   ['syncHistory', 'sync-history', 'sync-history'],
 
   // ---- CCR monthly bonus self-reporting -> submit-bonus.js (page.bonus)
-  ['submitBonus', 'submit-bonus', 'submit-bonus']
+  ['submitBonus', 'submit-bonus', 'submit-bonus'],
+
+  // ---- CCR bonus leadership review -> bonus-approvals.js (page.bonusapproval)
+  ['bonusApprovals', 'bonus-approvals', 'bonus-approvals']
 ];
 
 for (const [name, route, netlifyFunction] of ROUTES) {
