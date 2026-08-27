@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>Red Flags — CEL Sent, No Dates — OLH Tracker</title>
+<style>
+  :root{
+    --navy:#1B2A58; --ink:#2B2620; --muted:#6F6963; --faint:#908A82;
+    --border:#E4DED2; --bg:#FBF8F3; --card:#ffffff;
+    --red-bg:#FDECEA; --red-ink:#7F1D1D; --red-border:#F3C6C2; --red-accent:#AA1F23;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  }
+  a{color:var(--navy)}
+  header.top{
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    padding:14px 20px; background:var(--navy); border-bottom:1px solid var(--border);
+    position:sticky; top:0; z-index:50; flex-wrap:wrap;
+  }
+  header.top h1{ margin:0; font:400 20px/1.2 Georgia,"Times New Roman",serif; color:#fff; letter-spacing:-.01em; }
+  header.top .breadcrumb{ font-size:12px; color:#C7BFB2; margin-top:2px; }
+  header.top .breadcrumb a{ color:#C7BFB2; }
+  header.top a.home{
+    display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 13px;
+    border:1px solid rgba(255,255,255,.28); border-radius:4px; background:transparent;
+    color:#C7BFB2; font-size:13px; font-weight:500; text-decoration:none; white-space:nowrap;
+  }
+  header.top a.home:hover{ background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.45); color:#fff; }
+
+  main{ max-width:1200px; margin:0 auto; padding:24px 20px 80px; }
+  .toolbar{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+  .toolbar .count{ font-size:13px; color:var(--muted); }
+  .toolbar input[type=search]{
+    flex:1; min-width:220px; max-width:340px; height:34px; padding:0 12px; border:1px solid var(--border);
+    border-radius:6px; font:inherit; font-size:13.5px; background:#fff;
+  }
+  .banner{ padding:12px 16px; border-radius:8px; font-size:13.5px; margin-bottom:16px; background:var(--red-bg); color:var(--red-ink); border:1px solid var(--red-border); }
+
+  table{ width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  thead th{
+    text-align:left; font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+    color:var(--muted); background:#F5F0E7; padding:10px 12px; border-bottom:1px solid var(--border); white-space:nowrap;
+  }
+  tbody td{ padding:10px 12px; border-bottom:1px solid #F1EBE1; font-size:13px; vertical-align:top; }
+  tbody tr:last-child td{ border-bottom:none; }
+  tbody tr:hover{ background:#FBF8F3; }
+  .job{ font-weight:600; color:var(--navy); }
+  .muted{ color:var(--faint); }
+  .missing{ color:var(--red-accent); font-weight:600; }
+
+  .empty{ text-align:center; padding:36px 20px; color:var(--muted); font-size:13.5px; border:1px dashed var(--border); border-radius:10px; }
+  .skeleton{ text-align:center; padding:40px 20px; color:var(--faint); font-size:13.5px; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div>
+    <h1>CEL Sent, No Dates</h1>
+    <div class="breadcrumb"><a href="red-flags.html">Red Flags</a> / CEL Sent, No Dates</div>
+  </div>
+  <a class="home" href="/">All Views</a>
+</header>
+
+<main>
+  <div id="banners"></div>
+  <div class="toolbar">
+    <input type="search" id="search" placeholder="Filter by job #, community, or address…">
+    <span class="count" id="countLine"></span>
+  </div>
+  <div id="content" class="skeleton">Loading…</div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  var API = '/api';
+  var SESSION_KEY = 'olh.session.v1';
+
+  var COLUMNS = [
+    { label: 'Job #', key: 'job' },
+    { label: 'Community', key: 'community' },
+    { label: 'Address', key: 'address' },
+    { label: 'CEL Manager', key: 'celManager' },
+    { label: 'ACC Manager', key: 'accManager' },
+    { label: 'Construction Manager', key: 'cm' },
+    { label: 'Concierge', key: 'concierge' }
+  ];
+
+  function getSession() {
+    try { var v = localStorage.getItem(SESSION_KEY); return v ? JSON.parse(v) : null; }
+    catch (e) { return null; }
+  }
+  function authHeaders(extra) {
+    var h = Object.assign({ Accept: 'application/json' }, extra || {});
+    var s = getSession();
+    var tok = s && s.token;
+    if (tok) { h.Authorization = 'Bearer ' + tok; h['X-OLH-Token'] = 'Bearer ' + tok; }
+    return h;
+  }
+  function authedFetchHeaders(extra) {
+    if (!getSession() || !getSession().token) {
+      throw new Error('You are not signed in. Sign in at the OLH Tracker home page, then reload this page.');
+    }
+    return authHeaders(extra);
+  }
+  function apiGet(path) {
+    return fetch(API + path, { headers: authedFetchHeaders() }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (body) {
+        if (res.status === 401) { var e = new Error((body && body.error) || 'Your session has expired.'); e.status = 401; throw e; }
+        if (!res.ok || !body) throw new Error((body && body.error) || (path + ' failed (' + res.status + ')'));
+        return body;
+      });
+    });
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+
+  // Same definition as window.RedFlags.celNoDates on red-flags.html --
+  // duplicated here (rather than depending on that page having run first)
+  // since this page can be opened directly via a bookmark or link, not only
+  // by clicking through the landing tile.
+  function celNoDates(j) {
+    var f = j.fields || {};
+    return f['Record Status'] === 'Active' && !!f['CEL Letter Sent'] && !f['CEL Date'] && !f['ACC Date'];
+  }
+
+  function mgrName(managersById, links) {
+    if (!Array.isArray(links) || !links.length) return '';
+    return links.map(function (id) { return (managersById[id] && managersById[id].name) || ''; })
+      .filter(Boolean).join(', ');
+  }
+
+  var state = { rows: [], filter: '' };
+
+  function buildRows(jobs, managers) {
+    var byId = {};
+    managers.forEach(function (m) { byId[m.id] = m; });
+    return jobs.filter(celNoDates).map(function (j) {
+      var f = j.fields || {};
+      return {
+        job: f['Job #'] || '',
+        community: f['Community'] || '',
+        address: f['Street Address'] || '',
+        celManager: mgrName(byId, f['CEL Manager']),
+        accManager: mgrName(byId, f['ACC Manager']),
+        cm: f['Construction Manager'] || '',
+        concierge: f['Assigned Concierge'] || ''
+      };
+    }).sort(function (a, b) {
+      return a.community.localeCompare(b.community) || a.address.localeCompare(b.address);
+    });
+  }
+
+  function matchesFilter(r, q) {
+    if (!q) return true;
+    q = q.toLowerCase();
+    return (r.job + ' ' + r.community + ' ' + r.address).toLowerCase().indexOf(q) >= 0;
+  }
+
+  function render() {
+    var content = document.getElementById('content');
+    var countLine = document.getElementById('countLine');
+    var visible = state.rows.filter(function (r) { return matchesFilter(r, state.filter); });
+
+    countLine.textContent = visible.length + ' of ' + state.rows.length + ' flagged homesite' + (state.rows.length === 1 ? '' : 's');
+
+    if (!state.rows.length) {
+      content.innerHTML = '<div class="empty">Nothing flagged \u2014 every active homesite with a CEL letter sent already has a CEL or ACC date.</div>';
+      return;
+    }
+    if (!visible.length) {
+      content.innerHTML = '<div class="empty">No rows match that filter.</div>';
+      return;
+    }
+
+    var html = '<table><thead><tr>' +
+      COLUMNS.map(function (c) { return '<th>' + esc(c.label) + '</th>'; }).join('') +
+      '</tr></thead><tbody>';
+    html += visible.map(function (r) {
+      return '<tr>' + COLUMNS.map(function (c) {
+        var v = r[c.key];
+        if (c.key === 'job') return '<td class="job">' + esc(v || '\u2014') + '</td>';
+        return '<td>' + (v ? esc(v) : '<span class="muted">\u2014</span>') + '</td>';
+      }).join('') + '</tr>';
+    }).join('');
+    html += '</tbody></table>';
+    content.innerHTML = html;
+  }
+
+  function showBanner(html) {
+    document.getElementById('banners').innerHTML = '<div class="banner">' + html + '</div>';
+  }
+
+  document.getElementById('search').addEventListener('input', function (e) {
+    state.filter = e.target.value;
+    render();
+  });
+
+  var session = getSession();
+  if (!session || !session.token) {
+    document.getElementById('content').innerHTML =
+      '<div class="empty">You are not signed in. <a href="/">Sign in at the OLH Tracker home page</a>, then reload this page.</div>';
+  } else {
+    apiGet('/session')
+      .then(function (data) {
+        var can = data.can || [];
+        if (can.indexOf('page.redflags') < 0) {
+          document.getElementById('content').innerHTML = '<div class="empty">Your role does not have access to Red Flags.</div>';
+          return Promise.reject({ handled: true });
+        }
+        return apiGet('/jobs?refresh=1');
+      })
+      .then(function (data) {
+        var jobs = Array.isArray(data.jobs) ? data.jobs : [];
+        var managers = Array.isArray(data.managers) ? data.managers : [];
+        state.rows = buildRows(jobs, managers);
+        render();
+      })
+      .catch(function (err) {
+        if (err && err.handled) return;
+        var msg = (err && err.status === 401)
+          ? 'Your session has expired. Sign in again at the OLH Tracker home page, then reload this page.'
+          : 'Could not load: ' + (err && err.message ? err.message : String(err));
+        document.getElementById('content').innerHTML = '';
+        showBanner(esc(msg));
+      });
+  }
+})();
+</script>
+</body>
+</html>

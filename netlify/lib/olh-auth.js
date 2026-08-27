@@ -287,7 +287,7 @@ function readSession(token) {
 const ALL_PAGES = [
   'page.home', 'page.mywalks', 'page.tracker', 'page.completion', 'page.walks', 'page.game',
   'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload',
-  'page.walkstoschedule', 'page.admin', 'page.keys', 'page.sanmpr', 'page.synchistory'
+  'page.walkstoschedule', 'page.admin', 'page.keys', 'page.sanmpr', 'page.synchistory', 'page.redflags'
 ];
 
 // Mirrors DEFAULT_ROLES in the frontend auth module. Used when the Roles table
@@ -315,12 +315,12 @@ const DEFAULT_ROLES = {
   //   'page.home', 'page.tracker', 'page.completion', 'page.walks', 'page.qamgmt', 'page.missedwalks',
   //   'page.scheduler', 'page.timeoff', 'page.workload', 'page.walkstoschedule'],
   qam: ['suite.view', 'walk.complete', 'page.home', 'page.mywalks'],
-  cm: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.completion', 'page.walks'],
+  cm: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.completion', 'page.walks', 'page.redflags'],
   ccr: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.walks', 'page.qamgmt', 'page.missedwalks',
     'page.walkstoschedule'],
   leadership: ['suite.view', 'page.home', 'page.tracker', 'page.completion',
     'page.walks', 'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload',
-    'page.walkstoschedule', 'page.keys', 'page.synchistory'],
+    'page.walkstoschedule', 'page.keys', 'page.synchistory', 'page.redflags'],
   // View-only: the tracker grid, the schedule optimizer, and homesite.html
   // (which has no permission of its own -- it checks only suite.view and is
   // reached by drilling into a record from the tracker). No tracker.edit,

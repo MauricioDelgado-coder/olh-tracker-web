@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>Red Flags — OLH Tracker</title>
+<style>
+  :root{
+    --navy:#1B2A58; --ink:#2B2620; --muted:#6F6963; --faint:#908A82;
+    --border:#E4DED2; --bg:#FBF8F3; --card:#ffffff;
+    --red-bg:#FDECEA; --red-ink:#7F1D1D; --red-border:#F3C6C2; --red-accent:#AA1F23;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  }
+  a{color:var(--navy)}
+  header.top{
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    padding:14px 20px; background:var(--navy); border-bottom:1px solid var(--border);
+    position:sticky; top:0; z-index:50; flex-wrap:wrap;
+  }
+  header.top h1{
+    margin:0; font:400 22px/1.2 Georgia,"Times New Roman",serif; color:#fff;
+    letter-spacing:-.01em;
+  }
+  .who{ font-size:12px; color:#C7BFB2; }
+  header.top a.home{
+    display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 13px;
+    border:1px solid rgba(255,255,255,.28); border-radius:4px; background:transparent;
+    color:#C7BFB2; font-size:13px; font-weight:500; text-decoration:none; white-space:nowrap;
+  }
+  header.top a.home:hover{ background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.45); color:#fff; }
+
+  main{ max-width:960px; margin:0 auto; padding:28px 20px 80px; }
+  .intro{ margin:0 0 24px; color:var(--muted); font-size:14px; max-width:640px; }
+
+  .tiles{ display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; }
+  .tile{
+    display:flex; flex-direction:column; padding:20px 20px 22px; border:1px solid var(--border);
+    border-radius:12px; background:var(--card); box-shadow:0 1px 3px rgba(27,42,88,.06);
+    text-decoration:none; color:inherit;
+    transition:box-shadow 200ms cubic-bezier(.2,.6,.2,1), transform 200ms cubic-bezier(.2,.6,.2,1), border-color 200ms cubic-bezier(.2,.6,.2,1);
+  }
+  .tile:hover{ box-shadow:0 12px 28px rgba(27,42,88,.14); transform:translateY(-4px); border-color:var(--red-border); }
+  .tile .icon{
+    display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px;
+    border-radius:8px; background:var(--red-bg); color:var(--red-accent); flex-shrink:0;
+  }
+  .tile h2{
+    margin:14px 0 0; font:400 21px/1.2 Georgia,"Times New Roman",serif; color:var(--ink); letter-spacing:-.01em;
+  }
+  .tile p{ margin:7px 0 0; font-size:13.5px; color:var(--muted); }
+  .tile .count{
+    display:inline-flex; align-items:center; gap:6px; margin-top:16px; padding:3px 10px;
+    border-radius:999px; background:var(--red-bg); color:var(--red-ink); font-size:12.5px; font-weight:700;
+  }
+  .tile .count.zero{ background:#EAF6EE; color:#1E5B34; }
+  .tile .cta{
+    display:inline-flex; align-items:center; gap:7px; margin-top:auto; padding-top:18px;
+    font-size:13px; font-weight:600; color:var(--red-accent);
+  }
+  .empty{ text-align:center; padding:36px 20px; color:var(--muted); font-size:13.5px; border:1px dashed var(--border); border-radius:10px; }
+  .skeleton{ text-align:center; padding:40px 20px; color:var(--faint); font-size:13.5px; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div>
+    <h1>Red Flags</h1>
+    <div class="who" id="whoLine">Loading…</div>
+  </div>
+  <a class="home" href="/">All Views</a>
+</header>
+
+<main>
+  <p class="intro">Homesites needing attention that don't fit neatly into the tracker's day-to-day views. Pick a report below.</p>
+  <div id="content" class="skeleton">Loading…</div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  var API = '/api';
+  var SESSION_KEY = 'olh.session.v1';
+
+  var REPORTS = [
+    {
+      id: 'cel-no-dates',
+      href: 'red-flags-cel-no-dates.html',
+      title: 'CEL Sent, No Dates',
+      desc: 'Active homesites where the Celebration letter has been sent but neither a Celebration nor an Acceptance date has been scheduled yet.',
+      count: function (jobs) { return jobs.filter(celNoDates).length; }
+    },
+    {
+      id: 'no-co',
+      href: 'red-flags-no-co.html',
+      title: 'Completed Without CO',
+      desc: 'Active homesites where QA Acceptance is done but there is still no Certificate of Occupancy date on file.',
+      count: function (jobs) { return jobs.filter(noCO).length; }
+    }
+  ];
+
+  function celNoDates(j) {
+    var f = j.fields || {};
+    return f['Record Status'] === 'Active' && !!f['CEL Letter Sent'] && !f['CEL Date'] && !f['ACC Date'];
+  }
+  function noCO(j) {
+    var f = j.fields || {};
+    return f['Record Status'] === 'Active' && !!f['QAA Accepted'] && !f['Certificate of Occupancy Date'];
+  }
+  // Exposed so the two report pages reuse the exact same definitions rather
+  // than risking a second, silently different copy of "what counts as
+  // flagged" -- see red-flags-cel-no-dates.html / red-flags-no-co.html.
+  window.RedFlags = { celNoDates: celNoDates, noCO: noCO };
+
+  function getSession() {
+    try { var v = localStorage.getItem(SESSION_KEY); return v ? JSON.parse(v) : null; }
+    catch (e) { return null; }
+  }
+  function authHeaders(extra) {
+    var h = Object.assign({ Accept: 'application/json' }, extra || {});
+    var s = getSession();
+    var tok = s && s.token;
+    if (tok) { h.Authorization = 'Bearer ' + tok; h['X-OLH-Token'] = 'Bearer ' + tok; }
+    return h;
+  }
+  function authedFetchHeaders(extra) {
+    if (!getSession() || !getSession().token) {
+      throw new Error('You are not signed in. Sign in at the OLH Tracker home page, then reload this page.');
+    }
+    return authHeaders(extra);
+  }
+  function apiGet(path) {
+    return fetch(API + path, { headers: authedFetchHeaders() }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (body) {
+        if (res.status === 401) { var e = new Error((body && body.error) || 'Your session has expired.'); e.status = 401; throw e; }
+        if (!res.ok || !body) throw new Error((body && body.error) || (path + ' failed (' + res.status + ')'));
+        return body;
+      });
+    });
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+
+  function render(user, can, jobs, error) {
+    document.getElementById('whoLine').textContent = user ? user.name : 'Not signed in';
+    var content = document.getElementById('content');
+
+    if (error) { content.innerHTML = '<div class="empty">' + esc(error) + '</div>'; return; }
+    if (can.indexOf('page.redflags') < 0) {
+      content.innerHTML = '<div class="empty">Your role does not have access to Red Flags.</div>';
+      return;
+    }
+
+    content.innerHTML = '<div class="tiles">' + REPORTS.map(function (r) {
+      var n = r.count(jobs);
+      return (
+        '<a class="tile" href="' + esc(r.href) + '">' +
+          '<span class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg></span>' +
+          '<h2>' + esc(r.title) + '</h2>' +
+          '<p>' + esc(r.desc) + '</p>' +
+          '<span class="count' + (n === 0 ? ' zero' : '') + '">' + n + (n === 1 ? ' homesite' : ' homesites') + '</span>' +
+          '<span class="cta">Open Report' +
+            '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>' +
+          '</span>' +
+        '</a>'
+      );
+    }).join('') + '</div>';
+  }
+
+  var session = getSession();
+  if (!session || !session.token) {
+    document.getElementById('content').innerHTML =
+      '<div class="empty">You are not signed in. <a href="/">Sign in at the OLH Tracker home page</a>, then reload this page.</div>';
+    document.getElementById('whoLine').textContent = 'Not signed in';
+  } else {
+    var _user = null, _can = [];
+    apiGet('/session')
+      .then(function (data) { _user = data.user || null; _can = data.can || []; return apiGet('/jobs?refresh=1'); })
+      .then(function (data) { render(_user, _can, Array.isArray(data.jobs) ? data.jobs : [], null); })
+      .catch(function (err) {
+        var msg = (err && err.status === 401)
+          ? 'Your session has expired. Sign in again at the OLH Tracker home page, then reload this page.'
+          : 'Could not load: ' + (err && err.message ? err.message : String(err));
+        render(_user, _can, [], msg);
+      });
+  }
+})();
+</script>
+</body>
+</html>
