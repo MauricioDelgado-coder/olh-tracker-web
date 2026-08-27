@@ -71,13 +71,20 @@ function request(method, urlPath, { headers, body } = {}) {
  * 1. The route table matches netlify.toml
  * ---------------------------------------------------------------------- */
 
-// Transcribed from the [[redirects]] blocks in netlify.toml. Kept as literal
-// text rather than parsed out of the toml: the point is to notice when the two
-// disagree, and a parser that reads one of them cannot do that.
+// Historically transcribed from the [[redirects]] blocks in netlify.toml, back
+// when that file existed. It has since been deleted (Azure is the only host
+// now, per AZURE-DEPLOY.md's cutover checklist) -- but the point of keeping
+// this list literal rather than derived from api/src/index.js still holds:
+// api/src/index.js is the thing under test, so the expected shape has to live
+// somewhere else or the check can never fail. Whenever a route is added to
+// ROUTES there, add it here too in the same commit.
 const NETLIFY_ENDPOINTS = [
   ['/api/jobs', 'jobs'],
   ['/api/update-job', 'update-job'],
   ['/api/walk-config', 'walk-config'],
+  ['/api/time-off', 'time-off'],
+  ['/api/publish-schedule', 'publish-schedule'],
+  ['/api/public-schedule', 'public-schedule'],
   ['/api/sign-in', 'auth'],
   ['/api/session', 'auth'],
   ['/api/sign-out', 'auth'],
@@ -88,7 +95,13 @@ const NETLIFY_ENDPOINTS = [
   ['/api/users', 'users'],
   ['/api/users/:splat', 'users'],
   ['/api/roles', 'roles'],
-  ['/api/audit', 'audit']
+  ['/api/audit', 'audit'],
+  ['/api/walk-miss-log', 'walk-miss-log'],
+  ['/api/resolve-conflict', 'resolve-conflict'],
+  ['/api/jobs-sandbox-san', 'jobs-sandbox-san'],
+  ['/api/update-job-sandbox-san', 'update-job-sandbox-san'],
+  ['/api/sync-history', 'sync-history'],
+  ['/api/submit-bonus', 'submit-bonus']
 ];
 
 check('every netlify.toml endpoint has an Azure route', () => {
