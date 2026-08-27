@@ -102,8 +102,10 @@
   .badge.acc{ color:var(--acc); background:var(--acc-bg); }
   .badge.pub{ color:var(--green-ink); background:var(--green-bg); }
   .badge.pot{ color:var(--amber-ink); background:var(--amber-bg); }
-  .badge.insp-yes{ color:var(--green-ink); background:var(--green-bg); }
-  .badge.insp-no{ color:var(--muted); background:var(--border); }
+  /* Matches game.html's .type-QAI pill coloring exactly (same blue used for
+     the QAI walk-type badge there) -- shown only when approved, so there is
+     no "pending" variant. */
+  .badge.insp-yes{ color:#1B4FA0; background:#E7EEFB; }
 
   .walk-time{ font-size:13px; font-weight:600; color:var(--ink); white-space:nowrap; }
 
@@ -490,7 +492,7 @@
     var label = w.milestone === 'CEL' ? 'Celebration' : w.milestone === 'ACC' ? 'Acceptance' : w.milestone;
     var published = !!state.published[w.dateKey];
     var pubBadge = '<span class="badge ' + (published ? 'pub">Published' : 'pot">Potential') + '</span>';
-    var inspBadge = '<span class="badge ' + (w.inspApproved ? 'insp-yes">Insp. Approved' : 'insp-no">Insp. Pending') + '</span>';
+    var inspBadge = w.inspApproved ? '<span class="badge insp-yes">Insp. Approved</span>' : '';
     var cls = 'walk ' + m + (w.complete ? ' done' : '') + (w.missed ? ' missed' : '');
     var editable = canEdit();
 
