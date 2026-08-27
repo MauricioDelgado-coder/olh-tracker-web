@@ -3,7 +3,8 @@
  *
  *   POST /api/submit-bonus
  *         {bonusMonth, region, casesClosed, avgCycle, agedCases,
- *          agedExceptions, pctWithin7, celWalks, accWalks, submissionId?}
+ *          agedExceptions, pctWithin7, celWalks, accWalks, submissionId?,
+ *          discrepancyNotes?}
  *         -> {submission}
  *
  *   GET  /api/submit-bonus
@@ -20,6 +21,24 @@
  * Agreement's tiers -- never trusted from the client, the same reasoning
  * update-job.js applies to every write. Associate Name/Email/Division and
  * Submitted By/At all come from the session, never the body.
+ *
+ * ---- Salesforce comparison ------------------------------------------------
+ *
+ * At submit time, this looks up the matching CCR Bonus SF Source row (synced
+ * periodically by dev/sync_ccr_bonus_source.py) for this email + bonusMonth
+ * and copies its numbers onto the submission as a SNAPSHOT (the "(SF)"
+ * fields) -- never as a live lookup from the submission's own read path. A
+ * later resync of the source table must not retroactively change what a past
+ * submission's Salesforce comparison looked like; the snapshot is what makes
+ * that true. "SF Source Found" is false (a real, distinct state, not just
+ * blank SF fields) when no source row exists yet for that email/month --
+ * e.g. the sync hasn't run for a brand-new hire -- so a leader reviewing
+ * later can tell "no Salesforce data was available" apart from "Salesforce
+ * said zero." "Has Discrepancy" is set when any CCR-entered number differs
+ * from the SF snapshot outside a small tolerance for the two fields stored
+ * as non-integers (avgCycle, pctWithin7); it does not block submission --
+ * the CCR can always submit their own number, with an optional note leaders
+ * see on the approval page.
  */
 
 'use strict';
@@ -93,8 +112,25 @@ function submissionOf(rec) {
     status: f.Status || 'Submitted',
     notes: f['Leadership Notes'] || '',
     submittedBy: f['Submitted By'] || '',
-    submittedAt: f['Submitted At'] || ''
+    submittedAt: f['Submitted At'] || '',
+    sfFound: !!f['SF Source Found'],
+    sfCasesClosed: f['Cases Closed (SF)'] || 0,
+    sfAvgCycle: f['Average Cycle Time Days (SF)'] || 0,
+    sfAgedCases: f['Aged Cases 21+ (SF)'] || 0,
+    sfPctWithin7: Math.round((f['Pct Closed Within 7 Days (SF)'] || 0) * 1000) / 10,
+    sfCelWalks: f['CEL Walks (SF)'] || 0,
+    sfAccWalks: f['ACC Walks (SF)'] || 0,
+    hasDiscrepancy: !!f['Has Discrepancy'],
+    discrepancyNotes: f['Discrepancy Notes'] || ''
   };
+}
+
+/** True if a and b differ by more than a small tolerance -- integers must
+ * match exactly, the two fields Salesforce/the form store as non-integers
+ * (avgCycle in days, pctWithin7 as a 0-100 percent) get a little slack so a
+ * rounding difference alone never reads as a discrepancy. */
+function differs(a, b, tolerance) {
+  return Math.abs(num(a) - num(b)) > tolerance;
 }
 
 async function submit(event) {
@@ -137,6 +173,31 @@ async function submit(event) {
   const accBonus = accWalks * ACC_RATE;
   const total = closure.bonus + aged.bonus + consistency + celBonus + accBonus;
 
+  // Snapshot the Salesforce source (if any) for this email + month, and flag
+  // a discrepancy -- see the file header for why this is a snapshot rather
+  // than a live join, and why "not found" is tracked separately from zero.
+  const sourceFormula = '{Bonus Month} = "' + A.esc(bonusMonth) + '" AND LOWER({Associate Email}) = "' +
+    A.esc(A.normEmail(session.user.email)) + '"';
+  const sourceRec = await A.findOne(A.TABLES.bonusSource, sourceFormula);
+  const sf = sourceRec ? {
+    casesClosed: sourceRec.fields['Cases Closed (SF)'] || 0,
+    avgCycle: sourceRec.fields['Average Cycle Time Days (SF)'] || 0,
+    agedCases: sourceRec.fields['Aged Cases 21+ (SF)'] || 0,
+    pctWithin7: Math.round((sourceRec.fields['Pct Closed Within 7 Days (SF)'] || 0) * 1000) / 10,
+    celWalks: sourceRec.fields['CEL Walks (SF)'] || 0,
+    accWalks: sourceRec.fields['ACC Walks (SF)'] || 0
+  } : null;
+
+  const discrepancyNotes = str(body.discrepancyNotes).trim();
+  const hasDiscrepancy = !!sf && (
+    differs(casesClosed, sf.casesClosed, 0) ||
+    differs(avgCycle, sf.avgCycle, 0.05) ||
+    differs(agedCases, sf.agedCases, 0) ||
+    differs(pctWithin7, sf.pctWithin7, 0.1) ||
+    differs(celWalks, sf.celWalks, 0) ||
+    differs(accWalks, sf.accWalks, 0)
+  );
+
   const fields = {
     'Submission Id': submissionId,
     'Associate Name': session.user.name,
@@ -161,7 +222,16 @@ async function submit(event) {
     'Total Bonus': total,
     Status: 'Submitted',
     'Submitted By': session.user.name,
-    'Submitted At': new Date().toISOString()
+    'Submitted At': new Date().toISOString(),
+    'SF Source Found': !!sf,
+    'Cases Closed (SF)': sf ? sf.casesClosed : 0,
+    'Average Cycle Time Days (SF)': sf ? sf.avgCycle : 0,
+    'Aged Cases 21+ (SF)': sf ? sf.agedCases : 0,
+    'Pct Closed Within 7 Days (SF)': sf ? sf.pctWithin7 / 100 : 0,
+    'CEL Walks (SF)': sf ? sf.celWalks : 0,
+    'ACC Walks (SF)': sf ? sf.accWalks : 0,
+    'Has Discrepancy': hasDiscrepancy,
+    'Discrepancy Notes': discrepancyNotes
   };
 
   const created = await A.createRecord(A.TABLES.bonusSubmissions, fields);

@@ -30,7 +30,8 @@ const TABLES = {
   roles: 'tblIhpTZyCupEaASH',
   walkMissLog: 'tblLA3n0SRgUA9A0z',
   syncHistory: 'tblBHVI7HelUb6vyk',
-  bonusSubmissions: 'tblfFcCeZGUHEvj4N'
+  bonusSubmissions: 'tblfFcCeZGUHEvj4N',
+  bonusSource: 'tbl8eMWVp2Dx1YcDg'
 };
 
 /* ---- HTTP plumbing (shape matches the existing jobs.js) ------------------- */

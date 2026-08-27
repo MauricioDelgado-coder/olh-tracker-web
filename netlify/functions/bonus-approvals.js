@@ -74,7 +74,16 @@ function submissionOf(rec) {
     submittedBy: f['Submitted By'] || '',
     submittedAt: f['Submitted At'] || '',
     reviewedBy: f['Reviewed By'] || '',
-    reviewedAt: f['Reviewed At'] || ''
+    reviewedAt: f['Reviewed At'] || '',
+    sfFound: !!f['SF Source Found'],
+    sfCasesClosed: f['Cases Closed (SF)'] || 0,
+    sfAvgCycle: f['Average Cycle Time Days (SF)'] || 0,
+    sfAgedCases: f['Aged Cases 21+ (SF)'] || 0,
+    sfPctWithin7: Math.round((f['Pct Closed Within 7 Days (SF)'] || 0) * 1000) / 10,
+    sfCelWalks: f['CEL Walks (SF)'] || 0,
+    sfAccWalks: f['ACC Walks (SF)'] || 0,
+    hasDiscrepancy: !!f['Has Discrepancy'],
+    discrepancyNotes: f['Discrepancy Notes'] || ''
   };
 }
 

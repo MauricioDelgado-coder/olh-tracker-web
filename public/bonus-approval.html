@@ -212,6 +212,30 @@
     });
   }
 
+  function sfRow(label, entered, sfVal, suffix) {
+    suffix = suffix || '';
+    var mismatch = Math.abs(entered - sfVal) > 0.05;
+    return '<tr' + (mismatch ? ' style="background:var(--red-bg)"' : '') + '>' +
+      '<td>' + esc(label) + '</td><td class="num">' + entered + suffix + '</td>' +
+      '<td class="num" style="color:var(--muted)">' + sfVal + suffix + '</td></tr>';
+  }
+
+  function sfCompareHtml(s) {
+    return '<div style="margin-top:14px">' +
+      '<label class="notes-label" style="margin-top:0">Entered vs. Salesforce</label>' +
+      '<table class="calc" style="margin-top:4px">' +
+        '<tr><td></td><td class="num" style="font-weight:600">CCR Entered</td><td class="num" style="font-weight:600;color:var(--muted)">Salesforce</td></tr>' +
+        sfRow('Cases Closed', s.casesClosed, s.sfCasesClosed) +
+        sfRow('Avg Cycle Time (days)', s.avgCycle, s.sfAvgCycle) +
+        sfRow('Aged Cases (21+)', s.agedCases, s.sfAgedCases) +
+        sfRow('% Closed \u2264 7 Days', s.pctWithin7, s.sfPctWithin7, '%') +
+        sfRow('CEL Walks', s.celWalks, s.sfCelWalks) +
+        sfRow('ACC Walks', s.accWalks, s.sfAccWalks) +
+      '</table>' +
+      (s.discrepancyNotes ? '<div class="subm-meta" style="margin-top:6px"><strong>Rep\u2019s note:</strong> ' + esc(s.discrepancyNotes) + '</div>' : '') +
+    '</div>';
+  }
+
   function submissionHtml(s) {
     var colors = statusColors(s.status);
     var rs = state.rowState[s.recordId] || {};
@@ -222,7 +246,8 @@
             '<div class="subm-who">' + esc(s.associateName) + '<span class="subm-meta"> · ' + esc(s.division || '\u2014') + (s.region ? ' · ' + esc(s.region) : '') + '</span></div>' +
             '<div class="subm-meta">' + esc(s.bonusMonth) + ' · ' + s.casesClosed + ' cases</div>' +
           '</div>' +
-          '<div style="display:flex;align-items:center;gap:12px">' +
+          '<div style="display:flex;align-items:center;gap:8px">' +
+            (s.hasDiscrepancy ? '<span class="badge-status" style="color:var(--red-ink);background:var(--red-bg)">SF mismatch</span>' : '') +
             '<span class="subm-total">' + fmt(s.total) + '</span>' +
             '<span class="badge-status" style="color:' + colors.ink + ';background:' + colors.bg + '">' + esc(s.status) + '</span>' +
           '</div>' +
@@ -236,6 +261,7 @@
             '<tr><td>ACC Walk Bonus <span style="color:var(--faint)">(' + s.accWalks + ' walks)</span></td><td>' + fmt(s.accBonus) + '</td></tr>' +
             '<tr class="total"><td>Total Bonus</td><td>' + fmt(s.total) + '</td></tr>' +
           '</table>' +
+          (s.sfFound ? sfCompareHtml(s) : '<div class="subm-meta" style="margin-top:10px;font-style:italic">No Salesforce data was available for this associate/month at submission time.</div>') +
           '<div class="subm-meta" style="margin-top:10px">Submitted by ' + esc(s.submittedBy) + (s.submittedAt ? ' · ' + esc(new Date(s.submittedAt).toLocaleString()) : '') + '</div>' +
           (s.reviewedBy ? '<div class="subm-meta">Last reviewed by ' + esc(s.reviewedBy) + (s.reviewedAt ? ' · ' + esc(new Date(s.reviewedAt).toLocaleString()) : '') + '</div>' : '') +
           '<label class="notes-label" for="notes-' + s.recordId + '">Leadership Notes</label>' +

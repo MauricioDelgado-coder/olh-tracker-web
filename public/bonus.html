@@ -51,6 +51,12 @@
   input:read-only{ background:var(--bg); color:var(--muted); }
   input:focus, select:focus{ outline:2px solid var(--navy); outline-offset:1px; }
   .hint{ font-size:11px; color:var(--faint); margin-top:3px; font-weight:400; text-transform:none; letter-spacing:0; }
+  textarea{ width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:6px; font-size:13.5px; font-family:inherit; resize:vertical; min-height:56px; }
+  textarea:focus{ outline:2px solid var(--navy); outline-offset:1px; }
+  .sf-box{ display:flex; flex-wrap:wrap; gap:10px 24px; align-items:center; padding:12px 14px; border-radius:8px; background:var(--bg); border:1px solid var(--border); margin-top:2px; }
+  .sf-box .sf-stat{ font-size:13px; }
+  .sf-box .sf-stat b{ font-variant-numeric:tabular-nums; }
+  button.small{ padding:6px 12px; font-size:12.5px; }
 
   table.calc{ width:100%; border-collapse:collapse; font-size:14px; }
   table.calc td{ padding:9px 2px; border-bottom:1px solid #EFE9DD; }
@@ -151,7 +157,10 @@
     });
   }
 
-  var state = { user: null, can: [], loading: true, error: '', submissions: [], submitting: false, statusMsg: '', statusOk: false };
+  var state = {
+    user: null, can: [], loading: true, error: '', submissions: [], submitting: false, statusMsg: '', statusOk: false,
+    sfSource: null, sfFound: false, sfLoading: false, sfMonth: ''
+  };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
@@ -181,6 +190,66 @@
     return 0;
   }
   var CEL_RATE = 60, ACC_RATE = 40;
+  var DEFAULT_MONTH = new Date().toISOString().slice(0, 7);
+
+  /* ---- Salesforce source (pre-fill + comparison) ------------------------
+     Periodically synced by dev/sync_ccr_bonus_source.py into the CCR Bonus
+     SF Source Airtable table. This is a convenience pre-fill, never a
+     requirement -- the rep can always type their own number, and the
+     server snapshots + flags a discrepancy at submit time regardless of
+     whether this fetch even succeeded. */
+  function loadSfSource(month) {
+    if (!month) { state.sfSource = null; state.sfFound = false; state.sfMonth = ''; return Promise.resolve(); }
+    state.sfLoading = true;
+    state.sfMonth = month;
+    return apiGet('/bonus-source?month=' + encodeURIComponent(month)).then(function (data) {
+      state.sfLoading = false;
+      state.sfFound = !!data.found;
+      state.sfSource = data.source || null;
+    }).catch(function () {
+      state.sfLoading = false;
+      state.sfFound = false;
+      state.sfSource = null;
+    });
+  }
+
+  function timeAgo(iso) {
+    if (!iso) return '';
+    var ms = Date.now() - new Date(iso).getTime();
+    var mins = Math.round(ms / 60000);
+    if (mins < 60) return mins + ' min ago';
+    var hrs = Math.round(mins / 60);
+    if (hrs < 48) return hrs + ' hr ago';
+    return Math.round(hrs / 24) + ' days ago';
+  }
+
+  /** Small inline note under a field showing the Salesforce value, colored
+     amber when it disagrees with what's currently typed in. Wrapped in an
+     id'd div so updateSfHints() can refresh it on every keystroke without
+     rebuilding the whole card (which would drop focus mid-type). */
+  function sfHint(fieldId, sfVal, suffix) {
+    if (!state.sfFound || state.sfSource == null) return '<div id="sfhint-' + fieldId + '"></div>';
+    return '<div id="sfhint-' + fieldId + '">' + sfHintInner(fieldId, sfVal, suffix) + '</div>';
+  }
+  function sfHintInner(fieldId, sfVal, suffix) {
+    suffix = suffix || '';
+    var el = document.getElementById(fieldId);
+    var entered = el ? (parseFloat(el.value) || 0) : 0;
+    var mismatch = Math.abs(entered - sfVal) > 0.05;
+    return '<div class="hint" style="color:' + (mismatch ? 'var(--amber-ink)' : 'var(--faint)') + '">' +
+      'Salesforce: ' + sfVal + suffix + (mismatch ? ' \u2014 differs from what you entered' : '') + '</div>';
+  }
+  var SF_HINT_FIELDS = ['casesClosed', 'avgCycle', 'pctWithin7', 'agedCases', 'celWalks', 'accWalks'];
+  function updateSfHints() {
+    if (!state.sfFound || !state.sfSource) return;
+    var s = state.sfSource;
+    var map = { casesClosed: [s.casesClosed, ''], avgCycle: [s.avgCycle, ''], pctWithin7: [s.pctWithin7, '%'],
+      agedCases: [s.agedCases, ''], celWalks: [s.celWalks, ''], accWalks: [s.accWalks, ''] };
+    SF_HINT_FIELDS.forEach(function (id) {
+      var el = document.getElementById('sfhint-' + id);
+      if (el) el.innerHTML = sfHintInner(id, map[id][0], map[id][1]);
+    });
+  }
 
   function readForm() {
     var val = function (id) { var el = document.getElementById(id); return el ? parseFloat(el.value) || 0 : 0; };
@@ -193,7 +262,8 @@
       agedCases: val('agedCases'),
       agedExceptions: val('agedExceptions'),
       celWalks: val('celWalks'),
-      accWalks: val('accWalks')
+      accWalks: val('accWalks'),
+      discrepancyNotes: (document.getElementById('discrepancyNotes') || {}).value || ''
     };
   }
 
@@ -221,9 +291,31 @@
     return '<table class="history"><thead><tr><th>Month</th><th>Cases</th><th>Total</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table>';
   }
 
+  function sfSummaryHtml() {
+    if (state.sfLoading) return '<div class="card no-print" id="sfBox"><div class="hint">Checking Salesforce\u2026</div></div>';
+    if (!state.sfFound || !state.sfSource) {
+      return '<div class="card no-print" id="sfBox">' +
+        '<h2>Salesforce Data</h2>' +
+        '<div class="empty">No synced Salesforce data yet for ' + esc(state.sfMonth || 'this month') + '. Enter your numbers manually below \u2014 the sync runs daily and this will fill in automatically once it has data for this month.</div>' +
+      '</div>';
+    }
+    var s = state.sfSource;
+    return '<div class="card no-print" id="sfBox">' +
+      '<h2>Salesforce Data</h2>' +
+      '<div class="sf-box">' +
+        '<span class="sf-stat">Cases Closed: <b>' + s.casesClosed + '</b></span>' +
+        '<span class="sf-stat">Avg Cycle: <b>' + s.avgCycle + '</b> days</span>' +
+        '<span class="sf-stat">Aged Cases: <b>' + s.agedCases + '</b></span>' +
+        '<span class="sf-stat">% \u2264 7 Days: <b>' + s.pctWithin7 + '%</b></span>' +
+        '<span class="sf-stat">CEL Walks: <b>' + s.celWalks + '</b></span>' +
+        '<span class="sf-stat">ACC Walks: <b>' + s.accWalks + '</b></span>' +
+      '</div>' +
+      '<div class="hint" style="margin-top:8px">Synced ' + esc(timeAgo(s.lastSynced)) + '. <button type="button" class="secondary small" id="useSfBtn" style="margin-left:6px">Use These Numbers</button></div>' +
+    '</div>';
+  }
+
   function formHtml() {
-    var now = new Date();
-    var defaultMonth = now.toISOString().slice(0, 7);
+    var defaultMonth = DEFAULT_MONTH;
     return '' +
       '<div class="card no-print">' +
         '<h2>Associate &amp; Period</h2>' +
@@ -237,28 +329,33 @@
         '</div>' +
       '</div>' +
 
+      sfSummaryHtml() +
+
       '<div class="card no-print">' +
         '<h2>Case Metrics</h2>' +
         '<div class="grid">' +
           '<div><label for="casesClosed">Cases Closed</label><input id="casesClosed" type="number" min="0" step="1" placeholder="0">' +
-            '<div class="hint">Excludes touchpoint cases.</div></div>' +
+            '<div class="hint">Excludes touchpoint cases.</div>' + sfHint('casesClosed', state.sfSource ? state.sfSource.casesClosed : 0) + '</div>' +
           '<div><label for="avgCycle">Average Cycle Time (days)</label><input id="avgCycle" type="number" min="0" step="0.1" placeholder="0.0">' +
-            '<div class="hint">Average age at closure this month.</div></div>' +
+            '<div class="hint">Average age at closure this month.</div>' + sfHint('avgCycle', state.sfSource ? state.sfSource.avgCycle : 0) + '</div>' +
           '<div><label for="pctWithin7">% Closed in 7 Days or Less</label><input id="pctWithin7" type="number" min="0" max="100" step="0.1" placeholder="0.0">' +
-            '<div class="hint">Drives the Service Consistency tier.</div></div>' +
+            '<div class="hint">Drives the Service Consistency tier.</div>' + sfHint('pctWithin7', state.sfSource ? state.sfSource.pctWithin7 : 0, '%') + '</div>' +
         '</div>' +
         '<div class="grid two" style="margin-top:14px">' +
-          '<div><label for="agedCases">Aged Cases Closed (21+ Days)</label><input id="agedCases" type="number" min="0" step="1" placeholder="0"></div>' +
+          '<div><label for="agedCases">Aged Cases Closed (21+ Days)</label><input id="agedCases" type="number" min="0" step="1" placeholder="0">' +
+            sfHint('agedCases', state.sfSource ? state.sfSource.agedCases : 0) + '</div>' +
           '<div><label for="agedExceptions">Aged Case Exceptions Approved</label><input id="agedExceptions" type="number" min="0" step="1" placeholder="0">' +
-            '<div class="hint">Approved exceptions offset the aged-case count.</div></div>' +
+            '<div class="hint">Approved exceptions offset the aged-case count. No Salesforce equivalent \u2014 always entered by hand.</div></div>' +
         '</div>' +
       '</div>' +
 
       '<div class="card no-print">' +
         '<h2>Walks Completed</h2>' +
         '<div class="grid two">' +
-          '<div><label for="celWalks">CEL Walks Completed <span style="text-transform:none;font-weight:400">($60 each)</span></label><input id="celWalks" type="number" min="0" step="1" placeholder="0"></div>' +
-          '<div><label for="accWalks">ACC Walks Completed <span style="text-transform:none;font-weight:400">($40 each)</span></label><input id="accWalks" type="number" min="0" step="1" placeholder="0"></div>' +
+          '<div><label for="celWalks">CEL Walks Completed <span style="text-transform:none;font-weight:400">($60 each)</span></label><input id="celWalks" type="number" min="0" step="1" placeholder="0">' +
+            sfHint('celWalks', state.sfSource ? state.sfSource.celWalks : 0) + '</div>' +
+          '<div><label for="accWalks">ACC Walks Completed <span style="text-transform:none;font-weight:400">($40 each)</span></label><input id="accWalks" type="number" min="0" step="1" placeholder="0">' +
+            sfHint('accWalks', state.sfSource ? state.sfSource.accWalks : 0) + '</div>' +
         '</div>' +
       '</div>' +
 
@@ -273,6 +370,14 @@
   function calcHtml() {
     var f = readForm();
     var c = calc(f);
+    var mismatch = state.sfFound && state.sfSource && (
+      Math.abs(f.casesClosed - state.sfSource.casesClosed) > 0.05 ||
+      Math.abs(f.avgCycle - state.sfSource.avgCycle) > 0.05 ||
+      Math.abs(f.agedCases - state.sfSource.agedCases) > 0.05 ||
+      Math.abs(f.pctWithin7 - state.sfSource.pctWithin7) > 0.05 ||
+      Math.abs(f.celWalks - state.sfSource.celWalks) > 0.05 ||
+      Math.abs(f.accWalks - state.sfSource.accWalks) > 0.05
+    );
     return '<h2>Bonus Calculation</h2>' +
       '<table class="calc">' +
         '<tr><td>Case Closure Bonus ' + statusPill(c.closure.eligible, c.closure.eligible ? 'eligible' : 'needs <10 day cycle & 80+ cases') + '</td><td>' + fmt(c.closure.bonus) + '</td></tr>' +
@@ -282,6 +387,12 @@
         '<tr><td>ACC Walk Bonus</td><td>' + fmt(c.accBonus) + '</td></tr>' +
         '<tr class="total"><td>Total Bonus</td><td>' + fmt(c.total) + '</td></tr>' +
       '</table>' +
+      (mismatch ?
+        '<div class="no-print" style="margin-top:14px">' +
+          '<label for="discrepancyNotes">Discrepancy Notes <span style="text-transform:none;font-weight:400">(one or more numbers above differ from Salesforce \u2014 briefly explain why)</span></label>' +
+          '<textarea id="discrepancyNotes" placeholder="e.g. Salesforce hasn\u2019t picked up 2 cases I closed on the last day of the month.">' + esc(f.discrepancyNotes) + '</textarea>' +
+        '</div>'
+        : '<textarea id="discrepancyNotes" style="display:none">' + esc(f.discrepancyNotes) + '</textarea>') +
       '<div class="actions no-print">' +
         '<button class="primary" id="submitBtn"' + (state.submitting ? ' disabled' : '') + '>' + (state.submitting ? 'Submitting…' : 'Submit for the Month') + '</button>' +
         '<button class="secondary" id="exportBtn">Export to PDF</button>' +
@@ -293,6 +404,7 @@
     var el = document.getElementById('calcCard');
     if (el) el.innerHTML = calcHtml();
     wireCalcCard();
+    updateSfHints();
   }
 
   function wireCalcCard() {
@@ -307,6 +419,41 @@
       var el = document.getElementById(id);
       if (el) el.addEventListener('input', recalc);
     });
+    var monthEl = document.getElementById('bonusMonth');
+    if (monthEl) monthEl.addEventListener('change', function () {
+      state.sfLoading = true;
+      renderSfCardOnly();
+      loadSfSource(monthEl.value).then(function () {
+        renderSfCardOnly();
+        recalc();
+      });
+    });
+    wireSfButton();
+  }
+
+  /** Re-renders just the pieces that depend on sfSource -- the summary card
+     and the per-field hints -- without touching the case-metrics/walks
+     inputs the person may be mid-typing in. */
+  function renderSfCardOnly() {
+    var box = document.getElementById('sfBox');
+    if (box) box.outerHTML = sfSummaryHtml();
+    wireSfButton();
+    updateSfHints();
+  }
+  function wireSfButton() {
+    var btn = document.getElementById('useSfBtn');
+    if (btn) btn.addEventListener('click', function () {
+      if (!state.sfSource) return;
+      var s = state.sfSource;
+      var setVal = function (id, v) { var el = document.getElementById(id); if (el) el.value = v; };
+      setVal('casesClosed', s.casesClosed);
+      setVal('avgCycle', s.avgCycle);
+      setVal('pctWithin7', s.pctWithin7);
+      setVal('agedCases', s.agedCases);
+      setVal('celWalks', s.celWalks);
+      setVal('accWalks', s.accWalks);
+      recalc();
+    });
   }
 
   function submitBonus() {
@@ -319,7 +466,7 @@
       submissionId: 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
       bonusMonth: f.bonusMonth, region: f.region, casesClosed: f.casesClosed, avgCycle: f.avgCycle,
       pctWithin7: f.pctWithin7, agedCases: f.agedCases, agedExceptions: f.agedExceptions,
-      celWalks: f.celWalks, accWalks: f.accWalks
+      celWalks: f.celWalks, accWalks: f.accWalks, discrepancyNotes: f.discrepancyNotes
     }).then(function (data) {
       state.submitting = false;
       state.statusOk = true;
@@ -384,6 +531,7 @@
   } else {
     loadSession()
       .then(loadHistory)
+      .then(function () { return loadSfSource(DEFAULT_MONTH); })
       .then(function () {
         state.loading = false;
         render();

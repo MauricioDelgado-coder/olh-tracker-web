@@ -121,7 +121,10 @@ const ROUTES = [
   ['submitBonus', 'submit-bonus', 'submit-bonus'],
 
   // ---- CCR bonus leadership review -> bonus-approvals.js (page.bonusapproval)
-  ['bonusApprovals', 'bonus-approvals', 'bonus-approvals']
+  ['bonusApprovals', 'bonus-approvals', 'bonus-approvals'],
+
+  // ---- Salesforce-sourced CCR bonus pre-fill -> bonus-source.js (page.bonus)
+  ['bonusSource', 'bonus-source', 'bonus-source']
 ];
 
 for (const [name, route, netlifyFunction] of ROUTES) {
