@@ -30,6 +30,11 @@
   .kpi-tile{display:flex;flex-direction:column;justify-content:center;min-width:96px;height:44px;padding:2px 16px;border-radius:10px;line-height:1.15}
   .kpi-tile .kpi-count{font-size:19px;font-weight:700}
   .kpi-tile .kpi-label{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;opacity:.85}
+  .kpi-tile.kpi-clickable{cursor:pointer;border:2px solid transparent;transition:box-shadow .12s,border-color .12s}
+  .kpi-tile.kpi-clickable:hover{box-shadow:0 0 0 2px rgba(48,48,48,.08) inset}
+  .kpi-tile.kpi-clickable.active{border-color:currentColor;box-shadow:0 0 0 1px currentColor inset}
+  .status-pill-filter{height:30px;padding:0 14px;border:1px solid #BFB8AB;border-radius:999px;background:#fff;color:#6F6963;font-size:12.5px;font-weight:600;cursor:pointer}
+  .status-pill-filter.active{border-color:#005DAA;background:#005DAA;color:#fff}
 </style>
 </head>
 <body>
@@ -302,12 +307,17 @@
 
   <main style="flex:1 1 auto;max-width:1400px;width:100%;margin:0 auto;padding:20px 32px 40px">
 
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      <button id="pillUndelivered" type="button" class="status-pill-filter">Undelivered Keys</button>
+      <button id="pillAllStatuses" type="button" class="status-pill-filter">All Statuses</button>
+    </div>
+
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;border:1px solid #E4DED2;border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(27,42,88,.05);margin-bottom:14px">
-      <div id="tilePending" class="kpi-tile" style="background:#FBEFC0;color:#8A6B12">
+      <div id="tilePending" class="kpi-tile kpi-clickable" data-status="Pending" role="button" tabindex="0" title="Show only Pending" style="background:#FBEFC0;color:#8A6B12">
         <span class="kpi-count" id="tilePendingCount">0</span>
         <span class="kpi-label">Pending</span>
       </div>
-      <div id="tilePriority" class="kpi-tile" style="background:#F7D6D6;color:#A73939">
+      <div id="tilePriority" class="kpi-tile kpi-clickable" data-status="Priority" role="button" tabindex="0" title="Show only Priority" style="background:#F7D6D6;color:#A73939">
         <span class="kpi-count" id="tilePriorityCount">0</span>
         <span class="kpi-label">Priority</span>
       </div>
@@ -1292,6 +1302,14 @@
   var jobs = [];
   var managers = [];
 
+  // Quick-filter state for the KPI tiles (Pending/Priority) and the
+  // Undelivered/All Statuses pills above the toolbar. Both are UI-only
+  // overlays on top of the column filters -- they don't touch fStatus,
+  // so a manual column filter and a pill/tile click can combine.
+  var tileStatusFilter = null;      // null | 'Pending' | 'Priority'
+  var statusPillMode = 'undelivered'; // 'undelivered' | 'all'
+  var DELIVERED_STATUSES = ['Delivered to title', 'Delivered to WHC'];
+
   function pd(v){ if(!v) return null;
     var s = String(v);
     var d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(s+'T12:00:00') : new Date(s);
@@ -1423,20 +1441,17 @@
 
     var all = buildRows();
 
-    buildMultiOptions(document.getElementById('fComm'), all.map(function(r){ return r.community; }));
-    buildMultiOptions(document.getElementById('fCity'), all.map(function(r){ return r.city || BLANK; }));
-    buildMultiOptions(document.getElementById('fStatus'), all.map(function(r){ return r.keyStatus || BLANK; }));
-
-    // KPI tiles reflect all active homesites, independent of whatever
-    // column filters are currently applied -- an urgency snapshot, not a
-    // count of the current view. Scoped to the same B/S/W lot statuses as
-    // the table below, so the tile counts and the rows always agree.
+    // Active homesites only, everywhere -- a closed job or a lot status
+    // outside B/S/W isn't a live handover, so it should never surface in
+    // filter option lists, the KPI tiles, or the table itself.
     var LOTS = {B: 1, S: 1, W: 1};
     var activeAll = all.filter(function(r){ return !r.closed && LOTS[r.lotStatus]; });
 
-    var rows = all.filter(function(r){
-      if(r.closed) return false;
-      if(!LOTS[r.lotStatus]) return false;
+    buildMultiOptions(document.getElementById('fComm'), activeAll.map(function(r){ return r.community; }));
+    buildMultiOptions(document.getElementById('fCity'), activeAll.map(function(r){ return r.city || BLANK; }));
+    buildMultiOptions(document.getElementById('fStatus'), activeAll.map(function(r){ return r.keyStatus || BLANK; }));
+
+    var rows = activeAll.filter(function(r){
       if(fComm.length && fComm.indexOf(r.community) < 0) return false;
       if(fCity.length && fCity.indexOf(r.city || BLANK) < 0) return false;
       if(fStatus.length && fStatus.indexOf(r.keyStatus || BLANK) < 0) return false;
@@ -1448,6 +1463,11 @@
       if(!inDateRange(r.closingDate, closeFrom, closeTo)) return false;
       if(!inDateRange(r.ecoe, ecoeFrom, ecoeTo)) return false;
       if(q && (r.job + ' ' + r.community + ' ' + r.address + ' ' + r.city).toLowerCase().indexOf(q) < 0) return false;
+      // KPI tile quick-filter: clicking Pending/Priority narrows to that
+      // exact Key Status, on top of whatever column filters are set.
+      if(tileStatusFilter && r.keyStatus !== tileStatusFilter) return false;
+      // Undelivered/All Statuses pill: hides delivered homes by default.
+      if(statusPillMode === 'undelivered' && DELIVERED_STATUSES.indexOf(r.keyStatus) >= 0) return false;
       return true;
     });
 
@@ -1542,6 +1562,11 @@
 
     document.getElementById('tilePendingCount').textContent = activeAll.filter(function(r){ return r.keyStatus === 'Pending'; }).length;
     document.getElementById('tilePriorityCount').textContent = activeAll.filter(function(r){ return r.keyStatus === 'Priority'; }).length;
+
+    document.getElementById('tilePending').classList.toggle('active', tileStatusFilter === 'Pending');
+    document.getElementById('tilePriority').classList.toggle('active', tileStatusFilter === 'Priority');
+    document.getElementById('pillUndelivered').classList.toggle('active', statusPillMode === 'undelivered');
+    document.getElementById('pillAllStatuses').classList.toggle('active', statusPillMode === 'all');
 
     document.getElementById('countNote').textContent =
       rows.length + (rows.length === 1 ? ' homesite' : ' homesites');
@@ -1737,6 +1762,31 @@
     window.OLHAuth.onChange(updateReadOnlyBar);
     window.OLHAuth.restore().then(function(){ updateReadOnlyBar(); loadLive(); });
   }
+
+  // KPI tiles double as quick filters -- click (or Enter/Space) to narrow
+  // the table to that exact Key Status; click the active tile again to
+  // clear it back to no tile filter.
+  ['tilePending', 'tilePriority'].forEach(function(id){
+    var el = document.getElementById(id);
+    var toggle = function(){
+      var status = el.dataset.status;
+      tileStatusFilter = (tileStatusFilter === status) ? null : status;
+      render();
+    };
+    el.addEventListener('click', toggle);
+    el.addEventListener('keydown', function(e){
+      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggle(); }
+    });
+  });
+
+  document.getElementById('pillUndelivered').addEventListener('click', function(){
+    statusPillMode = 'undelivered';
+    render();
+  });
+  document.getElementById('pillAllStatuses').addEventListener('click', function(){
+    statusPillMode = 'all';
+    render();
+  });
 
   document.getElementById('q').addEventListener('input', function(){
     clearTimeout(window.__tsQt); window.__tsQt = setTimeout(render, 220);
