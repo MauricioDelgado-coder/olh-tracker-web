@@ -380,7 +380,9 @@
           missed: !!f[cfg.missed],
           missReason: f[cfg.reason] || '',
           missNote: f[cfg.note] || '',
-          inspApproved: !!f['Home Inspection Approved']
+          inspApproved: !!f['Home Inspection Approved'],
+          cm: f['Construction Manager'] || '',
+          concierge: f['Assigned Concierge'] || ''
         });
       });
     });
@@ -539,7 +541,8 @@
         '<div class="walk-body">' +
           '<div class="walk-top">' +
             '<div><div class="walk-addr">' + esc(w.address) + '</div>' +
-            '<div class="walk-meta">' + esc(w.job) + ' · ' + esc(w.community) + '</div></div>' +
+            '<div class="walk-meta">' + esc(w.job) + ' · ' + esc(w.community) + '</div>' +
+            '<div class="walk-meta">CM: ' + esc(w.cm || '—') + ' · Concierge: ' + esc(w.concierge || '—') + '</div></div>' +
             '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">' +
               '<span class="badge ' + m + '">' + label + '</span>' + pubBadge + inspBadge +
               (w.time ? '<span class="walk-time">' + esc(w.time) + '</span>' : '<span class="walk-time" style="color:var(--faint)">untimed</span>') +
