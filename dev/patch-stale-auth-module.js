@@ -103,9 +103,15 @@ for (const page of TARGET_PAGES) {
   const asset = findAuthAsset(content);
   if (!asset) { console.log(page.padEnd(28) + 'SKIP -- no embedded OLHAuth asset found (plain page?)'); skipped++; continue; }
 
-  if (asset.oldText.includes('"sandbox": "sandbox"') && asset.oldText.includes('page.sanmpr') && asset.oldText.includes('sandbox.edit')
-      && asset.oldText.includes('"concierge": "concierge"')
-      && asset.oldText.includes('page.redflags') && asset.oldText.includes('page.bonus')) {
+  // Exact content equality, not a marker-string checklist. The marker-list
+  // version of this check ("does the text contain page.redflags anywhere")
+  // is exactly how this module's own self-healing catalog-merge code shipped
+  // on missed-walks.html but silently failed to propagate to any of the 11
+  // target pages: none of the new code added a NEW marker string, so every
+  // page reported "already current" while actually carrying the old module.
+  // A byte-for-byte compare against the current source of truth cannot go
+  // stale in that way -- there is no list to forget to extend.
+  if (asset.oldText === goodModule) {
     console.log(page.padEnd(28) + 'OK -- already current (uuid ' + asset.uuid + ')');
     alreadyOk++;
     continue;
@@ -124,10 +130,11 @@ for (const page of TARGET_PAGES) {
     const patched = content.replace(asset.oldDataB64, newDataB64);
     fs.writeFileSync(filePath, patched);
 
-    // Verify: re-read, re-parse, re-decompress, confirm it now matches.
+    // Verify: re-read, re-parse, re-decompress, confirm it now matches
+    // exactly -- not just "contains a marker string".
     const verifyContent = fs.readFileSync(filePath, 'utf8');
     const verifyAsset = findAuthAsset(verifyContent);
-    if (!verifyAsset || !verifyAsset.oldText.includes('"sandbox": "sandbox"') || !verifyAsset.oldText.includes('page.redflags')) {
+    if (!verifyAsset || verifyAsset.oldText !== goodModule) {
       throw new Error(page + ': verification FAILED after write -- manual review needed.');
     }
     console.log(''.padEnd(28) + '-> patched and verified.');

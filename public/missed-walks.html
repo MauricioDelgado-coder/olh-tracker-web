@@ -413,6 +413,40 @@
 
   var ALL_PAGES = PAGES.map(function (p) { return p.key; });
 
+  var isPageKey = function (k) { return String(k).indexOf("page.") === 0; };
+  function titleCase(key) {
+    var body = String(key).indexOf(".") >= 0 ? String(key).split(".").slice(1).join(" ") : String(key);
+    return body.replace(/[_-]+/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2")
+      .split(" ").filter(Boolean)
+      .map(function (w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(" ");
+  }
+  /* Self-healing catalog: a permission key can go live in the server matrix
+   * before every embedded copy of this module has been updated to know its
+   * label -- page.redflags and page.bonus both did, for a full release, and
+   * the result was that admin's grid had no checkbox to grant or revoke
+   * either one at all, even though the server was already enforcing both.
+   * Rather than trust that every copy of PAGES/PERMS across every page stays
+   * in lockstep with the server (the CI gate in dev/check-page-perms.js and
+   * dev/patch-stale-auth-module.js --check is the real fix for that), this
+   * gives the admin console a fallback row for anything the live matrix
+   * mentions that the local catalog does not recognize yet -- an ugly label
+   * that can be toggled beats an invisible permission that cannot be. */
+  function extraCatalogEntries(matchFn, knownKeys) {
+    var seen = {}, out = [];
+    Object.keys(ROLES).forEach(function (r) {
+      ((ROLES[r] && ROLES[r].can) || []).forEach(function (key) {
+        if (!matchFn(key) || knownKeys.indexOf(key) >= 0 || seen[key]) return;
+        seen[key] = true;
+        out.push({
+          key: key, label: titleCase(key) + " (unlabeled)", href: null,
+          note: "Newer than this page's copy of the permission catalog -- the toggle below still works; ask a developer to give it a real label.",
+          unlabeled: true
+        });
+      });
+    });
+    return out;
+  }
+
   // Shipped defaults. An admin can override these; ROLE_LOCKS keeps the
   // console reachable no matter what the grid is set to.
   var DEFAULT_ROLES = {
@@ -656,8 +690,8 @@
      * GET {apiBase}/roles         -> {roles:{admin:["tracker.edit",…],…}}
      * PUT {apiBase}/roles {roles} -> {roles}
      * Airtable: a Roles table with Role and Permissions (multi-select). */
-    perms: function () { return PERMS.slice(); },
-    pages: function () { return PAGES.slice(); },
+    perms: function () { return PERMS.concat(extraCatalogEntries(function (k) { return k.indexOf("page.") !== 0; }, PERMS.map(function (p) { return p.key; }))); },
+    pages: function () { return PAGES.concat(extraCatalogEntries(isPageKey, ALL_PAGES)); },
     /* Pages this role can open, in catalog order — drives the home tiles and
        the "where do I send them" fallback after sign-in. */
     allowedPages: function (role) {
