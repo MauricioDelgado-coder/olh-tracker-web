@@ -192,6 +192,34 @@
   var CEL_RATE = 60, ACC_RATE = 40;
   var DEFAULT_MONTH = new Date().toISOString().slice(0, 7);
 
+  /* ---- Bonus Month options -----------------------------------------------
+     Dropdown, not a free native month-picker: only completed calendar months
+     from BONUS_MONTHS_START forward, plus the current month (labeled and
+     always last, even if that means only one option exists e.g. in the
+     program's first month). Computed live off today's date every render, not
+     hardcoded past July 2026. */
+  var MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+    'August', 'September', 'October', 'November', 'December'];
+  var BONUS_MONTHS_START = { y: 2026, m: 7 }; // July 2026
+  function pad2(n) { return n < 10 ? '0' + n : String(n); }
+  function monthOptions() {
+    var now = new Date();
+    var curY = now.getFullYear(), curM = now.getMonth() + 1;
+    var out = [];
+    var y = BONUS_MONTHS_START.y, m = BONUS_MONTHS_START.m;
+    while (y < curY || (y === curY && m < curM)) {
+      out.push({ value: y + '-' + pad2(m), label: MONTH_NAMES[m - 1] + ' ' + y });
+      m++; if (m > 12) { m = 1; y++; }
+    }
+    out.push({ value: curY + '-' + pad2(curM), label: MONTH_NAMES[curM - 1] + ' ' + curY + ' (Current)' });
+    return out;
+  }
+  function monthOptionsHtml(selected) {
+    return monthOptions().map(function (o) {
+      return '<option value="' + o.value + '"' + (o.value === selected ? ' selected' : '') + '>' + esc(o.label) + '</option>';
+    }).join('');
+  }
+
   /* ---- Salesforce source (pre-fill + comparison) ------------------------
      Periodically synced by dev/sync_ccr_bonus_source.py into the CCR Bonus
      SF Source Airtable table. This is a convenience pre-fill, never a
@@ -327,7 +355,7 @@
           '<div><label for="region">Region</label><input id="region" type="text" placeholder="e.g. OLH South"></div>' +
         '</div>' +
         '<div class="grid" style="margin-top:14px;max-width:220px">' +
-          '<div><label for="bonusMonth">Bonus Month</label><input id="bonusMonth" type="month" value="' + defaultMonth + '"></div>' +
+          '<div><label for="bonusMonth">Bonus Month</label><select id="bonusMonth">' + monthOptionsHtml(defaultMonth) + '</select></div>' +
         '</div>' +
       '</div>' +
 
