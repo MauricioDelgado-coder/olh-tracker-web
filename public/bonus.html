@@ -159,7 +159,7 @@
 
   var state = {
     user: null, can: [], loading: true, error: '', submissions: [], submitting: false, statusMsg: '', statusOk: false,
-    sfSource: null, sfFound: false, sfLoading: false, sfMonth: ''
+    sfSource: null, sfFound: false, sfLoading: false, sfMonth: '', exceptionsApproved: 0
   };
 
   function esc(s) {
@@ -199,17 +199,19 @@
      server snapshots + flags a discrepancy at submit time regardless of
      whether this fetch even succeeded. */
   function loadSfSource(month) {
-    if (!month) { state.sfSource = null; state.sfFound = false; state.sfMonth = ''; return Promise.resolve(); }
+    if (!month) { state.sfSource = null; state.sfFound = false; state.sfMonth = ''; state.exceptionsApproved = 0; return Promise.resolve(); }
     state.sfLoading = true;
     state.sfMonth = month;
     return apiGet('/bonus-source?month=' + encodeURIComponent(month)).then(function (data) {
       state.sfLoading = false;
       state.sfFound = !!data.found;
       state.sfSource = data.source || null;
+      state.exceptionsApproved = data.exceptionsApproved || 0;
     }).catch(function () {
       state.sfLoading = false;
       state.sfFound = false;
       state.sfSource = null;
+      state.exceptionsApproved = 0;
     });
   }
 
@@ -344,8 +346,8 @@
         '<div class="grid two" style="margin-top:14px">' +
           '<div><label for="agedCases">Aged Cases Closed (21+ Days)</label><input id="agedCases" type="number" min="0" step="1" placeholder="0">' +
             sfHint('agedCases', state.sfSource ? state.sfSource.agedCases : 0) + '</div>' +
-          '<div><label for="agedExceptions">Aged Case Exceptions Approved</label><input id="agedExceptions" type="number" min="0" step="1" placeholder="0">' +
-            '<div class="hint">Approved exceptions offset the aged-case count. No Salesforce equivalent \u2014 always entered by hand.</div></div>' +
+          '<div><label for="agedExceptions">Aged Case Exceptions Approved</label><input id="agedExceptions" type="number" min="0" step="1" value="' + state.exceptionsApproved + '" readonly>' +
+            '<div class="hint">Not Salesforce data \u2014 counted from your Approved <a href="case-aging.html">Case Aging Exception</a> requests for this month. Submit a request there to change this number.</div></div>' +
         '</div>' +
       '</div>' +
 
@@ -415,7 +417,7 @@
   }
 
   function wireInputs() {
-    ['casesClosed', 'avgCycle', 'pctWithin7', 'agedCases', 'agedExceptions', 'celWalks', 'accWalks'].forEach(function (id) {
+    ['casesClosed', 'avgCycle', 'pctWithin7', 'agedCases', 'celWalks', 'accWalks'].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) el.addEventListener('input', recalc);
     });
@@ -424,6 +426,8 @@
       state.sfLoading = true;
       renderSfCardOnly();
       loadSfSource(monthEl.value).then(function () {
+        var exEl = document.getElementById('agedExceptions');
+        if (exEl) exEl.value = state.exceptionsApproved;
         renderSfCardOnly();
         recalc();
       });
@@ -465,7 +469,7 @@
     apiPost('/submit-bonus', {
       submissionId: 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
       bonusMonth: f.bonusMonth, region: f.region, casesClosed: f.casesClosed, avgCycle: f.avgCycle,
-      pctWithin7: f.pctWithin7, agedCases: f.agedCases, agedExceptions: f.agedExceptions,
+      pctWithin7: f.pctWithin7, agedCases: f.agedCases,
       celWalks: f.celWalks, accWalks: f.accWalks, discrepancyNotes: f.discrepancyNotes
     }).then(function (data) {
       state.submitting = false;

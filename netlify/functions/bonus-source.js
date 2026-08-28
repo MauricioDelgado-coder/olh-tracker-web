@@ -4,7 +4,7 @@
  * before they submit.
  *
  *   GET /api/bonus-source?month=2026-08
- *       -> {found:true, source:{...}} or {found:false, source:null}
+ *       -> {found:true, source:{...}, exceptionsApproved:N} or {found:false, source:null, exceptionsApproved:N}
  *
  * Scoped to the caller's own email -- a CCR sees only their own row, matching
  * the same "your own data only" shape as GET /submit-bonus without ?all=1.
@@ -20,6 +20,15 @@
  * yet (e.g. a brand-new hire, or a month before this pipeline existed), not
  * that Salesforce showed zero of everything. bonus.html must not silently
  * treat the two the same.
+ *
+ * exceptionsApproved is NOT Salesforce data -- there is no such concept in
+ * Salesforce. It's the count of this CCR's Approved Case Aging Exception
+ * requests for this bonus month, computed here the same authoritative way
+ * submit-bonus.js computes it at submission time (see
+ * A.caseAgingExceptionsApprovedCount), so the number the CCR sees before
+ * submitting always matches what actually gets written. Always present
+ * (defaults to 0) regardless of whether an SF source row was found -- the
+ * two are independent facts.
  */
 
 'use strict';
@@ -57,10 +66,13 @@ async function list(event) {
 
   const email = A.normEmail(session.user.email);
   const formula = '{Bonus Month} = "' + A.esc(month) + '" AND LOWER({Associate Email}) = "' + A.esc(email) + '"';
-  const rec = await A.findOne(A.TABLES.bonusSource, formula);
+  const [rec, exceptionsApproved] = await Promise.all([
+    A.findOne(A.TABLES.bonusSource, formula),
+    A.caseAgingExceptionsApprovedCount(email, month)
+  ]);
 
-  if (!rec) return A.reply(200, { found: false, source: null });
-  return A.reply(200, { found: true, source: sourceOf(rec) });
+  if (!rec) return A.reply(200, { found: false, source: null, exceptionsApproved });
+  return A.reply(200, { found: true, source: sourceOf(rec), exceptionsApproved });
 }
 
 exports.handler = async (event) => {

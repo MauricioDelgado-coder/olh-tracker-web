@@ -3,8 +3,7 @@
  *
  *   POST /api/submit-bonus
  *         {bonusMonth, region, casesClosed, avgCycle, agedCases,
- *          agedExceptions, pctWithin7, celWalks, accWalks, submissionId?,
- *          discrepancyNotes?}
+ *          pctWithin7, celWalks, accWalks, submissionId?, discrepancyNotes?}
  *         -> {submission}
  *
  *   GET  /api/submit-bonus
@@ -20,7 +19,16 @@
  * Dollar amounts are computed HERE, server-side, from the CCR Bonus
  * Agreement's tiers -- never trusted from the client, the same reasoning
  * update-job.js applies to every write. Associate Name/Email/Division and
- * Submitted By/At all come from the session, never the body.
+ * Submitted By/At all come from the session, never the body. As of the Case
+ * Aging Exceptions integration, Aged Case Exceptions Approved is ALSO never
+ * trusted from the client for the same reason: it directly reduces Net Aged
+ * Cases and therefore increases the Aged Case Bonus, so it gets the same
+ * server-computed treatment as every other dollar-affecting figure. It is
+ * computed via A.caseAgingExceptionsApprovedCount -- a count of this CCR's
+ * own Approved rows in the Case Aging Exceptions table for this bonus
+ * month, not Salesforce (that table has no such concept; see the note on
+ * "Salesforce comparison" below). Whatever the client sends for
+ * agedExceptions is ignored.
  *
  * ---- Salesforce comparison ------------------------------------------------
  *
@@ -146,7 +154,6 @@ async function submit(event) {
   const casesClosed = num(body.casesClosed);
   const avgCycle = num(body.avgCycle);
   const agedCases = num(body.agedCases);
-  const agedExceptions = num(body.agedExceptions);
   const pctWithin7 = Math.max(0, Math.min(100, num(body.pctWithin7)));
   const celWalks = num(body.celWalks);
   const accWalks = num(body.accWalks);
@@ -154,10 +161,13 @@ async function submit(event) {
 
   for (const [label, v] of [
     ['casesClosed', casesClosed], ['avgCycle', avgCycle], ['agedCases', agedCases],
-    ['agedExceptions', agedExceptions], ['celWalks', celWalks], ['accWalks', accWalks]
+    ['celWalks', celWalks], ['accWalks', accWalks]
   ]) {
     if (v < 0) return A.reply(400, { error: '"' + label + '" cannot be negative.' });
   }
+
+  // Server-computed, not trusted from the client -- see the file header.
+  const agedExceptions = await A.caseAgingExceptionsApprovedCount(session.user.email, bonusMonth);
 
   const submissionId = str(body.submissionId).trim() ||
     ('b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7));

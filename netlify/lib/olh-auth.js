@@ -163,6 +163,23 @@ async function findOne(tableId, formula) {
 const createRecord = (tableId, fields) =>
   airtable('POST', '/' + tableId, { fields, typecast: true });
 
+/**
+ * Count of a CCR's Approved Case Aging Exceptions for one bonus month,
+ * matched on Submitted By Email + the month the exception was submitted in.
+ *
+ * Shared by submit-bonus.js (which trusts this, not the client, for the
+ * dollar-affecting Aged Case Exceptions Approved figure) and bonus-source.js
+ * (which surfaces it to the CCR as a read-only pre-fill before they submit).
+ * One copy here rather than two nearly-identical queries, for the same
+ * reason bonus math itself lives in one place: a duplicate is exactly the
+ * kind of thing that quietly drifts.
+ */
+function caseAgingExceptionsApprovedCount(email, bonusMonth) {
+  const formula = 'AND(LOWER({Submitted By Email}) = "' + esc(normEmail(email)) +
+    '", {Status} = "Approved", DATETIME_FORMAT({Submission Date}, "YYYY-MM") = "' + esc(bonusMonth) + '")';
+  return listRecords(TABLES.caseAgingExceptions, { filterByFormula: formula }).then((recs) => recs.length);
+}
+
 const updateRecord = (tableId, id, fields) =>
   airtable('PATCH', '/' + tableId + '/' + id, { fields, typecast: true });
 
@@ -627,6 +644,7 @@ module.exports = {
   crypto, BASE_ID, AIRTABLE_API, TABLES, PERMS, DEFAULT_ROLES, DENY,
   JSON_HEADERS, reply, readJson, route, fail, sleep, esc,
   airtable, listRecords, findOne, createRecord, updateRecord, deleteRecord,
+  caseAgingExceptionsApprovedCount,
   hashPassword, verifyPassword, checkPolicy,
   sha256, randomToken, mintSession, readSession, SESSION_TTL_MS,
   roleSlug, roleLabel, normalizeMatrix, loadMatrix, saveMatrix,
