@@ -124,7 +124,14 @@ const ROUTES = [
   ['bonusApprovals', 'bonus-approvals', 'bonus-approvals'],
 
   // ---- Salesforce-sourced CCR bonus pre-fill -> bonus-source.js (page.bonus)
-  ['bonusSource', 'bonus-source', 'bonus-source']
+  ['bonusSource', 'bonus-source', 'bonus-source'],
+
+  // ---- Case aging exception self-reporting -> case-aging.js (page.caseaging)
+  ['caseAging', 'case-aging', 'case-aging'],
+
+  // ---- Case aging exception leadership review -> case-aging-approvals.js
+  // (page.bonusapproval -- shared with bonus-approvals.js, see that file)
+  ['caseAgingApprovals', 'case-aging-approvals', 'case-aging-approvals']
 ];
 
 for (const [name, route, netlifyFunction] of ROUTES) {

@@ -31,7 +31,8 @@ const TABLES = {
   walkMissLog: 'tblLA3n0SRgUA9A0z',
   syncHistory: 'tblBHVI7HelUb6vyk',
   bonusSubmissions: 'tblfFcCeZGUHEvj4N',
-  bonusSource: 'tbl8eMWVp2Dx1YcDg'
+  bonusSource: 'tbl8eMWVp2Dx1YcDg',
+  caseAgingExceptions: 'tblF6CAPJkW4WgZmS'
 };
 
 /* ---- HTTP plumbing (shape matches the existing jobs.js) ------------------- */
@@ -290,7 +291,7 @@ const ALL_PAGES = [
   'page.home', 'page.mywalks', 'page.tracker', 'page.completion', 'page.walks', 'page.game',
   'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload',
   'page.walkstoschedule', 'page.admin', 'page.keys', 'page.sanmpr', 'page.synchistory', 'page.redflags',
-  'page.bonus', 'page.bonusapproval'
+  'page.bonus', 'page.bonusapproval', 'page.caseaging'
 ];
 
 // Mirrors DEFAULT_ROLES in the frontend auth module. Used when the Roles table
@@ -320,7 +321,7 @@ const DEFAULT_ROLES = {
   qam: ['suite.view', 'walk.complete', 'page.home', 'page.mywalks'],
   cm: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.completion', 'page.walks', 'page.redflags'],
   ccr: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.walks', 'page.qamgmt', 'page.missedwalks',
-    'page.walkstoschedule', 'page.bonus'],
+    'page.walkstoschedule', 'page.bonus', 'page.caseaging'],
   leadership: ['suite.view', 'page.home', 'page.tracker', 'page.completion',
     'page.walks', 'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload',
     'page.walkstoschedule', 'page.keys', 'page.synchistory', 'page.redflags', 'page.bonusapproval'],
@@ -581,7 +582,8 @@ const PAGE_LABEL = {
   'page.synchistory': 'Sync History',
   'page.redflags': 'Red Flags',
   'page.bonus': 'CCR Monthly Bonus',
-  'page.bonusapproval': 'CCR Bonus Approval'
+  'page.bonusapproval': 'Approvals (Bonus + Case Aging)',
+  'page.caseaging': 'Case Aging Exception Request'
 };
 const DENY = {
   'suite.view': 'Your account does not have access to the OLH Suite yet. Ask an admin to grant it.',

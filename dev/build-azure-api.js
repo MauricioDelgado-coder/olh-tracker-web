@@ -60,7 +60,9 @@ const FUNCTIONS = [
   'sync-history.js',
   'submit-bonus.js',
   'bonus-approvals.js',
-  'bonus-source.js'
+  'bonus-source.js',
+  'case-aging.js',
+  'case-aging-approvals.js'
 ];
 
 /** Shared helpers. Kept outside functions/ on Netlify so it is never itself an

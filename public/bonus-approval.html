@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow, noarchive">
-<title>CCR Bonus Approval — OLH Tracker</title>
+<title>Approvals — OLH Tracker</title>
 <style>
   :root{
     --navy:#1B2A58; --ink:#2B2620; --muted:#6F6963; --faint:#908A82;
@@ -86,13 +86,17 @@
   .row-status.err{ color:var(--red-ink); } .row-status.ok{ color:var(--green-ink); }
 
   .empty{ color:var(--muted); font-size:13px; padding:14px 2px; }
+
+  .type-tabs{ display:flex; gap:8px; margin-bottom:14px; }
+  .type-tab{ background:#fff; color:var(--muted); border:1px solid var(--border); border-radius:999px; padding:6px 16px; font-size:13px; font-weight:600; cursor:pointer; }
+  .type-tab.active{ background:var(--navy); color:#fff; border-color:var(--navy); }
 </style>
 </head>
 <body>
 
 <header class="top">
   <div>
-    <h1>CCR Bonus Approval</h1>
+    <h1>Approvals</h1>
     <div class="who" id="whoLine">Loading…</div>
   </div>
   <a class="home" href="/">All Views</a>
@@ -148,10 +152,15 @@
     });
   }
 
+  var CASE_AGING_STATUSES = ['Pending', 'Approved', 'Denied'];
+
   var state = {
     user: null, can: [], loading: true, error: '',
+    type: 'bonus', // 'bonus' | 'caseAging'
     submissions: [], reports: [], isAdmin: false, viewingAll: false,
     filterStatus: '', filterMonth: '', viewAll: false,
+    caseAgingRequests: [], caseAgingReports: [], caseAgingIsAdmin: false, caseAgingViewingAll: false,
+    caseAgingFilterStatus: '', caseAgingViewAll: false,
     rowState: {} // recordId -> {saving, msg, ok}
   };
 
@@ -165,9 +174,16 @@
   function statusColors(status) {
     if (status === 'Approved') return { bg: 'var(--green-bg)', ink: 'var(--green-ink)' };
     if (status === 'Paid') return { bg: 'var(--blue-bg)', ink: 'var(--blue-ink)' };
-    if (status === 'Rejected') return { bg: 'var(--red-bg)', ink: 'var(--red-ink)' };
+    if (status === 'Rejected' || status === 'Denied') return { bg: 'var(--red-bg)', ink: 'var(--red-ink)' };
     if (status === 'Under Review') return { bg: 'var(--amber-bg)', ink: 'var(--amber-ink)' };
-    return { bg: '#F1EBE1', ink: '#6F6963' }; // Submitted
+    return { bg: '#F1EBE1', ink: '#6F6963' }; // Submitted / Pending
+  }
+
+  function typeTabsHtml() {
+    return '<div class="type-tabs">' +
+      '<button class="type-tab' + (state.type === 'bonus' ? ' active' : '') + '" data-type="bonus">Bonus</button>' +
+      '<button class="type-tab' + (state.type === 'caseAging' ? ' active' : '') + '" data-type="caseAging">Case Aging</button>' +
+    '</div>';
   }
 
   function toolbarHtml() {
@@ -185,21 +201,40 @@
           '</select></div>' +
           (state.isAdmin ? '<div class="chk"><label style="margin:0;display:flex;gap:6px;align-items:center;text-transform:none;font-weight:400;color:var(--ink)"><input type="checkbox" id="fAll"' + (state.viewAll ? ' checked' : '') + '> View all CCR submissions (Admin)</label></div>' : '') +
         '</div>' +
-        (!state.viewingAll ? reportsStripHtml() : '') +
+        (!state.viewingAll ? reportsStripHtml(state.reports, state.submissions, 'associateEmail', 'bonusMonth', state.filterMonth) : '') +
       '</div>';
   }
 
-  function reportsStripHtml() {
-    if (!state.reports.length) {
+  function caseAgingToolbarHtml() {
+    return '' +
+      '<div class="card">' +
+        '<div class="toolbar">' +
+          '<div><label for="fCaStatus">Status</label><select id="fCaStatus">' +
+            '<option value="">All</option>' +
+            CASE_AGING_STATUSES.map(function (s) { return '<option value="' + esc(s) + '"' + (state.caseAgingFilterStatus === s ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') +
+          '</select></div>' +
+          (state.caseAgingIsAdmin ? '<div class="chk"><label style="margin:0;display:flex;gap:6px;align-items:center;text-transform:none;font-weight:400;color:var(--ink)"><input type="checkbox" id="fCaAll"' + (state.caseAgingViewAll ? ' checked' : '') + '> View all CCR requests (Admin)</label></div>' : '') +
+        '</div>' +
+        (!state.caseAgingViewingAll ? reportsStripHtml(state.caseAgingReports, state.caseAgingRequests, 'submittedByEmail', null, null) : '') +
+      '</div>';
+  }
+
+  /** Shared between the bonus and case-aging toolbars -- same direct-report
+     chip strip, parameterized on which field of the row carries the
+     associate's email and (for bonus only) which field/value scopes "has a
+     row this period" to a specific month. */
+  function reportsStripHtml(reports, rows, emailField, periodField, periodValue) {
+    if (!reports.length) {
       return '<div class="empty" style="margin-top:10px">No direct reports are linked to you yet. Ask an admin to set the Manager field for your team on the Users table.</div>';
     }
-    var monthsSeen = {};
-    state.submissions.forEach(function (s) { monthsSeen[String(s.associateEmail || '').toLowerCase() + '|' + s.bonusMonth] = true; });
-    var month = state.filterMonth;
-    var chips = state.reports.map(function (r) {
-      var has = month ? !!monthsSeen[r.email + '|' + month] : state.submissions.some(function (s) { return String(s.associateEmail || '').toLowerCase() === r.email; });
+    var seen = {};
+    rows.forEach(function (r) { seen[String(r[emailField] || '').toLowerCase() + '|' + (periodField ? r[periodField] : '')] = true; });
+    var chips = reports.map(function (r) {
+      var has = periodValue
+        ? !!seen[r.email + '|' + periodValue]
+        : rows.some(function (row) { return String(row[emailField] || '').toLowerCase() === r.email; });
       return '<span class="report-chip ' + (has ? 'has' : 'missing') + '"><span class="dot"></span>' + esc(r.name) +
-        (has ? '' : (month ? ' — no submission for ' + esc(month) : ' — no submissions yet')) + '</span>';
+        (has ? '' : (periodValue ? ' — none for ' + esc(periodValue) : ' — none yet')) + '</span>';
     }).join('');
     return '<div class="reports-strip">' + chips + '</div>';
   }
@@ -208,6 +243,13 @@
     return state.submissions.filter(function (s) {
       if (state.filterStatus && s.status !== state.filterStatus) return false;
       if (state.filterMonth && s.bonusMonth !== state.filterMonth) return false;
+      return true;
+    });
+  }
+
+  function filteredCaseAgingRequests() {
+    return state.caseAgingRequests.filter(function (r) {
+      if (state.caseAgingFilterStatus && r.status !== state.caseAgingFilterStatus) return false;
       return true;
     });
   }
@@ -283,6 +325,50 @@
     return rows.map(submissionHtml).join('');
   }
 
+  function caseAgingHtml(r) {
+    var colors = statusColors(r.status);
+    var rs = state.rowState[r.recordId] || {};
+    var isPending = r.status === 'Pending';
+    return '' +
+      '<details class="subm">' +
+        '<summary>' +
+          '<div>' +
+            '<div class="subm-who">' + esc(r.submittedBy) + '<span class="subm-meta"> · ' + esc(r.division || '\u2014') + '</span></div>' +
+            '<div class="subm-meta">Case ' + esc(r.caseNumber) + ' · submitted ' + esc(r.submissionDate) + '</div>' +
+          '</div>' +
+          '<div style="display:flex;align-items:center;gap:8px">' +
+            '<span class="subm-total">' + esc(String(r.currentAgeDays)) + ' days</span>' +
+            '<span class="badge-status" style="color:' + colors.ink + ';background:' + colors.bg + '">' + esc(r.status) + '</span>' +
+          '</div>' +
+        '</summary>' +
+        '<div class="subm-body">' +
+          '<table class="calc">' +
+            '<tr><td>Current Age</td><td>' + esc(String(r.currentAgeDays)) + ' days</td></tr>' +
+            '<tr><td>Expected Completion Date</td><td>' + esc(r.expectedCompletionDate) + '</td></tr>' +
+          '</table>' +
+          '<label class="notes-label" style="margin-top:10px">Aging Reason Notes</label>' +
+          '<div class="subm-meta" style="white-space:pre-wrap">' + esc(r.agingReasonNotes) + '</div>' +
+          '<div class="subm-meta" style="margin-top:10px">Submitted by ' + esc(r.submittedBy) + (r.submittedAt ? ' · ' + esc(new Date(r.submittedAt).toLocaleString()) : '') + '</div>' +
+          (r.reviewedBy ? '<div class="subm-meta">Last reviewed by ' + esc(r.reviewedBy) + (r.reviewedAt ? ' · ' + esc(new Date(r.reviewedAt).toLocaleString()) : '') + '</div>' : '') +
+          (isPending ? (
+            '<label class="notes-label" for="ca-notes-' + r.recordId + '">Reviewer Notes</label>' +
+            '<textarea id="ca-notes-' + r.recordId + '" data-record="' + r.recordId + '">' + esc(r.reviewerNotes) + '</textarea>' +
+            '<div class="actions">' +
+              '<button class="approve" data-ca-action="Approved" data-record="' + r.recordId + '"' + (rs.saving ? ' disabled' : '') + '>Approve</button>' +
+              '<button class="reject" data-ca-action="Denied" data-record="' + r.recordId + '"' + (rs.saving ? ' disabled' : '') + '>Deny</button>' +
+            '</div>'
+          ) : (r.reviewerNotes ? '<div class="subm-meta" style="margin-top:6px"><strong>Reviewer note:</strong> ' + esc(r.reviewerNotes) + '</div>' : '')) +
+          (rs.msg ? '<div class="row-status ' + (rs.ok ? 'ok' : 'err') + '">' + esc(rs.msg) + '</div>' : '') +
+        '</div>' +
+      '</details>';
+  }
+
+  function caseAgingListHtml() {
+    var rows = filteredCaseAgingRequests();
+    if (!rows.length) return '<div class="card"><div class="empty">No case aging exception requests match these filters.</div></div>';
+    return rows.map(caseAgingHtml).join('');
+  }
+
   function render() {
     document.getElementById('whoLine').textContent = state.user
       ? (state.user.name + (state.user.division ? ' · ' + state.user.division : ''))
@@ -293,15 +379,27 @@
     if (state.error) { content.innerHTML = '<div class="empty">' + esc(state.error) + '</div>'; return; }
 
     if (state.can.indexOf('page.bonusapproval') < 0) {
-      content.innerHTML = '<div class="empty">Your role does not have access to the CCR Bonus Approval page.</div>';
+      content.innerHTML = '<div class="empty">Your role does not have access to the Approvals page.</div>';
       return;
     }
 
-    content.innerHTML = toolbarHtml() + listHtml();
+    content.innerHTML = typeTabsHtml() +
+      (state.type === 'bonus' ? (toolbarHtml() + listHtml()) : (caseAgingToolbarHtml() + caseAgingListHtml()));
     wireControls();
   }
 
   function wireControls() {
+    Array.prototype.forEach.call(document.querySelectorAll('.type-tab'), function (btn) {
+      btn.addEventListener('click', function () {
+        var type = btn.getAttribute('data-type');
+        if (type === state.type) return;
+        state.type = type;
+        state.loading = true;
+        render();
+        load().then(function () { state.loading = false; render(); });
+      });
+    });
+
     var fStatus = document.getElementById('fStatus');
     if (fStatus) fStatus.addEventListener('change', function () { state.filterStatus = fStatus.value; render(); });
     var fMonth = document.getElementById('fMonth');
@@ -309,8 +407,16 @@
     var fAll = document.getElementById('fAll');
     if (fAll) fAll.addEventListener('change', function () { state.viewAll = fAll.checked; state.loading = true; render(); load().then(function () { state.loading = false; render(); }); });
 
+    var fCaStatus = document.getElementById('fCaStatus');
+    if (fCaStatus) fCaStatus.addEventListener('change', function () { state.caseAgingFilterStatus = fCaStatus.value; render(); });
+    var fCaAll = document.getElementById('fCaAll');
+    if (fCaAll) fCaAll.addEventListener('change', function () { state.caseAgingViewAll = fCaAll.checked; state.loading = true; render(); load().then(function () { state.loading = false; render(); }); });
+
     Array.prototype.forEach.call(document.querySelectorAll('button[data-action]'), function (btn) {
       btn.addEventListener('click', function () { doReview(btn.getAttribute('data-record'), btn.getAttribute('data-action')); });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('button[data-ca-action]'), function (btn) {
+      btn.addEventListener('click', function () { doCaseAgingReview(btn.getAttribute('data-record'), btn.getAttribute('data-ca-action')); });
     });
   }
 
@@ -330,6 +436,22 @@
     });
   }
 
+  function doCaseAgingReview(recordId, status) {
+    var ta = document.getElementById('ca-notes-' + recordId);
+    var notes = ta ? ta.value : undefined;
+    state.rowState[recordId] = { saving: true };
+    render();
+    apiPost('/case-aging-approvals', { recordId: recordId, status: status, notes: notes }).then(function (data) {
+      var idx = state.caseAgingRequests.findIndex(function (r) { return r.recordId === recordId; });
+      if (idx >= 0 && data.request) state.caseAgingRequests[idx] = data.request;
+      state.rowState[recordId] = { saving: false, ok: true, msg: 'Set to ' + status + '.' };
+      render();
+    }).catch(function (err) {
+      state.rowState[recordId] = { saving: false, ok: false, msg: 'Failed: ' + (err && err.message ? err.message : String(err)) };
+      render();
+    });
+  }
+
   function loadSession() {
     return apiGet('/session').then(function (data) {
       state.user = data.user || null;
@@ -337,6 +459,15 @@
     });
   }
   function load() {
+    if (state.type === 'caseAging') {
+      var caQs = state.caseAgingViewAll ? '?all=1' : '';
+      return apiGet('/case-aging-approvals' + caQs).then(function (data) {
+        state.caseAgingRequests = Array.isArray(data.requests) ? data.requests : [];
+        state.caseAgingReports = Array.isArray(data.reports) ? data.reports : [];
+        state.caseAgingIsAdmin = !!data.isAdmin;
+        state.caseAgingViewingAll = !!data.viewingAll;
+      });
+    }
     var qs = state.viewAll ? '?all=1' : '';
     return apiGet('/bonus-approvals' + qs).then(function (data) {
       state.submissions = Array.isArray(data.submissions) ? data.submissions : [];
