@@ -65,7 +65,11 @@ async function list(event) {
   }
 
   const email = A.normEmail(session.user.email);
-  const formula = '{Bonus Month} = "' + A.esc(month) + '" AND LOWER({Associate Email}) = "' + A.esc(email) + '"';
+  // Airtable formulas need AND(a, b) -- there is no infix "AND" keyword. The
+  // old '"a" AND "b"' string here was INVALID_FILTER_BY_FORMULA on every
+  // call, meaning this endpoint has always returned found:false regardless
+  // of whether a source row existed for the email/month.
+  const formula = 'AND({Bonus Month} = "' + A.esc(month) + '", LOWER({Associate Email}) = "' + A.esc(email) + '")';
   const [rec, exceptionsApproved] = await Promise.all([
     A.findOne(A.TABLES.bonusSource, formula),
     A.caseAgingExceptionsApprovedCount(email, month)
