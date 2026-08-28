@@ -11,6 +11,22 @@
  *            Admins additionally get everyone's via ?all=1 -- same "is this
  *            session an admin" gate as submit-bonus.js's own ?all=1.
  *
+ *   PATCH /api/case-aging
+ *         {recordId, caseClosedDate}
+ *         -> {request}
+ *
+ *         Records the date this CCR's own case actually closed. Only the
+ *         request's own submitter can set this (not a manager -- they don't
+ *         necessarily know when a rep's Salesforce case closed), and only on
+ *         an Approved request; a Pending or Denied request has nothing to
+ *         close against a bonus month for. This is the field
+ *         A.caseAgingExceptionsApprovedCount reads: an exception offsets
+ *         Aged Case math for whichever bonus month the case actually closes
+ *         in, not the month it was submitted or approved, since the whole
+ *         point of an exception is the case may run past its original
+ *         expected date. Can be called again to correct a wrong date as
+ *         long as the request is still Approved.
+ *
  * Gated on page.caseaging (see olh-auth.js ALL_PAGES/DEFAULT_ROLES) -- CCR
  * and Admin only, same shape as submit-bonus.js's page.bonus gate.
  *
@@ -49,6 +65,7 @@ function requestOf(rec) {
     reviewedBy: f['Reviewed By'] || '',
     reviewedAt: f['Reviewed At'] || '',
     reviewerNotes: f['Reviewer Notes'] || '',
+    caseClosedDate: f['Case Closed Date'] || '',
     submittedAt: f['Submitted At'] || ''
   };
 }
@@ -120,11 +137,40 @@ async function list(event) {
   return A.reply(200, { requests: rows });
 }
 
+async function markClosed(event) {
+  const session = await A.requireSession(event);
+  A.requirePerm(session, 'page.caseaging');
+
+  const body = A.readJson(event);
+  const recordId = str(body.recordId).trim();
+  const caseClosedDate = str(body.caseClosedDate).trim();
+  if (!recordId) return A.reply(400, { error: 'recordId is required.' });
+  if (!DATE_RE.test(caseClosedDate)) return A.reply(400, { error: 'caseClosedDate must be in YYYY-MM-DD form.' });
+
+  const target = await A.airtable('GET', '/' + A.TABLES.caseAgingExceptions + '/' + recordId).catch(() => null);
+  if (!target) return A.reply(404, { error: 'No matching case aging exception request.' });
+
+  const mine = String(session.user.email || '').toLowerCase();
+  const owner = String((target.fields && target.fields['Submitted By Email']) || '').toLowerCase();
+  const isAdmin = session.can.indexOf('roster.manage') >= 0;
+  if (!isAdmin && owner !== mine) {
+    return A.reply(403, { error: 'You can only set the closed date on your own requests.' });
+  }
+
+  const status = (target.fields && target.fields.Status) || 'Pending';
+  if (status !== 'Approved') {
+    return A.reply(400, { error: 'Only an Approved request can be marked closed. This request is ' + status + '.' });
+  }
+
+  const updated = await A.updateRecord(A.TABLES.caseAgingExceptions, recordId, { 'Case Closed Date': caseClosedDate });
+  return A.reply(200, { request: requestOf(updated) });
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 204,
-      headers: Object.assign({}, A.JSON_HEADERS, { Allow: 'GET, POST' }),
+      headers: Object.assign({}, A.JSON_HEADERS, { Allow: 'GET, POST, PATCH' }),
       body: ''
     };
   }
@@ -132,7 +178,8 @@ exports.handler = async (event) => {
   try {
     if (event.httpMethod === 'POST') return await submit(event);
     if (event.httpMethod === 'GET') return await list(event);
-    return A.reply(405, { error: 'GET or POST only.' });
+    if (event.httpMethod === 'PATCH') return await markClosed(event);
+    return A.reply(405, { error: 'GET, POST, or PATCH only.' });
   } catch (err) {
     return A.fail(err);
   }

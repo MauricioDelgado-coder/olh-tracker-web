@@ -131,6 +131,18 @@
       });
     });
   }
+  function apiPatch(path, payload) {
+    return fetch(API + path, {
+      method: 'PATCH',
+      headers: authedFetchHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload)
+    }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (body) {
+        if (!res.ok) throw new Error((body && body.error) || (path + ' failed (' + res.status + ')'));
+        return body;
+      });
+    });
+  }
 
   var state = {
     user: null, can: [], loading: true, error: '', requests: [], submitting: false, statusMsg: '', statusOk: false
@@ -158,12 +170,42 @@
     if (!state.requests.length) return '<div class="empty">No requests submitted yet.</div>';
     var rows = state.requests.map(function (r) {
       var c = statusColors(r.status);
+      var closedCell;
+      if (r.caseClosedDate) {
+        closedCell = esc(r.caseClosedDate);
+      } else if (r.status === 'Approved') {
+        closedCell = '<input type="date" class="close-date-input" id="close-date-' + r.recordId + '" style="width:132px;padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:12.5px">' +
+          ' <button type="button" class="mark-closed-btn" data-record="' + r.recordId + '" style="padding:4px 9px;font-size:12px">Set</button>';
+      } else {
+        closedCell = '<span style="color:var(--faint)">\u2014</span>';
+      }
       return '<tr><td>' + esc(r.caseNumber) + '</td><td>' + esc(r.submissionDate) + '</td>' +
         '<td class="num">' + esc(String(r.currentAgeDays)) + '</td>' +
         '<td>' + esc(r.expectedCompletionDate) + '</td>' +
-        '<td><span class="badge-status" style="color:' + c.ink + ';background:' + c.bg + '">' + esc(r.status) + '</span></td></tr>';
+        '<td><span class="badge-status" style="color:' + c.ink + ';background:' + c.bg + '">' + esc(r.status) + '</span></td>' +
+        '<td>' + closedCell + '</td></tr>';
     }).join('');
-    return '<table class="history"><thead><tr><th>Case #</th><th>Submitted</th><th>Age (days)</th><th>New Expected</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    return '<table class="history"><thead><tr><th>Case #</th><th>Submitted</th><th>Age (days)</th><th>New Expected</th><th>Status</th><th>Case Closed</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+      '<div class="hint" style="margin-top:8px">An Approved exception only offsets your Aged Case count for the bonus month the case actually closes in \u2014 set the date here once it does.</div>';
+  }
+
+  function wireHistoryControls() {
+    Array.prototype.forEach.call(document.querySelectorAll('.mark-closed-btn'), function (btn) {
+      btn.addEventListener('click', function () {
+        var recordId = btn.getAttribute('data-record');
+        var dateEl = document.getElementById('close-date-' + recordId);
+        var caseClosedDate = dateEl ? dateEl.value : '';
+        if (!caseClosedDate) { alert('Pick the date the case closed first.'); return; }
+        btn.disabled = true;
+        apiPatch('/case-aging', { recordId: recordId, caseClosedDate: caseClosedDate })
+          .then(function () { return loadHistory(); })
+          .then(function () { render(); })
+          .catch(function (err) {
+            btn.disabled = false;
+            alert('Could not set the closed date: ' + (err && err.message ? err.message : String(err)));
+          });
+      });
+    });
   }
 
   function formHtml() {
@@ -212,6 +254,7 @@
   function wireForm() {
     var submitBtn = document.getElementById('submitBtn');
     if (submitBtn) submitBtn.addEventListener('click', submitRequest);
+    wireHistoryControls();
   }
 
   function submitRequest() {

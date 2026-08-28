@@ -164,8 +164,17 @@ const createRecord = (tableId, fields) =>
   airtable('POST', '/' + tableId, { fields, typecast: true });
 
 /**
- * Count of a CCR's Approved Case Aging Exceptions for one bonus month,
- * matched on Submitted By Email + the month the exception was submitted in.
+ * Count of a CCR's Approved Case Aging Exceptions whose underlying case
+ * actually CLOSED in the given bonus month -- not the month the exception
+ * was submitted or approved. The whole point of an exception is that the
+ * case may run long and close later than expected, so the offset has to
+ * follow the case to whichever month it actually closes in, per the CCR
+ * Bonus Agreement.
+ *
+ * Requires Case Closed Date to be set (by the CCR, via PATCH /api/case-aging
+ * once they close the case in Salesforce) AND Status = Approved. A request
+ * that is Approved but not yet closed does not count toward any month yet;
+ * one that closed but was never approved never counts at all.
  *
  * Shared by submit-bonus.js (which trusts this, not the client, for the
  * dollar-affecting Aged Case Exceptions Approved figure) and bonus-source.js
@@ -176,7 +185,8 @@ const createRecord = (tableId, fields) =>
  */
 function caseAgingExceptionsApprovedCount(email, bonusMonth) {
   const formula = 'AND(LOWER({Submitted By Email}) = "' + esc(normEmail(email)) +
-    '", {Status} = "Approved", DATETIME_FORMAT({Submission Date}, "YYYY-MM") = "' + esc(bonusMonth) + '")';
+    '", {Status} = "Approved", {Case Closed Date} != "", ' +
+    'DATETIME_FORMAT({Case Closed Date}, "YYYY-MM") = "' + esc(bonusMonth) + '")';
   return listRecords(TABLES.caseAgingExceptions, { filterByFormula: formula }).then((recs) => recs.length);
 }
 

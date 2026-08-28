@@ -347,7 +347,7 @@
           '<div><label for="agedCases">Aged Cases Closed (21+ Days)</label><input id="agedCases" type="number" min="0" step="1" placeholder="0">' +
             sfHint('agedCases', state.sfSource ? state.sfSource.agedCases : 0) + '</div>' +
           '<div><label for="agedExceptions">Aged Case Exceptions Approved</label><input id="agedExceptions" type="number" min="0" step="1" value="' + state.exceptionsApproved + '" readonly>' +
-            '<div class="hint">Not Salesforce data \u2014 counted from your Approved <a href="case-aging.html">Case Aging Exception</a> requests for this month. Submit a request there to change this number.</div></div>' +
+            '<div class="hint">Not Salesforce data \u2014 counted from your Approved <a href="case-aging.html">Case Aging Exception</a> requests whose case closed this month. Mark a case closed there to change this number.</div></div>' +
         '</div>' +
       '</div>' +
 

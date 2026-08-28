@@ -25,10 +25,12 @@
  * Cases and therefore increases the Aged Case Bonus, so it gets the same
  * server-computed treatment as every other dollar-affecting figure. It is
  * computed via A.caseAgingExceptionsApprovedCount -- a count of this CCR's
- * own Approved rows in the Case Aging Exceptions table for this bonus
- * month, not Salesforce (that table has no such concept; see the note on
- * "Salesforce comparison" below). Whatever the client sends for
- * agedExceptions is ignored.
+ * own Approved rows in the Case Aging Exceptions table whose underlying
+ * case CLOSED in this bonus month (not the month the exception was
+ * submitted or approved -- the whole point of an exception is the case may
+ * run past its original expected date). Not Salesforce data; that table
+ * has no such concept (see the note on "Salesforce comparison" below).
+ * Whatever the client sends for agedExceptions is ignored.
  *
  * ---- Salesforce comparison ------------------------------------------------
  *

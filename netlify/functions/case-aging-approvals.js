@@ -58,6 +58,7 @@ function requestOf(rec) {
     reviewedBy: f['Reviewed By'] || '',
     reviewedAt: f['Reviewed At'] || '',
     reviewerNotes: f['Reviewer Notes'] || '',
+    caseClosedDate: f['Case Closed Date'] || '',
     submittedAt: f['Submitted At'] || ''
   };
 }
