@@ -32,17 +32,19 @@ script needs). The roster of *who is bonus-eligible* is still read from that
 skill's references/roster.json directly (static, human-curated, changes
 rarely) but the query building and SF-CLI plumbing are self-contained here.
 
-APPROVED CASE AGING EXCEPTIONS: for each month synced, this also pulls
-Approved rows from the Case Aging Exceptions Airtable table
-(tblF6CAPJkW4WgZmS) whose Case Closed Date falls in that month, and builds
-a set of excluded Case Numbers. Any case in that set is dropped entirely
-from Average Cycle Time / Aged Cases 21+ / Pct Closed Within 7 Days --
-matched case-by-case, not a blunt count subtraction -- but is STILL counted
-toward Cases Closed (SF). This means Aged Cases 21+ (SF) is now already net
-of approved exceptions; see the matching change in submit-bonus.js and
-bonus.html (both stopped separately subtracting
-A.caseAgingExceptionsApprovedCount from the aged count, which would
-otherwise double-discount every excepted case).
+APPROVED CASE AGING EXCEPTIONS: pulls every Approved row from the Case
+Aging Exceptions Airtable table (tblF6CAPJkW4WgZmS), by Case Number only --
+the exception's own Case Closed Date field is NOT used to decide which
+bonus month it applies to. A case's actual close month, from the live
+Salesforce case pull itself, is what determines that; if an aged case
+closing in a given bonus month has an Approved exception against it, it is
+dropped entirely from Average Cycle Time / Aged Cases 21+ / Pct Closed
+Within 7 Days for that month -- matched case-by-case, not a blunt count
+subtraction -- but is STILL counted toward Cases Closed (SF). This means
+Aged Cases 21+ (SF) is now already net of approved exceptions; see the
+matching change in submit-bonus.js and bonus.html (both stopped separately
+subtracting A.caseAgingExceptionsApprovedCount from the aged count, which
+would otherwise double-discount every excepted case).
 
 One row per (Associate Email, Bonus Month), upserted -- never duplicated,
 matched by "<email>|<month>" Key, same as before.
@@ -272,15 +274,18 @@ def fetch_existing_for_month(month_label):
     return records
 
 
-def fetch_approved_excluded_case_numbers(month_label):
-    """Case Numbers with an Approved Case Aging Exception whose Case Closed
-    Date falls in this month -- these are dropped from Average Cycle Time /
-    Aged Cases 21+ / Pct Closed Within 7 Days (but stay in Cases Closed).
-    Same criteria as A.caseAgingExceptionsApprovedCount in olh-auth.js,
-    minus the per-email scoping (a Case Number is unique to one case/owner
-    regardless, so no need to also filter by Submitted By Email here)."""
-    formula = ('AND({Status} = "Approved", {Case Closed Date} != "", '
-               'DATETIME_FORMAT({Case Closed Date}, "YYYY-MM") = "%s")') % esc(month_label)
+def fetch_approved_case_numbers():
+    """All Case Numbers with an Approved Case Aging Exception -- the
+    exception's own Case Closed Date field does NOT matter here. What
+    determines which bonus month a case's exclusion applies to is simply
+    which month the case actually closed in, per the live Salesforce case
+    pull (already scoped to the bonus month being synced) -- not a
+    manually-entered date on the exception request. A case aged in this
+    bonus month with an Approved exception for it is dropped from Average
+    Cycle Time / Aged Cases 21+ / Pct Closed Within 7 Days (but stays in
+    Cases Closed). Fetched once, not per-month, since the set itself has no
+    month dimension."""
+    formula = '{Status} = "Approved"'
     out, offset = set(), None
     while True:
         qs = 'pageSize=100&filterByFormula=' + urllib.parse.quote(formula)
@@ -361,6 +366,11 @@ def main():
     print('Touchpoint cases excluded from Cases Closed / derived stats: %s'
           % TOUCHPOINT_EXCLUDED_FROM_CLOSED, flush=True)
 
+    approved_case_numbers = fetch_approved_case_numbers()
+    print('%d Case Number(s) with an Approved Case Aging Exception (any date) -- '
+          'excluded from Avg Cycle/Aged/Within-7 wherever that case actually closed, '
+          'still counted toward Cases Closed.' % len(approved_case_numbers), flush=True)
+
     for year, mon, month_label in months_to_sync(args.month):
         print('\n=== %s ===' % month_label, flush=True)
         start = date(year, mon, 1)
@@ -384,12 +394,6 @@ def main():
         print('Querying Celebration/Acceptance walk assignments...', flush=True)
         walk_records = run_sf_query(walk_soql, args.alias)
         print('  %d homesites with a walk this month.' % len(walk_records), flush=True)
-
-        excluded_case_numbers = fetch_approved_excluded_case_numbers(month_label)
-        if excluded_case_numbers:
-            print('  %d case(s) excluded from Avg Cycle / Aged / Pct-Within-7 via '
-                  'Approved Case Aging Exceptions closing this month (still counted '
-                  'toward Cases Closed).' % len(excluded_case_numbers), flush=True)
 
         walk_counts = {}
         for r in walk_records:
@@ -417,9 +421,12 @@ def main():
             n_cases = len(counted)  # Cases Closed (SF) -- exception-excluded cases still count here
 
             # Avg Cycle / Aged / Pct-Within-7 drop any case with an Approved
-            # Case Aging Exception closing this month -- matched by exact
+            # Case Aging Exception request against it (any Case Number in
+            # approved_case_numbers, regardless of that exception's own
+            # recorded date -- the case's ACTUAL close date, already scoped
+            # to this bonus month above, is what matters). Matched by exact
             # Case Number, not a blunt count subtraction.
-            age_stat_cases = [c for c in counted if g(c, 'CaseNumber') not in excluded_case_numbers]
+            age_stat_cases = [c for c in counted if g(c, 'CaseNumber') not in approved_case_numbers]
             ages = [g(c, 'Age_Days__c') or 0 for c in age_stat_cases]
             n_age_stat = len(age_stat_cases)
             avg_cycle = round(sum(ages) / n_age_stat, 1) if n_age_stat else 0
