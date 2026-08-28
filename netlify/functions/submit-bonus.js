@@ -34,12 +34,20 @@
  *
  * ---- Salesforce comparison ------------------------------------------------
  *
- * At submit time, this looks up the matching CCR Bonus SF Source row (synced
- * periodically by dev/sync_ccr_bonus_source.py) for this email + bonusMonth
- * and copies its numbers onto the submission as a SNAPSHOT (the "(SF)"
- * fields) -- never as a live lookup from the submission's own read path. A
- * later resync of the source table must not retroactively change what a past
- * submission's Salesforce comparison looked like; the snapshot is what makes
+ * NOTE 2026-08-27: the puller that kept CCR Bonus SF Source current
+ * (dev/sync_ccr_bonus_source.py, run by launchd) was removed -- it was
+ * pulling incorrect numbers. The table, this snapshot-on-submit logic, and
+ * bonus-source.js's read path are all left in place for when the puller is
+ * rebuilt; until then, CCR Bonus SF Source will not receive new rows and
+ * existing rows will go stale. bonus.html's pre-fill/comparison will keep
+ * showing whatever was last synced.
+ *
+ * At submit time, this looks up the matching CCR Bonus SF Source row for
+ * this email + bonusMonth and copies its numbers onto the submission as a
+ * SNAPSHOT (the "(SF)" fields) -- never as a live lookup from the
+ * submission's own read path. A later resync of the source table must not
+ * retroactively change what a past submission's Salesforce comparison
+ * looked like; the snapshot is what makes
  * that true. "SF Source Found" is false (a real, distinct state, not just
  * blank SF fields) when no source row exists yet for that email/month --
  * e.g. the sync hasn't run for a brand-new hire -- so a leader reviewing
