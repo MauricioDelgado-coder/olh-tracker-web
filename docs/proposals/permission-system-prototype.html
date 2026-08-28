@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>OLH Permission System — Prototype</title>
+<style>
+  :root {
+    --bg: #0f1419; --panel: #161d27; --panel2: #1c2532; --border: #2a3644;
+    --text: #e6edf3; --muted: #8b98a5; --accent: #4f9cf9; --accent-dim: #2d4a6b;
+    --good: #3fb950; --warn: #d29922; --bad: #f85149;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    padding: 24px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 22px; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 16px 18px; margin-bottom: 20px;
+  }
+  .panel h2 { font-size: 14px; margin: 0 0 4px; color: var(--accent); }
+  .panel h2 .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 20px; height: 20px; border-radius: 50%; background: var(--accent-dim);
+    color: var(--text); font-size: 11px; margin-right: 8px; vertical-align: middle;
+  }
+  .panel .desc { color: var(--muted); font-size: 12px; margin-bottom: 14px; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 950px) { .two-col { grid-template-columns: 1fr; } }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .catalog-src {
+    background: #0a0e13; border: 1px solid var(--border); border-radius: 6px;
+    padding: 12px; font-size: 11.5px; max-height: 260px; overflow: auto; color: #9fd3ff;
+    white-space: pre;
+  }
+  .catalog-src .key { color: #f0883e; }
+  .catalog-src .str { color: #7ee787; }
+  select, button {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 10px; font-size: 13px; cursor: pointer;
+  }
+  select:focus, button:focus { outline: 1px solid var(--accent); }
+  button.primary { background: var(--accent-dim); border-color: var(--accent); }
+  button.small { padding: 3px 8px; font-size: 11px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { padding: 5px 8px; border-bottom: 1px solid var(--border); text-align: left; }
+  th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: .03em; }
+  .cap-cell { text-align: center; }
+  .cap-cell input[type=checkbox] { transform: scale(1.1); cursor: pointer; }
+  .pill {
+    display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 10.5px;
+    font-weight: 600; letter-spacing: .02em;
+  }
+  .pill.base { background: #21304a; color: #7fb0ff; }
+  .pill.grant { background: #1f3d24; color: #6fd67f; }
+  .pill.revoke { background: #3f1f22; color: #f38b8b; }
+  .pill.locked { background: #3a2f16; color: #e3b64f; }
+  .pill.stale { background: #3f1f22; color: #f38b8b; }
+  .pill.fresh { background: #1f3d24; color: #6fd67f; }
+  .row-flex { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+  .stack { display: flex; flex-direction: column; gap: 3px; }
+  .stack label { font-size: 11px; color: var(--muted); }
+  .effective-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip {
+    padding: 3px 9px; border-radius: 12px; font-size: 11.5px; background: var(--panel2);
+    border: 1px solid var(--border);
+  }
+  .chip.page { border-color: #2d4a6b; }
+  .chip.cap { border-color: #3d5a2f; }
+  .note { font-size: 11.5px; color: var(--muted); margin-top: 10px; line-height: 1.5; }
+  .divider { height: 1px; background: var(--border); margin: 14px 0; }
+  .warn-box {
+    background: #2a2110; border: 1px solid #4a3a15; color: #e3b64f; border-radius: 6px;
+    padding: 8px 10px; font-size: 12px; margin-top: 8px;
+  }
+  .flag { color: var(--bad); font-weight: 600; }
+  .ok { color: var(--good); font-weight: 600; }
+  .instance-box {
+    background: #0a0e13; border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px;
+  }
+  .instance-box h3 { font-size: 11.5px; margin: 0 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .timeline { font-size: 11px; color: var(--muted); margin-top: 6px; }
+  .timeline b { color: var(--text); }
+  .before-after { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .ba-box { border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; }
+  .ba-box.before { border-color: #4a3a15; background: #201a0d; }
+  .ba-box.after { border-color: #1f3d24; background: #0f1a10; }
+  .ba-box h4 { margin: 0 0 8px; font-size: 12px; }
+  .ba-box.before h4 { color: var(--warn); }
+  .ba-box.after h4 { color: var(--good); }
+  .ba-box ol, .ba-box ul { margin: 0; padding-left: 18px; font-size: 12px; }
+  .ba-box li { margin-bottom: 4px; }
+  .step-live { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<h1>OLH Permission System — Prototype</h1>
+<div class="sub">Rebuilt to follow the 5-point outline in order, each panel numbered to match. Sample data stands in for the real Roles / Users tables — nothing here touches Airtable or the live app.</div>
+
+<!-- ============ 1: SINGLE SOURCE OF TRUTH ============ -->
+<div class="panel">
+  <h2><span class="num">1</span>Single source of truth</h2>
+  <div class="desc">Replaces PERMS / ALL_PAGES / IMPLIES_VIEW / NEEDS_PAGE / DENY / PAGE_LABEL — six hand-maintained arrays — with one catalog everything else derives from.</div>
+  <div class="two-col">
+    <div>
+      <div id="catalogSrc" class="catalog-src"></div>
+    </div>
+    <div>
+      <div class="row-flex">
+        <button id="addPermBtn" class="small">+ Add sample permission to catalog</button>
+      </div>
+      <div id="addPermMsg" class="note"></div>
+      <div style="overflow-x:auto; margin-top:10px;">
+        <table id="matrixTable"></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 2: CACHE / REVOCATION GAP ============ -->
+<div class="panel">
+  <h2><span class="num">2</span>Cache / revocation gap</h2>
+  <div class="desc"><span class="mono">saveMatrix()</span> busts its own instance's 60s cache instantly, but other warm function instances keep serving the stale matrix until their own TTL expires. Simulated below with 3 instances.</div>
+  <div class="row-flex">
+    <button id="revokeSimBtn" class="primary small">Revoke page.bonusapproval from Leadership (simulate save)</button>
+    <button id="tickBtn" class="small">Advance clock +5s</button>
+    <span class="note" id="clockLabel" style="margin:0;">t = 0s</span>
+  </div>
+  <div class="two-col" style="grid-template-columns: repeat(3, 1fr);" id="instanceGrid"></div>
+  <div class="note" id="cacheNote"></div>
+</div>
+
+<!-- ============ 3: ADMIN UI FRAGILITY ============ -->
+<div class="panel">
+  <h2><span class="num">3</span>Admin UI fragility</h2>
+  <div class="desc">Today, changing the page list means decode → patch bundler template → re-encode → validate round-trip across 11+ bundled pages. Fix: admin.html fetches the catalog at load time instead of embedding it.</div>
+  <div class="before-after">
+    <div class="ba-box before">
+      <h4>Now: bundler template surgery</h4>
+      <ol>
+        <li>Decode gzip+base64 blob in <span class="mono">__bundler/manifest</span></li>
+        <li>Hand-edit hardcoded <span class="mono">&lt;option&gt;</span> list in <span class="mono">admin.html</span></li>
+        <li>Re-encode, run <span class="mono">patch-stale-auth-module.js</span></li>
+        <li>Run <span class="mono">check-page-perms.js --check</span> as deploy gate</li>
+        <li>Redeploy all 11+ bundled pages</li>
+      </ol>
+    </div>
+    <div class="ba-box after">
+      <h4>Proposed: fetch at load time</h4>
+      <ol>
+        <li>Add a permission to <span class="mono">PERMISSION_CATALOG</span></li>
+        <li><span class="mono">GET /api/permission-catalog</span> serves it live</li>
+        <li>admin.html renders whatever comes back</li>
+        <li>No bundler patch, no re-encode, no redeploy</li>
+      </ol>
+      <div class="step-live">
+        <button id="simulateFetchBtn" class="small">Simulate: call GET /api/permission-catalog</button>
+      </div>
+      <div id="fetchResult" class="note"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 4: PER-USER OVERRIDES ============ -->
+<div class="panel">
+  <h2><span class="num">4</span>Per-user overrides (no new role needed)</h2>
+  <div class="desc">Effective permissions = role base ± individual overrides. Stops a one-off exception from spawning a whole new role slug (how <span class="mono">sandbox</span> / <span class="mono">concierge</span> came to exist).</div>
+
+  <div class="row-flex">
+    <div class="stack">
+      <label>User</label>
+      <select id="userSelect"></select>
+    </div>
+    <div class="stack">
+      <label>Division scope</label>
+      <select id="divisionOverride"></select>
+    </div>
+  </div>
+
+  <div id="userMeta" class="note"></div>
+  <div class="divider"></div>
+
+  <div class="row-flex">
+    <div class="stack">
+      <label>Grant extra permission</label>
+      <select id="grantSelect"></select>
+    </div>
+    <button id="grantBtn" class="small">+ Grant</button>
+  </div>
+  <div class="row-flex">
+    <div class="stack">
+      <label>Revoke inherited permission</label>
+      <select id="revokeSelect"></select>
+    </div>
+    <button id="revokeBtn" class="small">– Revoke</button>
+  </div>
+
+  <div class="divider"></div>
+  <div style="font-size:12px; color:var(--muted); margin-bottom:4px;">Effective permissions for this user:</div>
+  <div id="effectiveList" class="effective-list"></div>
+  <div id="userWarnings"></div>
+</div>
+
+<!-- ============ 5: DIVISION SCOPING ============ -->
+<div class="panel">
+  <h2><span class="num">5</span>Division scoping (new axis)</h2>
+  <div class="desc">Capability = f(role, division) instead of just f(role). A Leadership user scoped to GFC can be missing bonus-approval rights that OLH/TPU/SAN Leadership keep, same role slug.</div>
+  <table id="scopeTable"></table>
+  <div class="note">Falls back to the flat role map wherever no division override exists, so current roles keep working unchanged.</div>
+</div>
+
+<script>
+/* =====================================================================
+   1. SINGLE-SOURCE CATALOG
+   ===================================================================== */
+const PERMISSION_CATALOG = {
+  'suite.view':        { label: 'OLH Suite (sign-in gate)', isPage: false },
+  'page.home':         { label: 'All Views (home)', isPage: true },
+  'page.mywalks':      { label: 'My Walks', isPage: true },
+  'page.tracker':      { label: 'QA & Closing Tracker', isPage: true },
+  'tracker.edit':      { label: 'Edit Tracker', impliesView: true, requiresPage: 'page.tracker' },
+  'page.completion':   { label: 'Completion Report', isPage: true },
+  'page.walks':        { label: 'Walk Schedule', isPage: true },
+  'walk.schedule':     { label: 'Schedule / Reassign Walks', impliesView: true, requiresPage: 'page.walks' },
+  'page.scheduler':    { label: 'Schedule Optimizer', isPage: true },
+  'optimizer.apply':   { label: 'Apply Optimizer Suggestions', impliesView: true, requiresPage: 'page.scheduler' },
+  'page.keys':         { label: 'Keys', isPage: true },
+  'page.redflags':     { label: 'Red Flags', isPage: true },
+  'page.bonus':        { label: 'CCR Monthly Bonus', isPage: true },
+  'page.bonusapproval':{ label: 'Approvals (Bonus + Case Aging)', isPage: true },
+  'page.caseaging':    { label: 'Case Aging Exception Request', isPage: true },
+  'page.admin':        { label: 'User Administration', isPage: true, adminOnly: true },
+  'roster.manage':     { label: 'Manage Roster', impliesView: true, requiresPage: 'page.admin' },
+};
+
+function deriveCatalog(catalog) {
+  const PERMS = Object.keys(catalog);
+  const ALL_PAGES = PERMS.filter(p => catalog[p].isPage);
+  const IMPLIES_VIEW = PERMS.filter(p => catalog[p].impliesView);
+  const NEEDS_PAGE = {};
+  const DENY = {};
+  const PAGE_LABEL = {};
+  for (const p of PERMS) {
+    const meta = catalog[p];
+    if (meta.requiresPage) NEEDS_PAGE[p] = meta.requiresPage;
+    if (meta.isPage) PAGE_LABEL[p] = meta.label;
+    DENY[p] = meta.isPage
+      ? `Your role does not have access to the ${meta.label} page.`
+      : `Your role can't ${meta.label.toLowerCase()}.`;
+  }
+  const ADMIN_ONLY_PAGES = PERMS.filter(p => catalog[p].adminOnly);
+  return { PERMS, ALL_PAGES, IMPLIES_VIEW, NEEDS_PAGE, DENY, PAGE_LABEL, ADMIN_ONLY_PAGES };
+}
+
+function normalizeMatrix(catalog, roleMap) {
+  const derived = deriveCatalog(catalog);
+  const out = {};
+  for (const slug of Object.keys(roleMap)) {
+    let can = roleMap[slug].slice().filter(p => derived.PERMS.includes(p));
+    if (can.some(p => derived.IMPLIES_VIEW.includes(p)) && !can.includes('suite.view')) can.push('suite.view');
+    for (const cap of Object.keys(derived.NEEDS_PAGE)) {
+      if (can.includes(cap) && !can.includes(derived.NEEDS_PAGE[cap])) can.push(derived.NEEDS_PAGE[cap]);
+    }
+    if (slug !== 'admin') can = can.filter(p => !derived.ADMIN_ONLY_PAGES.includes(p));
+    out[slug] = derived.PERMS.filter(p => can.includes(p));
+  }
+  return out;
+}
+
+/* =====================================================================
+   SAMPLE DATA
+   ===================================================================== */
+let ROLE_BASE = {
+  admin:       ['suite.view','tracker.edit','walk.schedule','optimizer.apply','roster.manage'].concat(
+                 Object.keys(PERMISSION_CATALOG).filter(p => PERMISSION_CATALOG[p].isPage)),
+  qam:         ['suite.view','page.home','page.mywalks'],
+  cm:          ['suite.view','tracker.edit','page.home','page.tracker','page.completion','page.walks','page.redflags'],
+  ccr:         ['suite.view','tracker.edit','page.home','page.tracker','page.walks','page.bonus','page.caseaging'],
+  leadership:  ['suite.view','page.home','page.tracker','page.completion','page.walks','page.scheduler',
+                 'page.keys','page.redflags','page.bonusapproval'],
+  concierge:   ['suite.view','page.home','page.tracker','page.scheduler'],
+};
+
+const ROLE_LABEL = {
+  admin:'Admin', qam:'QA Manager', cm:'Construction Manager', ccr:'Customer Care',
+  leadership:'Division Leadership', concierge:'Concierge'
+};
+
+const SAMPLE_USERS = [
+  { id:'u1', name:'Jeff Boyd',        role:'qam',        division:'OLH' },
+  { id:'u2', name:'Rajmani Ramdeo',   role:'ccr',         division:'OLH' },
+  { id:'u3', name:'Susan Jairam',     role:'leadership',  division:'TPU' },
+  { id:'u4', name:'Sarah Parrish',    role:'leadership',  division:'GFC' },
+  { id:'u5', name:'Alex Keeler',      role:'qam',         division:'SAN' },
+];
+
+let USER_OVERRIDES = {
+  u2: { grants: ['page.scheduler'], revokes: [] },
+};
+
+let DIVISION_SCOPE = {
+  GFC: { leadership: ['suite.view','page.home','page.tracker','page.completion'] }
+};
+
+/* =====================================================================
+   PANEL 1 — catalog + matrix
+   ===================================================================== */
+function renderCatalogSrc() {
+  const el = document.getElementById('catalogSrc');
+  let html = 'const PERMISSION_CATALOG = {\n';
+  for (const [k, v] of Object.entries(PERMISSION_CATALOG)) {
+    html += `  <span class="key">'${k}'</span>: { label: <span class="str">'${v.label}'</span>`;
+    if (v.isPage) html += `, isPage: true`;
+    if (v.impliesView) html += `, impliesView: true`;
+    if (v.requiresPage) html += `, requiresPage: <span class="str">'${v.requiresPage}'</span>`;
+    if (v.adminOnly) html += `, adminOnly: true`;
+    html += ' },\n';
+  }
+  html += '};';
+  el.innerHTML = html;
+}
+
+function renderMatrix() {
+  const derived = deriveCatalog(PERMISSION_CATALOG);
+  const normalized = normalizeMatrix(PERMISSION_CATALOG, ROLE_BASE);
+  const table = document.getElementById('matrixTable');
+  let html = '<tr><th>Permission</th>';
+  for (const slug of Object.keys(ROLE_BASE)) html += `<th>${ROLE_LABEL[slug]}</th>`;
+  html += '</tr>';
+  for (const perm of derived.PERMS) {
+    const meta = PERMISSION_CATALOG[perm];
+    html += `<tr><td>${meta.label} <span class="mono" style="color:var(--muted);font-size:10.5px;">(${perm})</span></td>`;
+    for (const slug of Object.keys(ROLE_BASE)) {
+      const has = normalized[slug].includes(perm);
+      html += `<td class="cap-cell"><input type="checkbox" data-role="${slug}" data-perm="${perm}" ${has?'checked':''} ${slug==='admin'?'disabled title="Admin is locked to full access"':''}></td>`;
+    }
+    html += '</tr>';
+  }
+  table.innerHTML = html;
+  table.querySelectorAll('input[type=checkbox]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const { role, perm } = cb.dataset;
+      const set = new Set(ROLE_BASE[role]);
+      if (cb.checked) set.add(perm); else set.delete(perm);
+      ROLE_BASE[role] = Array.from(set);
+      renderMatrix();
+      renderUserPanel();
+    });
+  });
+}
+
+document.getElementById('addPermBtn').addEventListener('click', () => {
+  const n = Object.keys(PERMISSION_CATALOG).length;
+  const key = 'page.demo' + n;
+  PERMISSION_CATALOG[key] = { label: 'Demo Page ' + n, isPage: true };
+  document.getElementById('addPermMsg').textContent = `Added "${key}" — new row appeared, no bundler template touched.`;
+  renderCatalogSrc();
+  renderMatrix();
+  renderUserPanel();
+});
+
+/* =====================================================================
+   PANEL 2 — cache / revocation simulation
+   ===================================================================== */
+let simClock = 0;
+const INSTANCE_TTLS = [
+  { name: 'Instance A (wrote the save)', lastRefresh: 0 },
+  { name: 'Instance B (warm, idle)',     lastRefresh: 0 },
+  { name: 'Instance C (warm, idle)',     lastRefresh: 0 },
+];
+const MATRIX_TTL = 60; // seconds, matches MATRIX_TTL_MS in real code
+let revokedAt = null;
+
+function renderInstances() {
+  const grid = document.getElementById('instanceGrid');
+  grid.innerHTML = INSTANCE_TTLS.map((inst, i) => {
+    const age = simClock - inst.lastRefresh;
+    const servesFresh = i === 0 ? true : (revokedAt === null || age >= MATRIX_TTL || inst.lastRefresh >= revokedAt);
+    return `
+      <div class="instance-box">
+        <h3>${inst.name}</h3>
+        <div>Serves: <span class="pill ${servesFresh ? 'fresh' : 'stale'}">${servesFresh ? 'page.bonusapproval revoked' : 'page.bonusapproval STILL ACTIVE'}</span></div>
+        <div class="timeline">Cache age: <b>${age}s</b> / ${MATRIX_TTL}s TTL</div>
+      </div>`;
+  }).join('');
+  document.getElementById('clockLabel').textContent = `t = ${simClock}s`;
+}
+
+document.getElementById('revokeSimBtn').addEventListener('click', () => {
+  revokedAt = simClock;
+  INSTANCE_TTLS[0].lastRefresh = simClock;
+  document.getElementById('cacheNote').innerHTML =
+    `<span class="flag">Revoked at t=${simClock}s.</span> Instance A reflects it immediately. B and C keep serving the old permission until their own 60s window lapses.`;
+  renderInstances();
+});
+
+document.getElementById('tickBtn').addEventListener('click', () => {
+  simClock += 5;
+  if (revokedAt !== null && simClock - revokedAt >= MATRIX_TTL) {
+    document.getElementById('cacheNote').innerHTML =
+      `<span class="ok">All instances converged at t=${simClock}s</span> — worst case matched MATRIX_TTL_MS exactly. A version-stamp check instead of wall-clock TTL would close this gap on the next request rather than waiting it out.`;
+  }
+  renderInstances();
+});
+
+renderInstances();
+
+/* =====================================================================
+   PANEL 3 — admin UI fetch simulation
+   ===================================================================== */
+document.getElementById('simulateFetchBtn').addEventListener('click', () => {
+  const derived = deriveCatalog(PERMISSION_CATALOG);
+  const payload = JSON.stringify({ pages: derived.ALL_PAGES, perms: derived.PERMS }, null, 0);
+  document.getElementById('fetchResult').innerHTML =
+    `<span class="ok">200 OK</span> — ${derived.PERMS.length} permissions, ${derived.ALL_PAGES.length} pages returned. ` +
+    `admin.html renders this directly; no manifest decode, no re-encode, no redeploy.<br>` +
+    `<span class="mono" style="font-size:10.5px;">${payload.slice(0,140)}${payload.length>140?'…':''}</span>`;
+});
+
+/* =====================================================================
+   PANEL 4 — per-user overrides
+   ===================================================================== */
+function populateUserSelect() {
+  const sel = document.getElementById('userSelect');
+  sel.innerHTML = SAMPLE_USERS.map(u => `<option value="${u.id}">${u.name} — ${ROLE_LABEL[u.role]} (${u.division})</option>`).join('');
+}
+function populateDivisionOverride() {
+  const sel = document.getElementById('divisionOverride');
+  sel.innerHTML = ['OLH','TPU','SAN','GFC'].map(d => `<option value="${d}">${d}</option>`).join('');
+}
+function currentUser() {
+  const id = document.getElementById('userSelect').value;
+  return SAMPLE_USERS.find(u => u.id === id);
+}
+function effectivePermsFor(user, divisionOverrideVal) {
+  const division = divisionOverrideVal || user.division;
+  const normalizedBase = normalizeMatrix(PERMISSION_CATALOG, ROLE_BASE);
+  let base = normalizedBase[user.role] ? normalizedBase[user.role].slice() : [];
+  const scopeOverride = DIVISION_SCOPE[division] && DIVISION_SCOPE[division][user.role];
+  if (scopeOverride) base = scopeOverride.slice();
+  const ov = USER_OVERRIDES[user.id] || { grants: [], revokes: [] };
+  let effective = new Set(base);
+  ov.grants.forEach(p => effective.add(p));
+  ov.revokes.forEach(p => effective.delete(p));
+  return { effective: Array.from(effective), base, ov, division, scopeOverride: !!scopeOverride };
+}
+function renderUserPanel() {
+  const user = currentUser();
+  if (!user) return;
+  const divSel = document.getElementById('divisionOverride');
+  divSel.value = user.division;
+  const { effective, ov, division, scopeOverride } = effectivePermsFor(user, divSel.value);
+  const derived = deriveCatalog(PERMISSION_CATALOG);
+
+  document.getElementById('userMeta').innerHTML =
+    `Base role: <b>${ROLE_LABEL[user.role]}</b> &nbsp;•&nbsp; Home division: <b>${user.division}</b>` +
+    (scopeOverride ? ` &nbsp;•&nbsp; <span class="flag">division scope override active for ${division}</span>` : '');
+
+  const list = document.getElementById('effectiveList');
+  list.innerHTML = effective.sort().map(p => {
+    const isGrant = ov.grants.includes(p);
+    const isPage = derived.ALL_PAGES.includes(p);
+    const label = PERMISSION_CATALOG[p].label;
+    return `<span class="chip ${isPage?'page':'cap'}">${label}${isGrant?' <span class="pill grant" style="margin-left:4px;">override</span>':''}</span>`;
+  }).join('') || '<span class="note">No permissions.</span>';
+
+  document.getElementById('userWarnings').innerHTML = ov.revokes.length
+    ? `<div class="warn-box">Revoked from base role: ${ov.revokes.map(p=>PERMISSION_CATALOG[p].label).join(', ')}</div>`
+    : '';
+
+  const grantSel = document.getElementById('grantSelect');
+  const notGranted = derived.PERMS.filter(p => !effective.includes(p));
+  grantSel.innerHTML = notGranted.map(p => `<option value="${p}">${PERMISSION_CATALOG[p].label}</option>`).join('') || '<option disabled>Already has everything</option>';
+
+  const revokeSel = document.getElementById('revokeSelect');
+  const { base } = effectivePermsFor(user, divSel.value);
+  revokeSel.innerHTML = base.map(p => `<option value="${p}">${PERMISSION_CATALOG[p].label}</option>`).join('') || '<option disabled>Nothing to revoke</option>';
+}
+
+document.getElementById('userSelect').addEventListener('change', renderUserPanel);
+document.getElementById('divisionOverride').addEventListener('change', renderUserPanel);
+document.getElementById('grantBtn').addEventListener('click', () => {
+  const user = currentUser();
+  const perm = document.getElementById('grantSelect').value;
+  if (!perm) return;
+  USER_OVERRIDES[user.id] = USER_OVERRIDES[user.id] || { grants: [], revokes: [] };
+  USER_OVERRIDES[user.id].grants.push(perm);
+  USER_OVERRIDES[user.id].revokes = USER_OVERRIDES[user.id].revokes.filter(p => p !== perm);
+  renderUserPanel();
+});
+document.getElementById('revokeBtn').addEventListener('click', () => {
+  const user = currentUser();
+  const perm = document.getElementById('revokeSelect').value;
+  if (!perm) return;
+  USER_OVERRIDES[user.id] = USER_OVERRIDES[user.id] || { grants: [], revokes: [] };
+  USER_OVERRIDES[user.id].revokes.push(perm);
+  USER_OVERRIDES[user.id].grants = USER_OVERRIDES[user.id].grants.filter(p => p !== perm);
+  renderUserPanel();
+});
+
+/* =====================================================================
+   PANEL 5 — division scoping table
+   ===================================================================== */
+function renderScopeTable() {
+  const divisions = ['OLH','TPU','SAN','GFC'];
+  const roleSlugs = Object.keys(ROLE_BASE).filter(r => r !== 'admin');
+  const table = document.getElementById('scopeTable');
+  let html = '<tr><th>Role</th>' + divisions.map(d=>`<th>${d}</th>`).join('') + '</tr>';
+  for (const role of roleSlugs) {
+    html += `<tr><td>${ROLE_LABEL[role]}</td>`;
+    for (const div of divisions) {
+      const scoped = DIVISION_SCOPE[div] && DIVISION_SCOPE[div][role];
+      html += `<td class="cap-cell">`;
+      html += scoped
+        ? `<span class="pill locked" title="Restricted set: ${scoped.map(p=>PERMISSION_CATALOG[p]?.label).join(', ')}">scoped</span>`
+        : `<span class="pill base">standard</span>`;
+      html += `</td>`;
+    }
+    html += '</tr>';
+  }
+  table.innerHTML = html;
+}
+
+/* =====================================================================
+   INIT
+   ===================================================================== */
+renderCatalogSrc();
+renderMatrix();
+populateUserSelect();
+populateDivisionOverride();
+renderUserPanel();
+renderScopeTable();
+</script>
+</body>
+</html>
