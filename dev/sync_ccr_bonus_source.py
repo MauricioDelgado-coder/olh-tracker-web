@@ -32,6 +32,18 @@ script needs). The roster of *who is bonus-eligible* is still read from that
 skill's references/roster.json directly (static, human-curated, changes
 rarely) but the query building and SF-CLI plumbing are self-contained here.
 
+APPROVED CASE AGING EXCEPTIONS: for each month synced, this also pulls
+Approved rows from the Case Aging Exceptions Airtable table
+(tblF6CAPJkW4WgZmS) whose Case Closed Date falls in that month, and builds
+a set of excluded Case Numbers. Any case in that set is dropped entirely
+from Average Cycle Time / Aged Cases 21+ / Pct Closed Within 7 Days --
+matched case-by-case, not a blunt count subtraction -- but is STILL counted
+toward Cases Closed (SF). This means Aged Cases 21+ (SF) is now already net
+of approved exceptions; see the matching change in submit-bonus.js and
+bonus.html (both stopped separately subtracting
+A.caseAgingExceptionsApprovedCount from the aged count, which would
+otherwise double-discount every excepted case).
+
 One row per (Associate Email, Bonus Month), upserted -- never duplicated,
 matched by "<email>|<month>" Key, same as before.
 """
@@ -52,6 +64,7 @@ from datetime import date, datetime, timedelta, timezone
 BASE_ID = 'appYX9df4lGO6G2uz'
 SOURCE_TABLE = 'tbl8eMWVp2Dx1YcDg'   # CCR Bonus SF Source
 USERS_TABLE = 'tblTesJj3P7BSiErH'
+CASE_AGING_TABLE = 'tblF6CAPJkW4WgZmS'   # Case Aging Exceptions
 AIRTABLE_API = 'https://api.airtable.com/v0'
 ROSTER_PATH = os.path.expanduser(
     '~/.claude/skills/ccr-monthly-bonus/references/roster.json')
@@ -259,6 +272,31 @@ def fetch_existing_for_month(month_label):
     return records
 
 
+def fetch_approved_excluded_case_numbers(month_label):
+    """Case Numbers with an Approved Case Aging Exception whose Case Closed
+    Date falls in this month -- these are dropped from Average Cycle Time /
+    Aged Cases 21+ / Pct Closed Within 7 Days (but stay in Cases Closed).
+    Same criteria as A.caseAgingExceptionsApprovedCount in olh-auth.js,
+    minus the per-email scoping (a Case Number is unique to one case/owner
+    regardless, so no need to also filter by Submitted By Email here)."""
+    formula = ('AND({Status} = "Approved", {Case Closed Date} != "", '
+               'DATETIME_FORMAT({Case Closed Date}, "YYYY-MM") = "%s")') % esc(month_label)
+    out, offset = set(), None
+    while True:
+        qs = 'pageSize=100&filterByFormula=' + urllib.parse.quote(formula)
+        if offset:
+            qs += '&offset=' + offset
+        page = airtable('GET', '/%s?%s' % (CASE_AGING_TABLE, qs))
+        for r in page.get('records', []):
+            cn = str((r.get('fields') or {}).get('Case Number', '')).strip()
+            if cn:
+                out.add(cn)
+        offset = page.get('offset')
+        if not offset:
+            break
+    return out
+
+
 def write_batches(verb, payload):
     if not payload:
         return 0
@@ -347,6 +385,12 @@ def main():
         walk_records = run_sf_query(walk_soql, args.alias)
         print('  %d homesites with a walk this month.' % len(walk_records), flush=True)
 
+        excluded_case_numbers = fetch_approved_excluded_case_numbers(month_label)
+        if excluded_case_numbers:
+            print('  %d case(s) excluded from Avg Cycle / Aged / Pct-Within-7 via '
+                  'Approved Case Aging Exceptions closing this month (still counted '
+                  'toward Cases Closed).' % len(excluded_case_numbers), flush=True)
+
         walk_counts = {}
         for r in walk_records:
             cel_mgr = g(r, 'Celebration_Manager__r.Name')
@@ -370,13 +414,20 @@ def main():
                 counted = [c for c in owned if g(c, 'RecordType.Name') != 'Touchpoint']
             else:
                 counted = owned
-            n_cases = len(counted)
-            ages = [g(c, 'Age_Days__c') or 0 for c in counted]
-            avg_cycle = round(sum(ages) / n_cases, 1) if n_cases else 0
+            n_cases = len(counted)  # Cases Closed (SF) -- exception-excluded cases still count here
+
+            # Avg Cycle / Aged / Pct-Within-7 drop any case with an Approved
+            # Case Aging Exception closing this month -- matched by exact
+            # Case Number, not a blunt count subtraction.
+            age_stat_cases = [c for c in counted if g(c, 'CaseNumber') not in excluded_case_numbers]
+            ages = [g(c, 'Age_Days__c') or 0 for c in age_stat_cases]
+            n_age_stat = len(age_stat_cases)
+            avg_cycle = round(sum(ages) / n_age_stat, 1) if n_age_stat else 0
             aged = sum(1 for a in ages if a > 21)
             within7 = sum(1 for a in ages if a <= 7)
-            pct_within7 = round(within7 / n_cases, 3) if n_cases else 0
+            pct_within7 = round(within7 / n_age_stat, 3) if n_age_stat else 0
             cel, acc = walk_counts.get(raw_name, (0, 0))
+            n_excepted_for_rep = n_cases - n_age_stat
 
             fields = {
                 'Key': email + '|' + month_label,
@@ -390,10 +441,12 @@ def main():
                 'CEL Walks (SF)': cel,
                 'ACC Walks (SF)': acc,
                 'Last Synced': now,
-                'Sync Run Note': '%d cases pulled total (%d Touchpoint %s), %d walk-tagged homesites' % (
+                'Sync Run Note': ('%d cases pulled total (%d Touchpoint %s), %d walk-tagged '
+                                  'homesites, %d case(s) excluded from Avg Cycle/Aged/Within-7 '
+                                  'via approved aging exceptions') % (
                     len(case_records), n_touchpoint,
                     'excluded' if TOUCHPOINT_EXCLUDED_FROM_CLOSED else 'included',
-                    len(walk_records)),
+                    len(walk_records), n_excepted_for_rep),
             }
 
             hit = existing.get(email)

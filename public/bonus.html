@@ -178,8 +178,13 @@
     var rate = avgCycle <= 6 ? 20 : (avgCycle <= 8 ? 15 : 5);
     return { bonus: rate * casesClosed, eligible: true };
   }
-  function agedCaseBonus(agedCases, exceptions) {
-    var net = Math.max(0, agedCases - exceptions);
+  function agedCaseBonus(agedCases) {
+    // agedCases arrives already net of Approved Case Aging Exceptions --
+    // dev/sync_ccr_bonus_source.py excludes those cases (by exact Case
+    // Number) from Aged Cases 21+ (SF) upstream, which is what feeds this
+    // field's pre-fill. Matches the server-side fix in submit-bonus.js --
+    // this preview must not diverge from what actually gets submitted.
+    var net = agedCases;
     var bonus = net === 0 ? 750 : (net <= 2 ? 300 : 0);
     return { bonus: bonus, net: net };
   }
@@ -300,7 +305,7 @@
 
   function calc(f) {
     var closure = caseClosureBonus(f.casesClosed, f.avgCycle);
-    var aged = agedCaseBonus(f.agedCases, f.agedExceptions);
+    var aged = agedCaseBonus(f.agedCases);
     var consistency = serviceConsistencyBonus(f.pctWithin7);
     var celBonus = f.celWalks * CEL_RATE;
     var accBonus = f.accWalks * ACC_RATE;
@@ -376,7 +381,7 @@
           '<div><label for="agedCases">Aged Cases Closed (21+ Days)</label><input id="agedCases" type="number" min="0" step="1" placeholder="0">' +
             sfHint('agedCases', state.sfSource ? state.sfSource.agedCases : 0) + '</div>' +
           '<div><label for="agedExceptions">Aged Case Exceptions Approved</label><input id="agedExceptions" type="number" min="0" step="1" value="' + state.exceptionsApproved + '" readonly>' +
-            '<div class="hint">Not Salesforce data \u2014 counted from your Approved <a href="case-aging.html">Case Aging Exception</a> requests whose case closed this month. Mark a case closed there to change this number.</div></div>' +
+            '<div class="hint">Informational only \u2014 these cases are already excluded from Average Cycle Time, Aged Cases, and % Closed in 7 Days above once Salesforce data syncs. Not Salesforce data itself; counted from your Approved <a href="case-aging.html">Case Aging Exception</a> requests whose case closed this month.</div></div>' +
         '</div>' +
       '</div>' +
 

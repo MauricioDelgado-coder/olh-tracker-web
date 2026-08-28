@@ -19,40 +19,38 @@
  * Dollar amounts are computed HERE, server-side, from the CCR Bonus
  * Agreement's tiers -- never trusted from the client, the same reasoning
  * update-job.js applies to every write. Associate Name/Email/Division and
- * Submitted By/At all come from the session, never the body. As of the Case
- * Aging Exceptions integration, Aged Case Exceptions Approved is ALSO never
- * trusted from the client for the same reason: it directly reduces Net Aged
- * Cases and therefore increases the Aged Case Bonus, so it gets the same
- * server-computed treatment as every other dollar-affecting figure. It is
- * computed via A.caseAgingExceptionsApprovedCount -- a count of this CCR's
- * own Approved rows in the Case Aging Exceptions table whose underlying
- * case CLOSED in this bonus month (not the month the exception was
- * submitted or approved -- the whole point of an exception is the case may
- * run past its original expected date). Not Salesforce data; that table
- * has no such concept (see the note on "Salesforce comparison" below).
- * Whatever the client sends for agedExceptions is ignored.
+ * Submitted By/At all come from the session, never the body.
+ *
+ * AGED CASE EXCEPTIONS (2026-08-28 revision): dev/sync_ccr_bonus_source.py
+ * now excludes cases with an Approved Case Aging Exception (Case Closed
+ * Date in this bonus month) from Aged Cases 21+ (SF) upstream, matched by
+ * exact Case Number -- so the aged count arriving here (whether typed by
+ * the CCR or copied from the SF pre-fill) is already net of exceptions.
+ * agedCaseBonus() therefore no longer subtracts anything further. This
+ * replaced an earlier design where THIS endpoint subtracted
+ * A.caseAgingExceptionsApprovedCount (a raw count of approved exceptions,
+ * not matched against which cases were actually aged) from whatever aged
+ * count came in -- that double-discounted once the sync started netting
+ * cases out itself, and could discount an exception that wasn't even
+ * against an aged case. agedExceptions is still computed and stored below
+ * (informational -- shows how many exceptions applied this month, and is
+ * not Salesforce data -- Salesforce has no such concept) but no longer
+ * affects Aged Case Bonus. Whatever the client sends for it is ignored;
+ * it is always recomputed here from A.caseAgingExceptionsApprovedCount.
  *
  * ---- Salesforce comparison ------------------------------------------------
- *
- * NOTE 2026-08-27: the puller that kept CCR Bonus SF Source current
- * (dev/sync_ccr_bonus_source.py, run by launchd) was removed -- it was
- * pulling incorrect numbers. The table, this snapshot-on-submit logic, and
- * bonus-source.js's read path are all left in place for when the puller is
- * rebuilt; until then, CCR Bonus SF Source will not receive new rows and
- * existing rows will go stale. bonus.html's pre-fill/comparison will keep
- * showing whatever was last synced.
  *
  * At submit time, this looks up the matching CCR Bonus SF Source row for
  * this email + bonusMonth and copies its numbers onto the submission as a
  * SNAPSHOT (the "(SF)" fields) -- never as a live lookup from the
  * submission's own read path. A later resync of the source table must not
  * retroactively change what a past submission's Salesforce comparison
- * looked like; the snapshot is what makes
- * that true. "SF Source Found" is false (a real, distinct state, not just
- * blank SF fields) when no source row exists yet for that email/month --
- * e.g. the sync hasn't run for a brand-new hire -- so a leader reviewing
- * later can tell "no Salesforce data was available" apart from "Salesforce
- * said zero." "Has Discrepancy" is set when any CCR-entered number differs
+ * looked like; the snapshot is what makes that true. "SF Source Found" is
+ * false (a real, distinct state, not just blank SF fields) when no source
+ * row exists yet for that email/month -- e.g. the sync hasn't run for a
+ * brand-new hire -- so a leader reviewing later can tell "no Salesforce
+ * data was available" apart from "Salesforce said zero." "Has Discrepancy"
+ * is set when any CCR-entered number differs
  * from the SF snapshot outside a small tolerance for the two fields stored
  * as non-integers (avgCycle, pctWithin7); it does not block submission --
  * the CCR can always submit their own number, with an optional note leaders
@@ -83,8 +81,18 @@ function caseClosureBonus(casesClosed, avgCycle) {
   return { bonus: rate * casesClosed, eligible: true };
 }
 
-function agedCaseBonus(agedCases, exceptions) {
-  const net = Math.max(0, agedCases - exceptions);
+function agedCaseBonus(agedCases) {
+  // agedCases arrives already net of Approved Case Aging Exceptions --
+  // dev/sync_ccr_bonus_source.py excludes those cases (matched by exact
+  // Case Number) from Aged Cases 21+ (SF) upstream, at the sync level, which
+  // is what feeds bonus.html's pre-fill. This function used to also
+  // subtract A.caseAgingExceptionsApprovedCount here, which double-counted
+  // every excepted case once the sync started netting them out itself, and
+  // overpaid the Aged Case Bonus tier as a result -- see the 2026-08-28
+  // sync change for the full story. agedExceptions is still computed below
+  // and stored on the submission (informational -- shows how many
+  // exceptions applied this month) but no longer subtracted here.
+  const net = agedCases;
   let bonus = 0;
   if (net === 0) bonus = 750;
   else if (net <= 2) bonus = 300;
@@ -187,7 +195,7 @@ async function submit(event) {
   if (existing) return A.reply(200, { submission: submissionOf(existing), duplicate: true });
 
   const closure = caseClosureBonus(casesClosed, avgCycle);
-  const aged = agedCaseBonus(agedCases, agedExceptions);
+  const aged = agedCaseBonus(agedCases);
   const consistency = serviceConsistencyBonus(pctWithin7);
   const celBonus = celWalks * CEL_RATE;
   const accBonus = accWalks * ACC_RATE;
@@ -196,8 +204,11 @@ async function submit(event) {
   // Snapshot the Salesforce source (if any) for this email + month, and flag
   // a discrepancy -- see the file header for why this is a snapshot rather
   // than a live join, and why "not found" is tracked separately from zero.
-  const sourceFormula = '{Bonus Month} = "' + A.esc(bonusMonth) + '" AND LOWER({Associate Email}) = "' +
-    A.esc(A.normEmail(session.user.email)) + '"';
+  // Airtable formulas need AND(a, b), not infix "AND" -- see the matching
+  // 2026-08-28 fix in bonus-source.js. This copy had the same bug, meaning
+  // every past submission's SF snapshot was silently blank/false.
+  const sourceFormula = 'AND({Bonus Month} = "' + A.esc(bonusMonth) + '", LOWER({Associate Email}) = "' +
+    A.esc(A.normEmail(session.user.email)) + '")';
   const sourceRec = await A.findOne(A.TABLES.bonusSource, sourceFormula);
   const sf = sourceRec ? {
     casesClosed: sourceRec.fields['Cases Closed (SF)'] || 0,
