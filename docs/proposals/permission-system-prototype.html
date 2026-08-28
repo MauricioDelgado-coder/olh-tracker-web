@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>OLH Permission System — Prototype</title>
+<title>OLH Permission System — Prototype (live Airtable snapshot)</title>
 <style>
   :root {
     --bg: #0f1419; --panel: #161d27; --panel2: #1c2532; --border: #2a3644;
@@ -17,6 +17,7 @@
   }
   h1 { font-size: 20px; margin: 0 0 4px; }
   .sub { color: var(--muted); font-size: 13px; margin-bottom: 22px; }
+  .sub b { color: var(--text); }
   .panel {
     background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
     padding: 16px 18px; margin-bottom: 20px;
@@ -33,7 +34,7 @@
   code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   .catalog-src {
     background: #0a0e13; border: 1px solid var(--border); border-radius: 6px;
-    padding: 12px; font-size: 11.5px; max-height: 260px; overflow: auto; color: #9fd3ff;
+    padding: 12px; font-size: 11px; max-height: 320px; overflow: auto; color: #9fd3ff;
     white-space: pre;
   }
   .catalog-src .key { color: #f0883e; }
@@ -45,9 +46,9 @@
   select:focus, button:focus { outline: 1px solid var(--accent); }
   button.primary { background: var(--accent-dim); border-color: var(--accent); }
   button.small { padding: 3px 8px; font-size: 11px; }
-  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
   th, td { padding: 5px 8px; border-bottom: 1px solid var(--border); text-align: left; }
-  th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: .03em; }
+  th { color: var(--muted); font-weight: 500; font-size: 10.5px; text-transform: uppercase; letter-spacing: .03em; }
   .cap-cell { text-align: center; }
   .cap-cell input[type=checkbox] { transform: scale(1.1); cursor: pointer; }
   .pill {
@@ -60,6 +61,7 @@
   .pill.locked { background: #3a2f16; color: #e3b64f; }
   .pill.stale { background: #3f1f22; color: #f38b8b; }
   .pill.fresh { background: #1f3d24; color: #6fd67f; }
+  .pill.live { background: #17331f; color: #6fd67f; border: 1px solid #2c5a3a; }
   .row-flex { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
   .stack { display: flex; flex-direction: column; gap: 3px; }
   .stack label { font-size: 11px; color: var(--muted); }
@@ -94,17 +96,21 @@
   .ba-box ol, .ba-box ul { margin: 0; padding-left: 18px; font-size: 12px; }
   .ba-box li { margin-bottom: 4px; }
   .step-live { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .src-tag {
+    display: inline-block; font-size: 10px; color: var(--muted); border: 1px solid var(--border);
+    border-radius: 4px; padding: 1px 6px; margin-left: 6px; vertical-align: middle;
+  }
 </style>
 </head>
 <body>
 
-<h1>OLH Permission System — Prototype</h1>
-<div class="sub">Rebuilt to follow the 5-point outline in order, each panel numbered to match. Sample data stands in for the real Roles / Users tables — nothing here touches Airtable or the live app.</div>
+<h1>OLH Permission System — Prototype <span class="pill live">LIVE AIRTABLE SNAPSHOT</span></h1>
+<div class="sub">Roles and Users below are pulled directly from base <b>appYX9df4lGO6G2uz</b> — <b>7 real role records</b> (27 real permission values from the Roles.Permissions field) and all <b>66 real Users rows</b> — snapshotted 2026-08-28. This is a snapshot, not a live fetch; wiring this UI to <span class="mono">GET /api/roles</span> / <span class="mono">GET /api/users</span> for real-time editing is the next step. Nothing here writes back to Airtable.</div>
 
 <!-- ============ 1: SINGLE SOURCE OF TRUTH ============ -->
 <div class="panel">
   <h2><span class="num">1</span>Single source of truth</h2>
-  <div class="desc">Replaces PERMS / ALL_PAGES / IMPLIES_VIEW / NEEDS_PAGE / DENY / PAGE_LABEL — six hand-maintained arrays — with one catalog everything else derives from.</div>
+  <div class="desc">All 27 permission values that actually exist today in Roles.Permissions, given real labels/relationships. This replaces PERMS / ALL_PAGES / IMPLIES_VIEW / NEEDS_PAGE / DENY / PAGE_LABEL as one catalog.</div>
   <div class="two-col">
     <div>
       <div id="catalogSrc" class="catalog-src"></div>
@@ -114,7 +120,7 @@
         <button id="addPermBtn" class="small">+ Add sample permission to catalog</button>
       </div>
       <div id="addPermMsg" class="note"></div>
-      <div style="overflow-x:auto; margin-top:10px;">
+      <div style="overflow-x:auto; margin-top:10px; max-height:420px;">
         <table id="matrixTable"></table>
       </div>
     </div>
@@ -124,7 +130,7 @@
 <!-- ============ 2: CACHE / REVOCATION GAP ============ -->
 <div class="panel">
   <h2><span class="num">2</span>Cache / revocation gap</h2>
-  <div class="desc"><span class="mono">saveMatrix()</span> busts its own instance's 60s cache instantly, but other warm function instances keep serving the stale matrix until their own TTL expires. Simulated below with 3 instances.</div>
+  <div class="desc"><span class="mono">saveMatrix()</span> busts its own instance's 60s cache instantly, but other warm function instances keep serving the stale matrix until their own TTL expires. Simulated below with 3 instances (this part is mechanics, not Airtable data).</div>
   <div class="row-flex">
     <button id="revokeSimBtn" class="primary small">Revoke page.bonusapproval from Leadership (simulate save)</button>
     <button id="tickBtn" class="small">Advance clock +5s</button>
@@ -167,12 +173,12 @@
 
 <!-- ============ 4: PER-USER OVERRIDES ============ -->
 <div class="panel">
-  <h2><span class="num">4</span>Per-user overrides (no new role needed)</h2>
-  <div class="desc">Effective permissions = role base ± individual overrides. Stops a one-off exception from spawning a whole new role slug (how <span class="mono">sandbox</span> / <span class="mono">concierge</span> came to exist).</div>
+  <h2><span class="num">4</span>Per-user overrides (no new role needed) <span class="src-tag">66 real Users rows loaded</span></h2>
+  <div class="desc">Effective permissions = role base ± individual overrides. Stops a one-off exception from spawning a whole new role slug (how <span class="mono">sandbox</span> / <span class="mono">concierge</span> came to exist). Default selection below (Rajmani Ramdeo) reflects the real documented case: CCR overflow staff who cover ACC walks when QAM capacity is exhausted, and could use scheduler visibility without becoming Leadership.</div>
 
   <div class="row-flex">
     <div class="stack">
-      <label>User</label>
+      <label>User (real Users table row)</label>
       <select id="userSelect"></select>
     </div>
     <div class="stack">
@@ -207,34 +213,48 @@
 
 <!-- ============ 5: DIVISION SCOPING ============ -->
 <div class="panel">
-  <h2><span class="num">5</span>Division scoping (new axis)</h2>
-  <div class="desc">Capability = f(role, division) instead of just f(role). A Leadership user scoped to GFC can be missing bonus-approval rights that OLH/TPU/SAN Leadership keep, same role slug.</div>
+  <h2><span class="num">5</span>Division scoping (new axis) <span class="src-tag">real Division values from Users table</span></h2>
+  <div class="desc">Capability = f(role, division) instead of just f(role). The real data already shows why this matters: Sandbox role is split across <b>San Antonio</b> and <b>SAN-AUS</b> divisions today — this demo scopes SAN-AUS Sandbox users to view-only (no <span class="mono">sandbox.edit</span>) since that market's pilot hasn't gone live for editing yet, while San Antonio keeps full edit.</div>
   <table id="scopeTable"></table>
-  <div class="note">Falls back to the flat role map wherever no division override exists, so current roles keep working unchanged.</div>
+  <div class="note">Falls back to the flat role map wherever no division override exists, so current roles keep working unchanged. Divisions shown are the actual distinct values present on the 66 real Users rows: Orlando, Central Florida, San Antonio, SAN-AUS.</div>
 </div>
 
 <script>
 /* =====================================================================
-   1. SINGLE-SOURCE CATALOG
+   1. SINGLE-SOURCE CATALOG — the 27 real permission choices that exist
+      today in Airtable base appYX9df4lGO6G2uz, table Roles (tblIhpTZyCupEaASH),
+      field Permissions (fldDvrCAfDfWr4IbI). Labels are best-effort based on
+      known app pages; requiresPage/impliesView are inferred from which pages
+      co-occur with each capability across the 7 real role records.
    ===================================================================== */
 const PERMISSION_CATALOG = {
-  'suite.view':        { label: 'OLH Suite (sign-in gate)', isPage: false },
-  'page.home':         { label: 'All Views (home)', isPage: true },
-  'page.mywalks':      { label: 'My Walks', isPage: true },
-  'page.tracker':      { label: 'QA & Closing Tracker', isPage: true },
-  'tracker.edit':      { label: 'Edit Tracker', impliesView: true, requiresPage: 'page.tracker' },
-  'page.completion':   { label: 'Completion Report', isPage: true },
-  'page.walks':        { label: 'Walk Schedule', isPage: true },
-  'walk.schedule':     { label: 'Schedule / Reassign Walks', impliesView: true, requiresPage: 'page.walks' },
-  'page.scheduler':    { label: 'Schedule Optimizer', isPage: true },
-  'optimizer.apply':   { label: 'Apply Optimizer Suggestions', impliesView: true, requiresPage: 'page.scheduler' },
-  'page.keys':         { label: 'Keys', isPage: true },
-  'page.redflags':     { label: 'Red Flags', isPage: true },
-  'page.bonus':        { label: 'CCR Monthly Bonus', isPage: true },
-  'page.bonusapproval':{ label: 'Approvals (Bonus + Case Aging)', isPage: true },
-  'page.caseaging':    { label: 'Case Aging Exception Request', isPage: true },
-  'page.admin':        { label: 'User Administration', isPage: true, adminOnly: true },
-  'roster.manage':     { label: 'Manage Roster', impliesView: true, requiresPage: 'page.admin' },
+  'suite.view':          { label: 'OLH Suite (sign-in gate)' },
+  'page.home':           { label: 'All Views (Home)', isPage: true },
+  'page.mywalks':        { label: 'My Walks', isPage: true },
+  'walk.complete':       { label: 'Complete Walks', impliesView: true, requiresPage: 'page.mywalks' },
+  'page.tracker':        { label: 'QA & Closing Tracker', isPage: true },
+  'tracker.edit':        { label: 'Edit Tracker', impliesView: true, requiresPage: 'page.tracker' },
+  'page.completion':     { label: 'Completion Report', isPage: true },
+  'page.walks':          { label: 'Walk Schedule', isPage: true },
+  'walk.schedule':       { label: 'Schedule / Reassign Walks', impliesView: true, requiresPage: 'page.walks' },
+  'page.scheduler':      { label: 'Schedule Optimizer', isPage: true },
+  'optimizer.apply':     { label: 'Apply Optimizer Suggestions', impliesView: true, requiresPage: 'page.scheduler' },
+  'page.workload':       { label: 'Workload', isPage: true },
+  'page.qamgmt':         { label: 'QA Management', isPage: true },
+  'page.missedwalks':    { label: 'Missed Walks', isPage: true },
+  'page.timeoff':        { label: 'Time Off', isPage: true },
+  'page.walkstoschedule':{ label: 'Walks to Schedule', isPage: true },
+  'page.keys':           { label: 'Keys', isPage: true },
+  'page.game':           { label: 'Walk Reassignment Board', isPage: true },
+  'page.redflags':       { label: 'Red Flags', isPage: true },
+  'page.bonus':          { label: 'CCR Monthly Bonus', isPage: true },
+  'page.bonusapproval':  { label: 'Approvals (Bonus + Case Aging)', isPage: true },
+  'page.caseaging':      { label: 'Case Aging Exception Request', isPage: true },
+  'page.sanmpr':         { label: 'SAN Sandbox Tracker', isPage: true },
+  'sandbox.edit':        { label: 'Edit Sandbox Data', impliesView: true, requiresPage: 'page.sanmpr' },
+  'page.synchistory':    { label: 'Sync History', isPage: true },
+  'page.admin':          { label: 'User Administration', isPage: true, adminOnly: true },
+  'roster.manage':       { label: 'Manage Roster', impliesView: true, requiresPage: 'page.admin' },
 };
 
 function deriveCatalog(catalog) {
@@ -272,38 +292,124 @@ function normalizeMatrix(catalog, roleMap) {
 }
 
 /* =====================================================================
-   SAMPLE DATA
+   REAL DATA — pulled live from Airtable base appYX9df4lGO6G2uz, 2026-08-28.
+   ROLE_BASE: exact Permissions values from the 7 rows in table Roles.
+   SAMPLE_USERS: all 66 rows in table Users (Name/Email/Role/Division).
    ===================================================================== */
 let ROLE_BASE = {
-  admin:       ['suite.view','tracker.edit','walk.schedule','optimizer.apply','roster.manage'].concat(
-                 Object.keys(PERMISSION_CATALOG).filter(p => PERMISSION_CATALOG[p].isPage)),
-  qam:         ['suite.view','page.home','page.mywalks'],
-  cm:          ['suite.view','tracker.edit','page.home','page.tracker','page.completion','page.walks','page.redflags'],
-  ccr:         ['suite.view','tracker.edit','page.home','page.tracker','page.walks','page.bonus','page.caseaging'],
-  leadership:  ['suite.view','page.home','page.tracker','page.completion','page.walks','page.scheduler',
-                 'page.keys','page.redflags','page.bonusapproval'],
-  concierge:   ['suite.view','page.home','page.tracker','page.scheduler'],
+  admin: ['suite.view','tracker.edit','walk.complete','walk.schedule','optimizer.apply','roster.manage',
+          'sandbox.edit','page.home','page.mywalks','page.tracker','page.completion','page.walks','page.game',
+          'page.qamgmt','page.missedwalks','page.scheduler','page.timeoff','page.workload','page.walkstoschedule',
+          'page.admin','page.keys','page.sanmpr','page.synchistory','page.redflags','page.bonus',
+          'page.bonusapproval','page.caseaging'],
+  qam: ['suite.view','walk.complete','page.home','page.mywalks'],
+  cm: ['suite.view','page.home'],
+  ccr: ['suite.view','page.home','page.mywalks','page.bonus','page.caseaging'],
+  leadership: ['suite.view','tracker.edit','walk.schedule','optimizer.apply','roster.manage','page.home',
+               'page.tracker','page.completion','page.walks','page.game','page.qamgmt','page.missedwalks',
+               'page.scheduler','page.timeoff','page.workload','page.walkstoschedule','page.keys',
+               'page.synchistory','page.redflags','page.bonusapproval'],
+  concierge: ['suite.view','tracker.edit','walk.schedule','page.home','page.tracker','page.walks',
+              'page.missedwalks','page.scheduler','page.walkstoschedule'],
+  sandbox: ['suite.view','sandbox.edit','page.home','page.sanmpr'],
 };
 
 const ROLE_LABEL = {
   admin:'Admin', qam:'QA Manager', cm:'Construction Manager', ccr:'Customer Care',
-  leadership:'Division Leadership', concierge:'Concierge'
+  leadership:'Division Leadership', concierge:'Concierge', sandbox:'Sandbox'
 };
 
-const SAMPLE_USERS = [
-  { id:'u1', name:'Jeff Boyd',        role:'qam',        division:'OLH' },
-  { id:'u2', name:'Rajmani Ramdeo',   role:'ccr',         division:'OLH' },
-  { id:'u3', name:'Susan Jairam',     role:'leadership',  division:'TPU' },
-  { id:'u4', name:'Sarah Parrish',    role:'leadership',  division:'GFC' },
-  { id:'u5', name:'Alex Keeler',      role:'qam',         division:'SAN' },
+const ROLE_LABEL_TO_SLUG = {
+  'Admin':'admin', 'QA Manager':'qam', 'Construction Manager':'cm', 'Customer Care':'ccr',
+  'Division Leadership':'leadership', 'Concierge':'concierge', 'Sandbox':'sandbox'
+};
+
+// All 66 real Users rows (Name, Email, Role label -> slug, Division), pulled live.
+const RAW_USERS = [
+  ['Josh Allen','joshua.c.allen@lennar.com','Customer Care','Orlando'],
+  ['Susan Jairam','susan.jairam@lennar.com','Division Leadership','Orlando'],
+  ['Jodie Lacy','jodie.lacy@lennar.com','QA Manager','Orlando'],
+  ['Dylan Tash','dylan.tash@lennar.com','Customer Care','Orlando'],
+  ['John Pickarski','john.pickarski@lennar.com','Division Leadership','Orlando'],
+  ['Mauricio Delgado','mauricio.delgado@lennar.com','Admin','Central Florida'],
+  ['Ben Goldstein','benjamin.goldstein@lennar.com','Division Leadership','Orlando'],
+  ['Xander Smaby','xander.smaby@lennar.com','Division Leadership','Orlando'],
+  ['Loany Ramirez','loany.ramirez@lennar.com','Concierge','Orlando'],
+  ['Scott Spears','scott.spears@lennar.com','Sandbox','San Antonio'],
+  ['Rene Granados','rene.granados@lennar.com','QA Manager','Orlando'],
+  ['Joshua Irizarry','josh.irizarry@lennar.com','Customer Care','Orlando'],
+  ['Connor Pickles','connor.pickles@lennar.com','Customer Care','Orlando'],
+  ['Katrina Beard','katrina.beard@lennar.com','Customer Care','Orlando'],
+  ['Maria Mallol','maria.mallol@lennar.com','Concierge','Orlando'],
+  ['Jeff Boyd','jeff.boyd@lennar.com','QA Manager','Orlando'],
+  ['Jennifer McAvoy','jennifer.mcavoy@lennar.com','Customer Care','Orlando'],
+  ['Nicole Bachanov','nicole.bachanov@lennar.com','QA Manager','Orlando'],
+  ['Diana Moussalli','diana.moussalli@lennar.com','Admin','Orlando'],
+  ['Mark Revell','mark.revell@lennar.com','Division Leadership','Orlando'],
+  ['Justin Essigmann','justin.essigmann@lennar.com','QA Manager','Orlando'],
+  ['Amy Kober','amy.kober@lennar.com','Customer Care','Orlando'],
+  ["Kris O'Dell",'kris.odell@lennar.com','QA Manager','Orlando'],
+  ['Maria Daniela Pino','daniela.pino@lennar.com','Concierge','Orlando'],
+  ['Al Kaufman','al.kaufman@lennar.com','Division Leadership','Orlando'],
+  ['Brittany Filho','brittany.filho@lennar.com','QA Manager','Orlando'],
+  ['Test account','test.account@lennar.com','Sandbox','Orlando'],
+  ['Tabitha Riley','tabitha.riley@lennar.com','Customer Care','Orlando'],
+  ['Kenny Calhoun','kenny.calhoun@lennar.com','QA Manager','Orlando'],
+  ['Tabatha Worden','tabatha.worden@lennar.com','QA Manager','Orlando'],
+  ['Miranda Vita','miranda.vita@lennar.com','Customer Care','Orlando'],
+  ['Lance Beauchene','lance.beauchene@lennar.com','Customer Care','Orlando'],
+  ['Yalimar Gonzalez','yalimar.gonzalez@lennar.com','Customer Care','Orlando'],
+  ['Jennifer Brockman','jennifer.brockman@lennar.com','Concierge','Orlando'],
+  ['Lindsay Judkins','lindsay.judkins@lennar.com','Concierge','Orlando'],
+  ['Lissette Ortiz','lissette.ortiz@lennar.com','QA Manager','Orlando'],
+  ['Victoria Mills','victoria.mills@lennar.com','Customer Care','Orlando'],
+  ['Raymond Kollar','ray.kollar@lennar.com','QA Manager','Orlando'],
+  ['Matt Griffith','matt.griffith@lennar.com','Customer Care','Orlando'],
+  ['Anthony Desimone','anthony.desimone@lennar.com','Admin','Orlando'],
+  ['Max Ceron','maximo.ceron@lennar.com','Division Leadership','Orlando'],
+  ['Alex Keeler','alex.keeler@lennar.com','QA Manager','Orlando'],
+  ['Tara Waycott','tara.waycott@lennar.com','Sandbox','San Antonio'],
+  ['Stan Deringer','stan.deringer@lennar.com','Sandbox','SAN-AUS'],
+  ['Bob Rowland','bob.rowland@lennar.com','Division Leadership','Orlando'],
+  ['Moniquie Bolden','moniquie.bolden@lennar.com','Customer Care','Orlando'],
+  ["Don'ta Watkins",'donta.watkins@lennar.com','QA Manager','Orlando'],
+  ['Shannon Rowland','shannon.rowland@lennar.com','Customer Care','Orlando'],
+  ['Jennifer Winston','jennifer.winston@lennar.com','Concierge','Orlando'],
+  ['Deb Rodriguez','deb.rodriguez@lennar.com','Division Leadership','Orlando'],
+  ['Rajmani Ramdeo','rajmani.ramdeo@lennar.com','Customer Care','Orlando'],
+  ['Alexis Saber','alexis.saber@lennar.com','Customer Care','Orlando'],
+  ['Blake Beauchene','blake.beauchene@lennar.com','QA Manager','Orlando'],
+  ['Vanessa Cortes','vanessa.cortes@lennar.com','Division Leadership','Orlando'],
+  ['Crystal Santiago','crystal.santiago@lennar.com','QA Manager','Orlando'],
+  ['Yomaris Isaac','yomaris.isaac@lennar.com','QA Manager','Orlando'],
+  ['Kiarha Rivera','kiarha.rivera@lennar.com','QA Manager','Orlando'],
+  ['Natalie Fung','natalie.fung@lennar.com','Customer Care','Orlando'],
+  ['Jerad Baynham','jerad.baynham@lennar.com','Sandbox','San Antonio'],
+  ['Ivonne Lopez','ivonne.lopez@lennar.com','Customer Care','Central Florida'],
+  ['Anthony Bullard','anthony.bullard@lennar.com','QA Manager','Orlando'],
+  ['Mariangel Da Costa','mariangel.dacosta@lennar.com','Concierge','Orlando'],
+  ['Darren Stockdale','darren.stockdale@lennar.com','QA Manager','Orlando'],
+  ['Mathew Olguin','mathew.olguin@lennar.com','Division Leadership','Orlando'],
+  ['Emily Sakkab','emily.sakkab@lennar.com','Division Leadership','Orlando'],
+  ['Kimberly Neuman','kimberly.neuman@lennar.com','Customer Care','Orlando'],
 ];
 
+const SAMPLE_USERS = RAW_USERS.map(([name, email, roleLabel, division]) => ({
+  id: email, name, role: ROLE_LABEL_TO_SLUG[roleLabel], division
+}));
+
+// Per-user override: Rajmani Ramdeo is documented CCR overflow staff who covers
+// ACC when QAM capacity is exhausted -- a real candidate for scheduler visibility
+// without promotion to Leadership.
 let USER_OVERRIDES = {
-  u2: { grants: ['page.scheduler'], revokes: [] },
+  'rajmani.ramdeo@lennar.com': { grants: ['page.scheduler'], revokes: [] },
 };
 
+// Division scope: real split already exists in the data -- Sandbox role spans
+// San Antonio and SAN-AUS. Here SAN-AUS is scoped to view-only (no sandbox.edit)
+// since that market's edit pilot hasn't gone live.
 let DIVISION_SCOPE = {
-  GFC: { leadership: ['suite.view','page.home','page.tracker','page.completion'] }
+  'SAN-AUS': { sandbox: ['suite.view','page.home','page.sanmpr'] }
 };
 
 /* =====================================================================
@@ -311,7 +417,7 @@ let DIVISION_SCOPE = {
    ===================================================================== */
 function renderCatalogSrc() {
   const el = document.getElementById('catalogSrc');
-  let html = 'const PERMISSION_CATALOG = {\n';
+  let html = 'const PERMISSION_CATALOG = {  // 27 real values, live 2026-08-28\n';
   for (const [k, v] of Object.entries(PERMISSION_CATALOG)) {
     html += `  <span class="key">'${k}'</span>: { label: <span class="str">'${v.label}'</span>`;
     if (v.isPage) html += `, isPage: true`;
@@ -328,13 +434,14 @@ function renderMatrix() {
   const derived = deriveCatalog(PERMISSION_CATALOG);
   const normalized = normalizeMatrix(PERMISSION_CATALOG, ROLE_BASE);
   const table = document.getElementById('matrixTable');
+  const roleOrder = ['admin','qam','cm','ccr','leadership','concierge','sandbox'];
   let html = '<tr><th>Permission</th>';
-  for (const slug of Object.keys(ROLE_BASE)) html += `<th>${ROLE_LABEL[slug]}</th>`;
+  for (const slug of roleOrder) html += `<th>${ROLE_LABEL[slug]}</th>`;
   html += '</tr>';
   for (const perm of derived.PERMS) {
     const meta = PERMISSION_CATALOG[perm];
-    html += `<tr><td>${meta.label} <span class="mono" style="color:var(--muted);font-size:10.5px;">(${perm})</span></td>`;
-    for (const slug of Object.keys(ROLE_BASE)) {
+    html += `<tr><td>${meta.label} <span class="mono" style="color:var(--muted);font-size:10px;">(${perm})</span></td>`;
+    for (const slug of roleOrder) {
       const has = normalized[slug].includes(perm);
       html += `<td class="cap-cell"><input type="checkbox" data-role="${slug}" data-perm="${perm}" ${has?'checked':''} ${slug==='admin'?'disabled title="Admin is locked to full access"':''}></td>`;
     }
@@ -364,7 +471,7 @@ document.getElementById('addPermBtn').addEventListener('click', () => {
 });
 
 /* =====================================================================
-   PANEL 2 — cache / revocation simulation
+   PANEL 2 — cache / revocation simulation (mechanics, not Airtable data)
    ===================================================================== */
 let simClock = 0;
 const INSTANCE_TTLS = [
@@ -372,7 +479,7 @@ const INSTANCE_TTLS = [
   { name: 'Instance B (warm, idle)',     lastRefresh: 0 },
   { name: 'Instance C (warm, idle)',     lastRefresh: 0 },
 ];
-const MATRIX_TTL = 60; // seconds, matches MATRIX_TTL_MS in real code
+const MATRIX_TTL = 60;
 let revokedAt = null;
 
 function renderInstances() {
@@ -422,15 +529,17 @@ document.getElementById('simulateFetchBtn').addEventListener('click', () => {
 });
 
 /* =====================================================================
-   PANEL 4 — per-user overrides
+   PANEL 4 — per-user overrides (real 66 users)
    ===================================================================== */
 function populateUserSelect() {
   const sel = document.getElementById('userSelect');
   sel.innerHTML = SAMPLE_USERS.map(u => `<option value="${u.id}">${u.name} — ${ROLE_LABEL[u.role]} (${u.division})</option>`).join('');
+  sel.value = 'rajmani.ramdeo@lennar.com';
 }
 function populateDivisionOverride() {
   const sel = document.getElementById('divisionOverride');
-  sel.innerHTML = ['OLH','TPU','SAN','GFC'].map(d => `<option value="${d}">${d}</option>`).join('');
+  const divisions = Array.from(new Set(SAMPLE_USERS.map(u => u.division))).sort();
+  sel.innerHTML = divisions.map(d => `<option value="${d}">${d}</option>`).join('');
 }
 function currentUser() {
   const id = document.getElementById('userSelect').value;
@@ -457,7 +566,7 @@ function renderUserPanel() {
   const derived = deriveCatalog(PERMISSION_CATALOG);
 
   document.getElementById('userMeta').innerHTML =
-    `Base role: <b>${ROLE_LABEL[user.role]}</b> &nbsp;•&nbsp; Home division: <b>${user.division}</b>` +
+    `Base role: <b>${ROLE_LABEL[user.role]}</b> &nbsp;•&nbsp; Home division: <b>${user.division}</b> &nbsp;•&nbsp; Email: <span class="mono">${user.id}</span>` +
     (scopeOverride ? ` &nbsp;•&nbsp; <span class="flag">division scope override active for ${division}</span>` : '');
 
   const list = document.getElementById('effectiveList');
@@ -503,21 +612,26 @@ document.getElementById('revokeBtn').addEventListener('click', () => {
 });
 
 /* =====================================================================
-   PANEL 5 — division scoping table
+   PANEL 5 — division scoping table (real division values)
    ===================================================================== */
 function renderScopeTable() {
-  const divisions = ['OLH','TPU','SAN','GFC'];
-  const roleSlugs = Object.keys(ROLE_BASE).filter(r => r !== 'admin');
+  const divisions = Array.from(new Set(SAMPLE_USERS.map(u => u.division))).sort();
+  const roleSlugs = ['qam','cm','ccr','leadership','concierge','sandbox'];
   const table = document.getElementById('scopeTable');
   let html = '<tr><th>Role</th>' + divisions.map(d=>`<th>${d}</th>`).join('') + '</tr>';
   for (const role of roleSlugs) {
     html += `<tr><td>${ROLE_LABEL[role]}</td>`;
     for (const div of divisions) {
       const scoped = DIVISION_SCOPE[div] && DIVISION_SCOPE[div][role];
+      const hasUsersHere = SAMPLE_USERS.some(u => u.role === role && u.division === div);
       html += `<td class="cap-cell">`;
-      html += scoped
-        ? `<span class="pill locked" title="Restricted set: ${scoped.map(p=>PERMISSION_CATALOG[p]?.label).join(', ')}">scoped</span>`
-        : `<span class="pill base">standard</span>`;
+      if (scoped) {
+        html += `<span class="pill locked" title="Restricted set: ${scoped.map(p=>PERMISSION_CATALOG[p]?.label).join(', ')}">scoped</span>`;
+      } else if (hasUsersHere) {
+        html += `<span class="pill base">standard</span>`;
+      } else {
+        html += `<span class="mono" style="color:var(--muted);font-size:11px;">—</span>`;
+      }
       html += `</td>`;
     }
     html += '</tr>';
