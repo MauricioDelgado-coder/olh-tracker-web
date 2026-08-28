@@ -212,6 +212,7 @@
       m++; if (m > 12) { m = 1; y++; }
     }
     out.push({ value: curY + '-' + pad2(curM), label: MONTH_NAMES[curM - 1] + ' ' + curY + ' (Current)' });
+    out.reverse(); // descending: current month first, oldest last
     return out;
   }
   function monthOptionsHtml(selected) {
@@ -354,7 +355,7 @@
           '<div><label>Division</label><input value="' + esc(state.user.division || '') + '" readonly></div>' +
           '<div><label for="region">Region</label><input id="region" type="text" placeholder="e.g. OLH South"></div>' +
         '</div>' +
-        '<div class="grid" style="margin-top:14px;max-width:220px">' +
+        '<div class="grid" style="margin-top:14px;max-width:340px">' +
           '<div><label for="bonusMonth">Bonus Month</label><select id="bonusMonth">' + monthOptionsHtml(defaultMonth) + '</select></div>' +
         '</div>' +
       '</div>' +
@@ -444,6 +445,25 @@
     if (exportBtn) exportBtn.addEventListener('click', function () { window.print(); });
   }
 
+  /** Copies Salesforce numbers straight into the (still-editable) Case
+     Metrics / Walks inputs. Called automatically whenever SF data loads
+     (initial page load and on month change) so the fields show real numbers
+     immediately instead of blanks -- the person can still type over any of
+     them, which is exactly what triggers the amber "differs from Salesforce"
+     hint and the Discrepancy Notes box. Also wired to the manual "Use These
+     Numbers" button as a way to reset back to Salesforce after overriding. */
+  function applySfToFields() {
+    if (!state.sfFound || !state.sfSource) return;
+    var s = state.sfSource;
+    var setVal = function (id, v) { var el = document.getElementById(id); if (el) el.value = v; };
+    setVal('casesClosed', s.casesClosed);
+    setVal('avgCycle', s.avgCycle);
+    setVal('pctWithin7', s.pctWithin7);
+    setVal('agedCases', s.agedCases);
+    setVal('celWalks', s.celWalks);
+    setVal('accWalks', s.accWalks);
+  }
+
   function wireInputs() {
     ['casesClosed', 'avgCycle', 'pctWithin7', 'agedCases', 'celWalks', 'accWalks'].forEach(function (id) {
       var el = document.getElementById(id);
@@ -456,6 +476,7 @@
       loadSfSource(monthEl.value).then(function () {
         var exEl = document.getElementById('agedExceptions');
         if (exEl) exEl.value = state.exceptionsApproved;
+        applySfToFields();
         renderSfCardOnly();
         recalc();
       });
@@ -475,15 +496,7 @@
   function wireSfButton() {
     var btn = document.getElementById('useSfBtn');
     if (btn) btn.addEventListener('click', function () {
-      if (!state.sfSource) return;
-      var s = state.sfSource;
-      var setVal = function (id, v) { var el = document.getElementById(id); if (el) el.value = v; };
-      setVal('casesClosed', s.casesClosed);
-      setVal('avgCycle', s.avgCycle);
-      setVal('pctWithin7', s.pctWithin7);
-      setVal('agedCases', s.agedCases);
-      setVal('celWalks', s.celWalks);
-      setVal('accWalks', s.accWalks);
+      applySfToFields();
       recalc();
     });
   }
@@ -551,6 +564,7 @@
 
     content.innerHTML = formHtml();
     wireInputs();
+    applySfToFields();
     recalc();
   }
 
