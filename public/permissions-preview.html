@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>Permission System Preview — OLH Tracker</title>
+<style>
+  :root{
+    --navy:#1B2A58; --ink:#2B2620; --muted:#6F6963; --faint:#908A82;
+    --border:#E4DED2; --bg:#FBF8F3; --card:#ffffff;
+    --amber-bg:#FFF8E1; --amber-ink:#7C4A03; --amber-border:#F0DFAE;
+    --red-bg:#FDECEA; --red-ink:#7F1D1D; --red-border:#F3C6C2;
+    --green-bg:#EAF6EE; --green-ink:#1E5B34; --green-border:#C6E6D2;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  }
+  a{color:var(--navy)}
+  header.top{
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    padding:14px 20px; background:var(--navy); border-bottom:1px solid var(--border);
+    position:sticky; top:0; z-index:50; flex-wrap:wrap;
+  }
+  header.top h1{
+    margin:0; font:400 22px/1.2 Georgia,"Times New Roman",serif; color:#fff;
+    letter-spacing:-.01em;
+  }
+  .who{ font-size:12px; color:#C7BFB2; }
+  header.top a.home{
+    display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 13px;
+    border:1px solid rgba(255,255,255,.28); border-radius:4px; background:transparent;
+    color:#C7BFB2; font-size:13px; font-weight:500; text-decoration:none; white-space:nowrap;
+  }
+  header.top a.home:hover{ background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.45); color:#fff; }
+
+  main{ max-width:1160px; margin:0 auto; padding:22px 20px 80px; }
+  .empty{ color:var(--muted); font-size:13.5px; padding:14px 2px; }
+
+  .live-badge{
+    display:inline-block; font-size:10.5px; font-weight:700; letter-spacing:.03em;
+    padding:2px 9px; border-radius:10px; background:var(--green-bg); color:var(--green-ink);
+    border:1px solid var(--green-border); margin-left:8px; vertical-align:middle;
+  }
+  .banner{ padding:12px 16px; border-radius:8px; font-size:13.5px; margin-bottom:16px; }
+  .banner.error{ background:var(--red-bg); color:var(--red-ink); border:1px solid var(--red-border); }
+  .banner.info{ background:var(--amber-bg); color:var(--amber-ink); border:1px solid var(--amber-border); }
+
+  .card{ background:var(--card); border:1px solid var(--border); border-radius:10px; padding:20px 22px; margin-bottom:18px; }
+  .card h2{ margin:0 0 4px; font:400 18px/1.2 Georgia,"Times New Roman",serif; color:var(--navy); }
+  .card .desc{ font-size:12.5px; color:var(--muted); margin-bottom:14px; line-height:1.5; }
+  .two-col{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:950px){ .two-col{ grid-template-columns:1fr; } }
+  code, .mono{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .catalog-src{
+    background:#20242c; border:1px solid var(--border); border-radius:6px; color:#9fd3ff;
+    padding:12px; font-size:11px; max-height:320px; overflow:auto; white-space:pre;
+  }
+  .catalog-src .key{ color:#f0883e; } .catalog-src .str{ color:#7ee787; }
+
+  select, button{
+    background:#fff; color:var(--ink); border:1px solid var(--border);
+    border-radius:6px; padding:6px 10px; font-size:13px; cursor:pointer;
+  }
+  select:focus, button:focus{ outline:2px solid var(--navy); outline-offset:1px; }
+  button.small{ padding:3px 8px; font-size:11px; }
+
+  table{ width:100%; border-collapse:collapse; font-size:12px; }
+  th, td{ padding:5px 8px; border-bottom:1px solid var(--border); text-align:left; }
+  th{ color:var(--muted); font-weight:600; font-size:10.5px; text-transform:uppercase; letter-spacing:.03em; }
+  .cap-cell{ text-align:center; }
+  .pill{ display:inline-block; padding:1px 7px; border-radius:10px; font-size:10.5px; font-weight:700; letter-spacing:.02em; }
+  .pill.base{ background:#E7EEFB; color:#2A4E9C; }
+  .pill.grant{ background:var(--green-bg); color:var(--green-ink); }
+  .pill.locked{ background:var(--amber-bg); color:var(--amber-ink); }
+  .row-flex{ display:flex; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
+  .stack{ display:flex; flex-direction:column; gap:3px; }
+  .stack label{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; font-weight:600; }
+  .effective-list{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .chip{ padding:3px 9px; border-radius:12px; font-size:11.5px; background:#F3EFE6; border:1px solid var(--border); }
+  .note{ font-size:11.5px; color:var(--muted); margin-top:10px; line-height:1.5; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div>
+    <h1>Permission System Preview<span class="live-badge">LIVE DATA</span></h1>
+    <div class="who" id="whoLine">Loading…</div>
+  </div>
+  <a class="home" href="/">All Views</a>
+</header>
+
+<main>
+  <div id="banners"></div>
+  <div id="content">Loading…</div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  var API = '/api';
+  var SESSION_KEY = 'olh.session.v1';
+
+  /* ---- Auth (mirrors case-aging.html / bonus.html's shared OLHAuth session contract) --- */
+  function getSession() {
+    try { var v = localStorage.getItem(SESSION_KEY); return v ? JSON.parse(v) : null; }
+    catch (e) { return null; }
+  }
+  function authHeaders(extra) {
+    var h = Object.assign({ Accept: 'application/json' }, extra || {});
+    var s = getSession();
+    var tok = s && s.token;
+    if (tok) { h.Authorization = 'Bearer ' + tok; h['X-OLH-Token'] = 'Bearer ' + tok; }
+    return h;
+  }
+  function authedFetchHeaders(extra) {
+    if (!getSession() || !getSession().token) {
+      throw new Error('You are not signed in. Sign in at the OLH Tracker home page, then reload this page.');
+    }
+    return authHeaders(extra);
+  }
+  function apiGet(path) {
+    return fetch(API + path, { headers: authedFetchHeaders() }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (body) {
+        if (res.status === 401) { var e = new Error((body && body.error) || 'Your session has expired.'); e.status = 401; throw e; }
+        if (!res.ok || !body) throw new Error((body && body.error) || (path + ' failed (' + res.status + ')'));
+        return body;
+      });
+    });
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+
+  /* =====================================================================
+     PERMISSION CATALOG METADATA — labels/relationships only. The actual set
+     of permission keys and role->permission grants come live from
+     GET /api/roles (session.matrix / A.PERMS), never hardcoded here. If the
+     server ever adds a permission this map doesn't know, it still renders
+     (falls back to the raw key as its label) rather than hiding it.
+     ===================================================================== */
+  var CATALOG_META = {
+    'suite.view':          { label: 'OLH Suite (sign-in gate)' },
+    'page.home':           { label: 'All Views (Home)', isPage: true },
+    'page.mywalks':        { label: 'My Walks', isPage: true },
+    'walk.complete':       { label: 'Complete Walks' },
+    'page.tracker':        { label: 'QA & Closing Tracker', isPage: true },
+    'tracker.edit':        { label: 'Edit Tracker' },
+    'page.completion':     { label: 'Completion Report', isPage: true },
+    'page.walks':          { label: 'Walk Schedule', isPage: true },
+    'walk.schedule':       { label: 'Schedule / Reassign Walks' },
+    'page.scheduler':      { label: 'Schedule Optimizer', isPage: true },
+    'optimizer.apply':     { label: 'Apply Optimizer Suggestions' },
+    'page.workload':       { label: 'Workload', isPage: true },
+    'page.qamgmt':         { label: 'QA Management', isPage: true },
+    'page.missedwalks':    { label: 'Missed Walks', isPage: true },
+    'page.timeoff':        { label: 'Time Off', isPage: true },
+    'page.walkstoschedule':{ label: 'Walks to Schedule', isPage: true },
+    'page.keys':           { label: 'Keys', isPage: true },
+    'page.game':           { label: 'Walk Reassignment Board', isPage: true },
+    'page.redflags':       { label: 'Red Flags', isPage: true },
+    'page.bonus':          { label: 'CCR Monthly Bonus', isPage: true },
+    'page.bonusapproval':  { label: 'Approvals (Bonus + Case Aging)', isPage: true },
+    'page.caseaging':      { label: 'Case Aging Exception Request', isPage: true },
+    'page.sanmpr':         { label: 'SAN Sandbox Tracker', isPage: true },
+    'sandbox.edit':        { label: 'Edit Sandbox Data' },
+    'page.synchistory':    { label: 'Sync History', isPage: true },
+    'page.admin':          { label: 'User Administration', isPage: true },
+    'roster.manage':       { label: 'Manage Roster' }
+  };
+  function labelFor(perm) { return (CATALOG_META[perm] && CATALOG_META[perm].label) || perm; }
+  function isPageKey(perm) { return !!(CATALOG_META[perm] && CATALOG_META[perm].isPage); }
+
+  var ROLE_LABEL = {
+    admin: 'Admin', qam: 'QA Manager', cm: 'Construction Manager', ccr: 'Customer Care',
+    leadership: 'Division Leadership', concierge: 'Concierge', sandbox: 'Sandbox'
+  };
+  var ROLE_ORDER = ['admin', 'qam', 'cm', 'ccr', 'leadership', 'concierge', 'sandbox'];
+
+  var state = {
+    user: null, can: [], loading: true, error: '',
+    roles: {}, perms: [], users: [],
+    selUserId: '', divisionOverride: ''
+  };
+
+  /* ---- Data loads -------------------------------------------------------- */
+  function loadSession() {
+    return apiGet('/session').then(function (data) {
+      state.user = data.user || null;
+      state.can = data.can || [];
+    });
+  }
+  function loadRoles() {
+    return apiGet('/roles').then(function (data) {
+      state.roles = data.roles || {};
+      state.perms = data.perms || [];
+    });
+  }
+  function loadUsers() {
+    // roster.manage-gated on the server; if this user lacks it the request
+    // 403s and we show that as the reason the Users panel can't render,
+    // rather than crashing the whole page.
+    return apiGet('/users').then(function (data) {
+      state.users = Array.isArray(data.users) ? data.users : [];
+    }).catch(function (err) {
+      state.usersError = (err && err.message) || 'Could not load Users.';
+      state.users = [];
+    });
+  }
+
+  /* ---- Rendering ---------------------------------------------------------- */
+  function renderCatalogSrc() {
+    var lines = ['const PERMS = [  // ' + state.perms.length + ' live values, GET /api/roles just now'];
+    state.perms.forEach(function (p) {
+      lines.push('  <span class="key">\'' + esc(p) + '\'</span>' + (isPageKey(p) ? ' <span class="str">// page</span>' : ''));
+    });
+    lines.push('];');
+    return lines.join('\n');
+  }
+
+  function renderMatrixTable() {
+    var rolesPresent = ROLE_ORDER.filter(function (r) { return state.roles[r]; });
+    var html = '<tr><th>Permission</th>' + rolesPresent.map(function (r) { return '<th>' + ROLE_LABEL[r] + '</th>'; }).join('') + '</tr>';
+    state.perms.forEach(function (perm) {
+      html += '<tr><td>' + esc(labelFor(perm)) + ' <span class="mono" style="color:var(--muted);font-size:10px">(' + esc(perm) + ')</span></td>';
+      rolesPresent.forEach(function (r) {
+        var has = (state.roles[r] || []).indexOf(perm) >= 0;
+        html += '<td class="cap-cell">' + (has ? '<span class="pill base">\u2713</span>' : '') + '</td>';
+      });
+      html += '</tr>';
+    });
+    return html;
+  }
+
+  function effectiveUsersByRole(role) {
+    return state.users.filter(function (u) { return u.role === role; });
+  }
+
+  function divisionsFromUsers() {
+    var set = {};
+    state.users.forEach(function (u) { if (u.division) set[u.division] = true; });
+    return Object.keys(set).sort();
+  }
+
+  function renderUserPanel() {
+    var user = state.users.filter(function (u) { return u.id === state.selUserId; })[0];
+    if (!user && state.users.length) { user = state.users[0]; state.selUserId = user.id; }
+    if (!user) return '<div class="empty">No users loaded.</div>';
+
+    var effective = state.roles[user.role] || [];
+    var chips = effective.slice().sort().map(function (p) {
+      return '<span class="chip">' + esc(labelFor(p)) + '</span>';
+    }).join('') || '<span class="note">No permissions.</span>';
+
+    var userOpts = state.users.map(function (u) {
+      return '<option value="' + esc(u.id) + '"' + (u.id === user.id ? ' selected' : '') + '>' +
+        esc(u.name) + ' \u2014 ' + esc(ROLE_LABEL[u.role] || u.role) + ' (' + esc(u.division || '\u2014') + ')' +
+        (u.active === false ? ' [inactive]' : '') + (u.pending ? ' [pending]' : '') + '</option>';
+    }).join('');
+
+    return '' +
+      '<div class="row-flex">' +
+        '<div class="stack"><label>User (live Users table row)</label>' +
+        '<select id="userSelect">' + userOpts + '</select></div>' +
+      '</div>' +
+      '<div class="note">Base role: <b>' + esc(ROLE_LABEL[user.role] || user.role) + '</b> &nbsp;\u2022&nbsp; Division: <b>' + esc(user.division || '\u2014') + '</b> ' +
+        '&nbsp;\u2022&nbsp; Email: <span class="mono">' + esc(user.email) + '</span>' +
+        (user.active === false ? ' &nbsp;\u2022&nbsp; <span class="pill locked">inactive</span>' : '') +
+        (user.pending ? ' &nbsp;\u2022&nbsp; <span class="pill locked">pending invite</span>' : '') + '</div>' +
+      '<div style="height:1px;background:var(--border);margin:14px 0"></div>' +
+      '<div style="font-size:12px;color:var(--muted);margin-bottom:4px">Effective permissions (role-based, read-only preview \u2014 no per-user overrides exist in the live system yet):</div>' +
+      '<div class="effective-list">' + chips + '</div>';
+  }
+
+  function renderScopeTable() {
+    var divisions = divisionsFromUsers();
+    if (!divisions.length) return '<div class="empty">No division data on the loaded Users rows.</div>';
+    var roleSlugs = ROLE_ORDER.filter(function (r) { return r !== 'admin'; });
+    var html = '<tr><th>Role</th>' + divisions.map(function (d) { return '<th>' + esc(d) + '</th>'; }).join('') + '</tr>';
+    roleSlugs.forEach(function (role) {
+      html += '<tr><td>' + esc(ROLE_LABEL[role]) + '</td>';
+      divisions.forEach(function (div) {
+        var count = state.users.filter(function (u) { return u.role === role && u.division === div; }).length;
+        html += '<td class="cap-cell">' + (count ? ('<span class="pill base">' + count + ' user' + (count === 1 ? '' : 's') + '</span>') : '<span class="mono" style="color:var(--faint);font-size:11px">\u2014</span>') + '</td>';
+      });
+      html += '</tr>';
+    });
+    return html;
+  }
+
+  function contentHtml() {
+    var usersNote = state.usersError
+      ? '<div class="banner error">Users panel: ' + esc(state.usersError) + ' (requires roster.manage)</div>'
+      : '';
+
+    return '' +
+      usersNote +
+      '<div class="banner info">Read-only preview. Live GET /api/roles' + (state.usersError ? '' : ' + GET /api/users') + ' \u2014 no writes happen from this page. Per-user overrides and division-scoped roles shown in the design doc (docs/proposals/permission-system-prototype.html) do not exist in the live system yet; this page shows what IS actually live today.</div>' +
+
+      '<div class="card">' +
+        '<h2>Live permission catalog</h2>' +
+        '<div class="desc">' + state.perms.length + ' permissions currently defined server-side, pulled just now from GET /api/roles.</div>' +
+        '<div class="two-col">' +
+          '<div><pre class="catalog-src">' + renderCatalogSrc() + '</pre></div>' +
+          '<div style="overflow-x:auto;max-height:420px"><table>' + renderMatrixTable() + '</table></div>' +
+        '</div>' +
+      '</div>' +
+
+      (state.usersError ? '' :
+      '<div class="card">' +
+        '<h2>Per-user view (' + state.users.length + ' live Users rows)</h2>' +
+        '<div class="desc">Every user\u2019s effective permissions today come entirely from their role \u2014 there is no per-user override layer in the live system. This panel shows exactly that: pick anyone and see their role\u2019s permission set.</div>' +
+        '<div id="userPanel">' + renderUserPanel() + '</div>' +
+      '</div>' +
+
+      '<div class="card">' +
+        '<h2>Users by role &times; division</h2>' +
+        '<div class="desc">Live headcount from the Users table. All capability grants today are per-role only \u2014 this table shows where a division-scoping layer would actually matter (e.g. Sandbox users split across markets).</div>' +
+        '<table>' + renderScopeTable() + '</table>' +
+      '</div>');
+  }
+
+  function render() {
+    document.getElementById('whoLine').textContent = state.user
+      ? (state.user.name + (state.user.division ? ' \u00b7 ' + state.user.division : ''))
+      : 'Not signed in';
+
+    var content = document.getElementById('content');
+    if (state.loading) { content.innerHTML = ''; return; }
+    if (state.error) { content.innerHTML = '<div class="empty">' + esc(state.error) + '</div>'; return; }
+    if (state.can.indexOf('page.admin') < 0) {
+      content.innerHTML = '<div class="empty">Your role does not have access to the User Administration page (this preview is gated the same way).</div>';
+      return;
+    }
+    content.innerHTML = contentHtml();
+    wireUserSelect();
+  }
+
+  function onUserSelectChange() {
+    state.selUserId = document.getElementById('userSelect').value;
+    document.getElementById('userPanel').innerHTML = renderUserPanel();
+    wireUserSelect();
+  }
+  function wireUserSelect() {
+    var sel = document.getElementById('userSelect');
+    if (sel) sel.addEventListener('change', onUserSelectChange);
+  }
+
+  /* ---- Boot ------------------------------------------------------------ */
+  var session = getSession();
+  if (!session || !session.token) {
+    document.getElementById('content').innerHTML =
+      '<div class="empty">You are not signed in. <a href="/">Sign in at the OLH Tracker home page</a>, then reload this page.</div>';
+    document.getElementById('whoLine').textContent = 'Not signed in';
+  } else {
+    loadSession()
+      .then(loadRoles)
+      .then(loadUsers)
+      .then(function () {
+        if (state.users.length) state.selUserId = state.users[0].id;
+        state.loading = false;
+        render();
+      })
+      .catch(function (err) {
+        state.loading = false;
+        if (err && err.status === 401) {
+          state.error = 'Your session has expired. Sign in again at the OLH Tracker home page, then reload this page.';
+        } else {
+          state.error = 'Could not load this page: ' + (err && err.message ? err.message : String(err));
+        }
+        render();
+      });
+  }
+})();
+</script>
+</body>
+</html>
