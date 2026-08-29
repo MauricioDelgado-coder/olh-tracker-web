@@ -131,7 +131,13 @@ const ROUTES = [
 
   // ---- Case aging exception leadership review -> case-aging-approvals.js
   // (page.bonusapproval -- shared with bonus-approvals.js, see that file)
-  ['caseAgingApprovals', 'case-aging-approvals', 'case-aging-approvals']
+  ['caseAgingApprovals', 'case-aging-approvals', 'case-aging-approvals'],
+
+  // ---- Daily Summary self-reporting -> daily-summary.js (page.dailysummary)
+  ['dailySummary', 'daily-summary', 'daily-summary'],
+
+  // ---- Monthly One-on-One check-ins -> monthly-1on1.js (page.monthly1on1)
+  ['monthly1on1', 'monthly-1on1', 'monthly-1on1']
 ];
 
 for (const [name, route, netlifyFunction] of ROUTES) {
