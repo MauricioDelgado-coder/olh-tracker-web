@@ -132,6 +132,19 @@
       });
     });
   }
+  function apiPatch(path, payload) {
+    return fetch(API + path, {
+      method: 'PATCH',
+      headers: authedFetchHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload)
+    }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (body) {
+        if (res.status === 401) { var e = new Error((body && body.error) || 'Your session has expired.'); e.status = 401; throw e; }
+        if (!res.ok) throw new Error((body && body.error) || (path + ' failed (' + res.status + ')'));
+        return body;
+      });
+    });
+  }
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
@@ -187,7 +200,7 @@
   var state = {
     user: null, can: [], loading: true, error: '',
     roles: {}, perms: [], users: [],
-    selUserId: '', divisionOverride: ''
+    selUserId: '', saving: false, statusMsg: '', statusOk: false
   };
 
   /* ---- Data loads -------------------------------------------------------- */
@@ -249,20 +262,56 @@
     return Object.keys(set).sort();
   }
 
-  function renderUserPanel() {
+  function currentUser() {
     var user = state.users.filter(function (u) { return u.id === state.selUserId; })[0];
     if (!user && state.users.length) { user = state.users[0]; state.selUserId = user.id; }
+    return user;
+  }
+
+  /** role base ∪ grants − revokes, mirroring applyOverrides' grant/revoke
+      order server-side (a revoke always wins over a grant of the same key). */
+  function effectivePermsFor(user) {
+    var base = state.roles[user.role] || [];
+    var grants = user.grants || [];
+    var revokes = user.revokes || [];
+    var set = {};
+    base.forEach(function (p) { set[p] = true; });
+    grants.forEach(function (p) { if (state.perms.indexOf(p) >= 0) set[p] = true; });
+    revokes.forEach(function (p) { delete set[p]; });
+    return Object.keys(set);
+  }
+
+  function renderUserPanel() {
+    var user = currentUser();
     if (!user) return '<div class="empty">No users loaded.</div>';
 
-    var effective = state.roles[user.role] || [];
+    var grants = user.grants || [];
+    var revokes = user.revokes || [];
+    var effective = effectivePermsFor(user);
+
     var chips = effective.slice().sort().map(function (p) {
-      return '<span class="chip">' + esc(labelFor(p)) + '</span>';
+      var isGrant = grants.indexOf(p) >= 0;
+      return '<span class="chip">' + esc(labelFor(p)) +
+        (isGrant ? ' <span class="pill grant" style="margin-left:4px">override</span>' : '') + '</span>';
     }).join('') || '<span class="note">No permissions.</span>';
 
     var userOpts = state.users.map(function (u) {
       return '<option value="' + esc(u.id) + '"' + (u.id === user.id ? ' selected' : '') + '>' +
         esc(u.name) + ' \u2014 ' + esc(ROLE_LABEL[u.role] || u.role) + ' (' + esc(u.division || '\u2014') + ')' +
         (u.active === false ? ' [inactive]' : '') + (u.pending ? ' [pending]' : '') + '</option>';
+    }).join('');
+
+    // Grant list: anything not currently effective. Revoke list: anything
+    // currently effective that came from the role base (revoking a permission
+    // the user only has because of a grant override is just removing the
+    // grant, offered separately below).
+    var baseCan = state.roles[user.role] || [];
+    var grantOptions = state.perms.filter(function (p) { return effective.indexOf(p) < 0; })
+      .map(function (p) { return '<option value="' + esc(p) + '">' + esc(labelFor(p)) + '</option>'; }).join('');
+    var revokeOptions = baseCan.filter(function (p) { return effective.indexOf(p) >= 0 && revokes.indexOf(p) < 0; })
+      .map(function (p) { return '<option value="' + esc(p) + '">' + esc(labelFor(p)) + '</option>'; }).join('');
+    var ungrantOptions = grants.map(function (p) {
+      return '<option value="' + esc(p) + '">' + esc(labelFor(p)) + ' (remove grant)</option>';
     }).join('');
 
     return '' +
@@ -275,7 +324,30 @@
         (user.active === false ? ' &nbsp;\u2022&nbsp; <span class="pill locked">inactive</span>' : '') +
         (user.pending ? ' &nbsp;\u2022&nbsp; <span class="pill locked">pending invite</span>' : '') + '</div>' +
       '<div style="height:1px;background:var(--border);margin:14px 0"></div>' +
-      '<div style="font-size:12px;color:var(--muted);margin-bottom:4px">Effective permissions (role-based, read-only preview \u2014 no per-user overrides exist in the live system yet):</div>' +
+
+      '<div class="row-flex">' +
+        '<div class="stack"><label>Grant extra permission</label>' +
+        '<select id="grantSelect">' + (grantOptions || '<option disabled>Already has everything</option>') + '</select></div>' +
+        '<button id="grantBtn" class="small"' + (state.saving ? ' disabled' : '') + '>+ Grant</button>' +
+      '</div>' +
+      (ungrantOptions ? (
+      '<div class="row-flex">' +
+        '<div class="stack"><label>Remove an existing grant</label>' +
+        '<select id="ungrantSelect">' + ungrantOptions + '</select></div>' +
+        '<button id="ungrantBtn" class="small"' + (state.saving ? ' disabled' : '') + '>\u2013 Remove grant</button>' +
+      '</div>') : '') +
+      '<div class="row-flex">' +
+        '<div class="stack"><label>Revoke inherited permission</label>' +
+        '<select id="revokeSelect">' + (revokeOptions || '<option disabled>Nothing to revoke</option>') + '</select></div>' +
+        '<button id="revokeBtn" class="small"' + (state.saving ? ' disabled' : '') + '>\u2013 Revoke</button>' +
+      '</div>' +
+      (revokes.length ? '<div class="note">Currently revoked from role base: ' + revokes.map(function (p) { return esc(labelFor(p)); }).join(', ') +
+        ' <button id="clearRevokesBtn" class="small" style="margin-left:8px">Clear all revokes</button></div>' : '') +
+
+      (state.statusMsg ? '<div class="note" style="color:' + (state.statusOk ? 'var(--green-ink)' : 'var(--red-ink)') + '">' + esc(state.statusMsg) + '</div>' : '') +
+
+      '<div style="height:1px;background:var(--border);margin:14px 0"></div>' +
+      '<div style="font-size:12px;color:var(--muted);margin-bottom:4px">Effective permissions (role base + grants \u2212 revokes, live -- takes effect on this user\u2019s next request, no sign-out needed):</div>' +
       '<div class="effective-list">' + chips + '</div>';
   }
 
@@ -302,7 +374,7 @@
 
     return '' +
       usersNote +
-      '<div class="banner info">Read-only preview. Live GET /api/roles' + (state.usersError ? '' : ' + GET /api/users') + ' \u2014 no writes happen from this page. Per-user overrides and division-scoped roles shown in the design doc (docs/proposals/permission-system-prototype.html) do not exist in the live system yet; this page shows what IS actually live today.</div>' +
+      '<div class="banner info">Live GET /api/roles' + (state.usersError ? '' : ' + GET /api/users') + '. Grant/revoke below writes to Airtable via PATCH /api/users/:id and takes effect on that user\u2019s next request \u2014 no sign-out needed. An admin\u2019s suite.view/roster.manage/page.admin can never be revoked this way; the server re-enforces that regardless of what\u2019s submitted. Division-scoped roles (shown in the design doc, docs/proposals/permission-system-prototype.html) are not built yet.</div>' +
 
       '<div class="card">' +
         '<h2>Live permission catalog</h2>' +
@@ -315,8 +387,8 @@
 
       (state.usersError ? '' :
       '<div class="card">' +
-        '<h2>Per-user view (' + state.users.length + ' live Users rows)</h2>' +
-        '<div class="desc">Every user\u2019s effective permissions today come entirely from their role \u2014 there is no per-user override layer in the live system. This panel shows exactly that: pick anyone and see their role\u2019s permission set.</div>' +
+        '<h2>Per-user editor (' + state.users.length + ' live Users rows)</h2>' +
+        '<div class="desc">Pick anyone and grant or revoke individual permissions on top of their role. Writes to the real Permission Grants / Permission Revokes fields on that Users record.</div>' +
         '<div id="userPanel">' + renderUserPanel() + '</div>' +
       '</div>' +
 
@@ -340,17 +412,80 @@
       return;
     }
     content.innerHTML = contentHtml();
-    wireUserSelect();
+    wireUserPanel();
+  }
+
+  function refreshUserPanel() {
+    document.getElementById('userPanel').innerHTML = renderUserPanel();
+    wireUserPanel();
   }
 
   function onUserSelectChange() {
     state.selUserId = document.getElementById('userSelect').value;
-    document.getElementById('userPanel').innerHTML = renderUserPanel();
-    wireUserSelect();
+    state.statusMsg = '';
+    refreshUserPanel();
   }
-  function wireUserSelect() {
+
+  function savePatch(user, patch, successMsg) {
+    state.saving = true;
+    state.statusMsg = '';
+    refreshUserPanel();
+    return apiPatch('/users/' + user.id, patch).then(function (data) {
+      state.saving = false;
+      state.statusOk = true;
+      state.statusMsg = successMsg;
+      var idx = state.users.findIndex(function (u) { return u.id === user.id; });
+      if (idx >= 0 && data && data.user) state.users[idx] = data.user;
+      refreshUserPanel();
+    }).catch(function (err) {
+      state.saving = false;
+      state.statusOk = false;
+      state.statusMsg = 'Save failed: ' + (err && err.message ? err.message : String(err));
+      refreshUserPanel();
+    });
+  }
+
+  function onGrantClick() {
+    var user = currentUser();
+    var perm = document.getElementById('grantSelect').value;
+    if (!perm) return;
+    var next = (user.grants || []).slice();
+    if (next.indexOf(perm) < 0) next.push(perm);
+    savePatch(user, { grants: next }, 'Granted ' + labelFor(perm) + '.');
+  }
+  function onUngrantClick() {
+    var user = currentUser();
+    var sel = document.getElementById('ungrantSelect');
+    if (!sel) return;
+    var perm = sel.value;
+    if (!perm) return;
+    var next = (user.grants || []).filter(function (p) { return p !== perm; });
+    savePatch(user, { grants: next }, 'Removed the grant for ' + labelFor(perm) + '.');
+  }
+  function onRevokeClick() {
+    var user = currentUser();
+    var perm = document.getElementById('revokeSelect').value;
+    if (!perm) return;
+    var next = (user.revokes || []).slice();
+    if (next.indexOf(perm) < 0) next.push(perm);
+    savePatch(user, { revokes: next }, 'Revoked ' + labelFor(perm) + '.');
+  }
+  function onClearRevokesClick() {
+    var user = currentUser();
+    savePatch(user, { revokes: [] }, 'Cleared all revokes \u2014 back to the full role base.');
+  }
+
+  function wireUserPanel() {
     var sel = document.getElementById('userSelect');
     if (sel) sel.addEventListener('change', onUserSelectChange);
+    var grantBtn = document.getElementById('grantBtn');
+    if (grantBtn) grantBtn.addEventListener('click', onGrantClick);
+    var ungrantBtn = document.getElementById('ungrantBtn');
+    if (ungrantBtn) ungrantBtn.addEventListener('click', onUngrantClick);
+    var revokeBtn = document.getElementById('revokeBtn');
+    if (revokeBtn) revokeBtn.addEventListener('click', onRevokeClick);
+    var clearBtn = document.getElementById('clearRevokesBtn');
+    if (clearBtn) clearBtn.addEventListener('click', onClearRevokesClick);
   }
 
   /* ---- Boot ------------------------------------------------------------ */
