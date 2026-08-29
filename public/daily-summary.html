@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>Daily Summary — OLH Tracker</title>
+<style>
+  :root{
+    --navy: #0a2240;
+    --blue: #0b3d91;
+    --blue-deep: #08306b;
+    --cream: #f7f4ee;
+    --cream-line: #d8cfc0;
+    --ink: #1c1d1f;
+    --muted: #6b6f76;
+    --paper: #ffffff;
+    --amber: #b98900;
+    --green: #1e7145;
+    --danger: #a3312a;
+    --radius: 3px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--cream);font-family:'Georgia','Iowan Old Style',serif;color:var(--ink);}
+
+  /* Suite-standard top strip -- consistent with case-aging.html / my-walks.html
+     so this reads as part of the app, not a bare form. */
+  header.suite-top{
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    padding:10px 20px; background:var(--navy);
+    font-family:Arial,Helvetica,sans-serif;
+  }
+  header.suite-top .who{ font-size:12px; color:#C7BFB2; }
+  header.suite-top a.home{
+    display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 12px;
+    border:1px solid rgba(255,255,255,.28); border-radius:4px; background:transparent;
+    color:#C7BFB2; font-size:12.5px; font-weight:500; text-decoration:none; white-space:nowrap;
+  }
+  header.suite-top a.home:hover{ background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.45); color:#fff; }
+
+  .sheet{max-width:880px;margin:0 auto;background:var(--paper);min-height:100vh;box-shadow:0 0 0 1px var(--cream-line);}
+  header.top{display:flex;justify-content:space-between;align-items:center;padding:18px 28px;border-bottom:1px solid var(--cream-line);}
+  .brand{font-family:Arial,Helvetica,sans-serif;font-weight:700;letter-spacing:1px;color:var(--blue);font-size:15px;}
+  .doc-label{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;}
+  .title-block{padding:26px 28px 6px;}
+  h1{font-family:Georgia,'Times New Roman',serif;font-weight:400;font-size:34px;margin:0 0 8px;color:var(--ink);}
+  .sub{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:var(--muted);line-height:1.6;max-width:620px;margin:0 0 18px;}
+  .meta{display:grid;grid-template-columns:1fr 1fr;gap:16px;background:#ede8dd;border:1px solid var(--cream-line);border-radius:var(--radius);padding:16px 20px;margin:0 28px 22px;}
+  .field label{display:block;font-family:Arial,Helvetica,sans-serif;font-size:10px;letter-spacing:1.2px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;}
+  .field input{width:100%;border:none;border-bottom:1px solid #b9ae98;background:transparent;font-family:Arial,Helvetica,sans-serif;font-size:14.5px;padding:4px 2px 6px;color:var(--ink);}
+  .field input:focus{outline:none;border-bottom:1px solid var(--blue);}
+  .field input:read-only{color:var(--muted);}
+  section.block{padding:0 28px 8px;}
+  .block-head{display:flex;align-items:center;justify-content:space-between;margin:26px 0 10px;}
+  .block-head h2{font-family:Georgia,serif;font-weight:400;font-size:19px;margin:0;display:flex;align-items:center;gap:10px;}
+  .num{font-family:Arial,Helvetica,sans-serif;font-weight:700;font-size:12px;color:var(--blue);}
+  .none-toggle{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;}
+  .none-toggle input{accent-color:var(--blue);width:14px;height:14px;}
+  table.grid{width:100%;border-collapse:collapse;margin-bottom:6px;}
+  table.grid thead th{background:var(--blue);color:#fff;font-family:Arial,Helvetica,sans-serif;font-size:10.5px;letter-spacing:0.8px;text-transform:uppercase;text-align:left;padding:8px 10px;font-weight:600;}
+  table.grid thead th.colrm{width:34px;}
+  table.grid tbody td{border-bottom:1px solid var(--cream-line);padding:6px 8px;vertical-align:top;}
+  table.grid tbody tr.none-row td{font-family:Arial,Helvetica,sans-serif;color:var(--muted);font-style:italic;padding:10px 8px;}
+  table.grid input,table.grid textarea{width:100%;border:none;background:transparent;font-family:Arial,Helvetica,sans-serif;font-size:13.5px;padding:4px;color:var(--ink);resize:none;}
+  table.grid input:focus,table.grid textarea:focus{outline:none;background:#f4f7fc;border-radius:2px;}
+  .row-flag{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--cream-line);margin-top:8px;}
+  .row-flag.filled{background:var(--amber);}
+  .row-flag.blank-warn{background:var(--danger);}
+  .rm-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:2px 6px;}
+  .rm-btn:hover{color:var(--danger);}
+  .add-row{font-family:Arial,Helvetica,sans-serif;font-size:12.5px;color:var(--blue);background:none;border:none;cursor:pointer;padding:6px 2px;font-weight:600;}
+  .add-row:hover{text-decoration:underline;}
+  .notes-box{margin:30px 28px 10px;background:#faf6f0;border:1px solid var(--cream-line);border-radius:var(--radius);padding:16px 20px;}
+  .notes-box label{display:block;font-family:Arial,Helvetica,sans-serif;font-size:10px;letter-spacing:1.2px;color:var(--muted);text-transform:uppercase;margin-bottom:8px;}
+  .notes-box textarea{width:100%;min-height:80px;border:none;background:transparent;font-family:Georgia,serif;font-size:14px;resize:vertical;}
+  .notes-box textarea:focus{outline:none;}
+  .actions{display:flex;align-items:center;gap:14px;padding:22px 28px 10px;}
+  .submit-btn{font-family:Arial,Helvetica,sans-serif;font-weight:700;font-size:13.5px;letter-spacing:0.4px;background:var(--blue);color:#fff;border:none;padding:12px 26px;border-radius:3px;cursor:pointer;}
+  .submit-btn:hover{background:var(--blue-deep);}
+  .submit-btn:disabled{background:#9aa5b5;cursor:not-allowed;}
+  .status-msg{font-family:Arial,Helvetica,sans-serif;font-size:12.5px;}
+  .status-msg.ok{color:var(--green);}
+  .status-msg.err{color:var(--danger);}
+  footer.bottom{display:flex;justify-content:space-between;align-items:center;padding:16px 28px 26px;margin-top:10px;border-top:1px solid var(--cream-line);font-family:Arial,Helvetica,sans-serif;font-size:10.5px;color:var(--muted);}
+  .empty{font-family:Arial,Helvetica,sans-serif;color:var(--muted);font-size:13px;padding:24px 28px;}
+  @media (max-width:620px){
+    .meta{grid-template-columns:1fr;}
+    h1{font-size:26px;}
+    table.grid thead th{font-size:9.5px;padding:6px;}
+    table.grid tbody td{padding:5px 4px;}
+    header.top,.title-block,section.block,.actions,footer.bottom,.notes-box{padding-left:16px;padding-right:16px;}
+    .meta{margin-left:16px;margin-right:16px;}
+  }
+</style>
+</head>
+<body>
+
+<header class="suite-top">
+  <div class="who" id="whoLine">Loading…</div>
+  <a class="home" href="/">All Views</a>
+</header>
+
+<div class="sheet">
+  <header class="top">
+    <div class="brand">LENNAR</div>
+    <div class="doc-label">Daily Summary</div>
+  </header>
+
+  <div class="title-block">
+    <h1>Daily Summary</h1>
+    <p class="sub">Complete every section before the end of your shift. If a section has no activity, mark it "None." Every open item needs a reason — no cell is left blank.</p>
+  </div>
+
+  <div id="permMsg" class="empty" style="display:none;"></div>
+
+  <div id="formArea" style="display:none;">
+    <div class="meta">
+      <div class="field">
+        <label>Associate Name</label>
+        <input type="text" id="assocName" readonly>
+      </div>
+      <div class="field">
+        <label>Date</label>
+        <input type="date" id="reportDate">
+      </div>
+    </div>
+
+    <div id="sections"></div>
+
+    <div class="notes-box">
+      <label>Notes and Escalations</label>
+      <textarea id="notes" placeholder="Anything your supervisor should know before the next shift..."></textarea>
+    </div>
+
+    <div class="actions">
+      <button class="submit-btn" id="submitBtn">Submit Report</button>
+      <span class="status-msg" id="statusMsg"></span>
+    </div>
+  </div>
+
+  <footer class="bottom">
+    <span>Internal use only. Submit before the end of each shift.</span>
+    <span>Customer Care Operations</span>
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var API = '/api';
+  var SESSION_KEY = 'olh.session.v1';
+
+  /* ---- Auth (mirrors case-aging.html / my-walks.html's shared OLHAuth session contract) --- */
+  function getSession() {
+    try { var v = localStorage.getItem(SESSION_KEY); return v ? JSON.parse(v) : null; }
+    catch (e) { return null; }
+  }
+  function authHeaders(extra) {
+    var h = Object.assign({ Accept: 'application/json' }, extra || {});
+    var s = getSession();
+    var tok = s && s.token;
+    if (tok) { h.Authorization = 'Bearer ' + tok; h['X-OLH-Token'] = 'Bearer ' + tok; }
+    return h;
+  }
+  function authedFetchHeaders(extra) {
+    if (!getSession() || !getSession().token) {
+      throw new Error('You are not signed in. Sign in at the OLH Tracker home page, then reload this page.');
+    }
+    return authHeaders(extra);
+  }
+  function apiGet(path) {
+    return fetch(API + path, { headers: authedFetchHeaders() }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (body) {
+        if (res.status === 401) { var e = new Error((body && body.error) || 'Your session has expired.'); e.status = 401; throw e; }
+        if (!res.ok || !body) throw new Error((body && body.error) || (path + ' failed (' + res.status + ')'));
+        return body;
+      });
+    });
+  }
+  function apiPost(path, payload) {
+    return fetch(API + path, {
+      method: 'POST',
+      headers: authedFetchHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload)
+    }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (body) {
+        if (!res.ok) throw new Error((body && body.error) || (path + ' failed (' + res.status + ')'));
+        return body;
+      });
+    });
+  }
+
+  var CURRENT_USER = { name: null, email: null, division: null };
+
+  var SECTIONS = [
+    { key:'aged_case', num:'01', title:'Aged Case Updates',
+      cols:[{key:'case',label:'Case Number',type:'input'},{key:'edoc',label:'EDOC',type:'input'},{key:'remaining',label:'Remaining Items',type:'text'},{key:'reason',label:'Delay Reason',type:'text'}] },
+    { key:'open_wo_aged', num:'02', title:'Open Work Orders on Aged Cases',
+      cols:[{key:'wo',label:'WO Number',type:'input'},{key:'item',label:'Item',type:'input'},{key:'trade',label:'Trade',type:'input'},{key:'status',label:'WO Status',type:'input'},{key:'reason',label:'Reason',type:'text'}] },
+    { key:'overdue_wo', num:'03', title:'Overdue Work Orders',
+      cols:[{key:'wo',label:'WO Number',type:'input'},{key:'item',label:'Item',type:'input'},{key:'reason',label:'Overdue Reason',type:'text'}] },
+    { key:'expired_trade', num:'04', title:'Expired Trade Assignments',
+      cols:[{key:'wo',label:'WO Number',type:'input'},{key:'item',label:'Item',type:'input'},{key:'trade',label:'Trade',type:'input'},{key:'reason',label:'Reason Expired',type:'text'}] },
+    { key:'unscheduled_wo', num:'05', title:'Unscheduled Work Orders Over 9 Days',
+      cols:[{key:'wo',label:'WO Number',type:'input'},{key:'item',label:'Item',type:'input'},{key:'trade',label:'Trade',type:'input'},{key:'status',label:'Status',type:'input'},{key:'reason',label:'Reason',type:'text'}] },
+    { key:'buildpro', num:'06', title:'BuildPro Access Needed',
+      cols:[{key:'community',label:'Community',type:'input'},{key:'address',label:'Address',type:'input'}] }
+  ];
+
+  var state = {};
+  SECTIONS.forEach(function (s) { state[s.key] = { none:false, rows:[makeEmptyRow(s)] }; });
+  function makeEmptyRow(section){ var row={}; section.cols.forEach(function(c){ row[c.key]=''; }); return row; }
+
+  function todayISO(){
+    var d=new Date(); var off=d.getTimezoneOffset();
+    return new Date(d.getTime()-off*60000).toISOString().slice(0,10);
+  }
+
+  function rowHasAnyContent(row){ return Object.values(row).some(function(v){ return v&&v.trim().length>0; }); }
+  function rowIsComplete(row){ return Object.values(row).every(function(v){ return v&&v.trim().length>0; }); }
+
+  function renderSections(){
+    var container=document.getElementById('sections');
+    container.innerHTML='';
+    SECTIONS.forEach(function(section){
+      var s=state[section.key];
+      var block=document.createElement('section');
+      block.className='block';
+      var head=document.createElement('div');
+      head.className='block-head';
+      head.innerHTML=
+        '<h2><span class="num">'+section.num+'</span>'+section.title+'</h2>'+
+        '<label class="none-toggle">'+
+        '<input type="checkbox" '+(s.none?'checked':'')+' data-section="'+section.key+'" class="none-check">'+
+        'No activity — mark None</label>';
+      block.appendChild(head);
+
+      if(!s.none){
+        var table=document.createElement('table');
+        table.className='grid';
+        var thHtml='<thead><tr>';
+        section.cols.forEach(function(c){ thHtml+='<th>'+c.label+'</th>'; });
+        thHtml+='<th class="colrm"></th></tr></thead>';
+        table.innerHTML=thHtml;
+        var tbody=document.createElement('tbody');
+        s.rows.forEach(function(row,idx){
+          var tr=document.createElement('tr');
+          var tdHtml='';
+          section.cols.forEach(function(c){
+            var val=(row[c.key]||'').replace(/"/g,'&quot;');
+            tdHtml += c.type==='text'
+              ? '<td><textarea rows="1" data-section="'+section.key+'" data-row="'+idx+'" data-col="'+c.key+'" class="cell">'+(row[c.key]||'')+'</textarea></td>'
+              : '<td><input type="text" value="'+val+'" data-section="'+section.key+'" data-row="'+idx+'" data-col="'+c.key+'" class="cell"></td>';
+          });
+          var complete=rowIsComplete(row), hasContent=rowHasAnyContent(row);
+          var flagClass = hasContent && !complete ? 'blank-warn' : (complete?'filled':'');
+          tdHtml += '<td class="colrm"><span class="row-flag '+flagClass+'"></span> <button class="rm-btn" data-section="'+section.key+'" data-row="'+idx+'">&times;</button></td>';
+          tr.innerHTML=tdHtml;
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        block.appendChild(table);
+        var addBtn=document.createElement('button');
+        addBtn.className='add-row'; addBtn.type='button'; addBtn.textContent='+ Add row';
+        addBtn.dataset.section=section.key;
+        block.appendChild(addBtn);
+      } else {
+        var table2=document.createElement('table');
+        table2.className='grid';
+        table2.innerHTML='<tbody><tr class="none-row"><td>None — no activity this shift.</td></tr></tbody>';
+        block.appendChild(table2);
+      }
+      container.appendChild(block);
+    });
+    attachHandlers();
+  }
+
+  function attachHandlers(){
+    document.querySelectorAll('.none-check').forEach(function(el){
+      el.addEventListener('change', function(e){
+        var key=e.target.dataset.section;
+        state[key].none=e.target.checked;
+        if(state[key].none) state[key].rows=[makeEmptyRow(SECTIONS.find(function(s){return s.key===key;}))];
+        renderSections();
+      });
+    });
+    document.querySelectorAll('.cell').forEach(function(el){
+      el.addEventListener('input', function(e){
+        var section=e.target.dataset.section, row=e.target.dataset.row, col=e.target.dataset.col;
+        state[section].rows[row][col]=e.target.value;
+        var tr=e.target.closest('tr');
+        var rowData=state[section].rows[row];
+        var complete=rowIsComplete(rowData), hasContent=rowHasAnyContent(rowData);
+        tr.querySelector('.row-flag').className='row-flag'+(hasContent&&!complete?' blank-warn':(complete?' filled':''));
+      });
+    });
+    document.querySelectorAll('.rm-btn').forEach(function(el){
+      el.addEventListener('click', function(e){
+        var section=e.target.dataset.section, row=e.target.dataset.row;
+        if(state[section].rows.length>1) state[section].rows.splice(row,1);
+        else state[section].rows[0]=makeEmptyRow(SECTIONS.find(function(s){return s.key===section;}));
+        renderSections();
+      });
+    });
+    document.querySelectorAll('.add-row').forEach(function(el){
+      el.addEventListener('click', function(e){
+        var key=e.target.dataset.section;
+        state[key].rows.push(makeEmptyRow(SECTIONS.find(function(s){return s.key===key;})));
+        renderSections();
+      });
+    });
+  }
+
+  function validate(){
+    var name=document.getElementById('assocName').value.trim();
+    var date=document.getElementById('reportDate').value;
+    if(!name) return 'Enter your name before submitting.';
+    if(!date) return 'Select a date before submitting.';
+    for (var i=0;i<SECTIONS.length;i++){
+      var section=SECTIONS[i];
+      var s=state[section.key];
+      if(s.none) continue;
+      for (var j=0;j<s.rows.length;j++){
+        var row=s.rows[j];
+        var hasContent=rowHasAnyContent(row), complete=rowIsComplete(row);
+        if(hasContent && !complete) return '"'+section.title+'" has a row with a blank cell. Fill every cell or remove the row.';
+      }
+      if(s.rows.filter(rowHasAnyContent).length===0) return '"'+section.title+'" is empty — check "No activity — mark None" if there\'s nothing to report.';
+    }
+    return null;
+  }
+
+  function flattenSection(section){
+    var s=state[section.key];
+    if(s.none) return 'None';
+    return s.rows.filter(rowHasAnyContent).map(function(row){
+      return section.cols.map(function(c){ return c.label+': '+(row[c.key]||''); }).join(' | ');
+    }).join('\n');
+  }
+
+  function submitReport(){
+    var statusEl=document.getElementById('statusMsg');
+    var err=validate();
+    if(err){ statusEl.textContent=err; statusEl.className='status-msg err'; return; }
+
+    var btn=document.getElementById('submitBtn');
+    btn.disabled=true;
+    statusEl.textContent='Submitting...'; statusEl.className='status-msg';
+
+    var submissionId = 'ds' + Date.now() + Math.random().toString(36).slice(2,8);
+    var payload = {
+      submissionId: submissionId,
+      reportDate: document.getElementById('reportDate').value,
+      sections: Object.fromEntries(SECTIONS.map(function(s){ return [s.key, flattenSection(s)]; })),
+      notes: document.getElementById('notes').value.trim()
+    };
+
+    apiPost('/daily-summary', payload).then(function () {
+      statusEl.textContent = 'Submitted for ' + CURRENT_USER.name + ' — ' + payload.reportDate + '.';
+      statusEl.className='status-msg ok';
+    }).catch(function (e) {
+      statusEl.textContent = e.message || 'Could not submit — check your connection and try again.';
+      statusEl.className='status-msg err';
+    }).finally(function () {
+      btn.disabled=false;
+    });
+  }
+
+  function init(){
+    apiGet('/session').then(function (data) {
+      CURRENT_USER.name = data.user.name;
+      CURRENT_USER.email = data.user.email;
+      CURRENT_USER.division = data.user.division;
+      document.getElementById('whoLine').textContent = CURRENT_USER.name;
+
+      if ((data.can || []).indexOf('page.dailysummary') < 0) {
+        document.getElementById('permMsg').style.display = '';
+        document.getElementById('permMsg').textContent = 'Your role does not have access to the Daily Summary page.';
+        document.getElementById('formArea').style.display = 'none';
+        return;
+      }
+
+      document.getElementById('formArea').style.display = '';
+      document.getElementById('assocName').value = CURRENT_USER.name;
+      document.getElementById('reportDate').value = todayISO();
+      renderSections();
+      document.getElementById('submitBtn').addEventListener('click', submitReport);
+    }).catch(function (err) {
+      document.getElementById('whoLine').textContent = 'Not signed in';
+      document.getElementById('permMsg').style.display = '';
+      document.getElementById('permMsg').textContent = err.message || 'Could not load this page.';
+      document.getElementById('formArea').style.display = 'none';
+    });
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

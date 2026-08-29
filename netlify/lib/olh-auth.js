@@ -32,7 +32,9 @@ const TABLES = {
   syncHistory: 'tblBHVI7HelUb6vyk',
   bonusSubmissions: 'tblfFcCeZGUHEvj4N',
   bonusSource: 'tbl8eMWVp2Dx1YcDg',
-  caseAgingExceptions: 'tblF6CAPJkW4WgZmS'
+  caseAgingExceptions: 'tblF6CAPJkW4WgZmS',
+  dailySummary: 'tbllmzusPJehWJDxj',
+  monthly1on1: 'tbl2GraVFEzPi7Myx'
 };
 
 /* ---- HTTP plumbing (shape matches the existing jobs.js) ------------------- */
@@ -318,7 +320,7 @@ const ALL_PAGES = [
   'page.home', 'page.mywalks', 'page.tracker', 'page.completion', 'page.walks', 'page.game',
   'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload',
   'page.walkstoschedule', 'page.admin', 'page.keys', 'page.sanmpr', 'page.synchistory', 'page.redflags',
-  'page.bonus', 'page.bonusapproval', 'page.caseaging'
+  'page.bonus', 'page.bonusapproval', 'page.caseaging', 'page.dailysummary', 'page.monthly1on1'
 ];
 
 // Mirrors DEFAULT_ROLES in the frontend auth module. Used when the Roles table
@@ -345,13 +347,24 @@ const DEFAULT_ROLES = {
   // qam: ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply',
   //   'page.home', 'page.tracker', 'page.completion', 'page.walks', 'page.qamgmt', 'page.missedwalks',
   //   'page.scheduler', 'page.timeoff', 'page.workload', 'page.walkstoschedule'],
-  qam: ['suite.view', 'walk.complete', 'page.home', 'page.mywalks'],
-  cm: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.completion', 'page.walks', 'page.redflags'],
+  // 2026-08-29: page.monthly1on1 added to qam so QAMs can complete their own
+  // associate-side check-in too, same as ccr/cm below -- everyone with a
+  // monthly one-on-one has the associate half of the page even if their role
+  // otherwise carries no other tracker/case pages.
+  qam: ['suite.view', 'walk.complete', 'page.home', 'page.mywalks', 'page.monthly1on1'],
+  cm: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.completion', 'page.walks', 'page.redflags',
+    'page.monthly1on1'],
   ccr: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.walks', 'page.qamgmt', 'page.missedwalks',
-    'page.walkstoschedule', 'page.bonus', 'page.caseaging'],
+    'page.walkstoschedule', 'page.bonus', 'page.caseaging', 'page.dailysummary', 'page.monthly1on1'],
+  // page.dailysummary and page.monthly1on1 both live here too, view-only in
+  // effect for the associate-authored fields (the frontend gates writing
+  // those to the record's own owner) -- leadership is who the "Support
+  // Needed" side of a one-on-one and the "Reviewed By" side of a daily
+  // summary actually belongs to, mirroring page.bonusapproval's role.
   leadership: ['suite.view', 'page.home', 'page.tracker', 'page.completion',
     'page.walks', 'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload',
-    'page.walkstoschedule', 'page.keys', 'page.synchistory', 'page.redflags', 'page.bonusapproval'],
+    'page.walkstoschedule', 'page.keys', 'page.synchistory', 'page.redflags', 'page.bonusapproval',
+    'page.dailysummary', 'page.monthly1on1'],
   // View-only: the tracker grid, the schedule optimizer, and homesite.html
   // (which has no permission of its own -- it checks only suite.view and is
   // reached by drilling into a record from the tracker). No tracker.edit,
@@ -795,7 +808,9 @@ const PAGE_LABEL = {
   'page.redflags': 'Red Flags',
   'page.bonus': 'CCR Monthly Bonus',
   'page.bonusapproval': 'Approvals (Bonus + Case Aging)',
-  'page.caseaging': 'Case Aging Exception Request'
+  'page.caseaging': 'Case Aging Exception Request',
+  'page.dailysummary': 'Daily Summary',
+  'page.monthly1on1': 'Monthly One-on-One'
 };
 const DENY = {
   'suite.view': 'Your account does not have access to the OLH Suite yet. Ask an admin to grant it.',
