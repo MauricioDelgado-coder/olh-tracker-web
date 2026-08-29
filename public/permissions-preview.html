@@ -146,6 +146,20 @@
     });
   }
 
+  function apiPost(path, payload) {
+    return fetch(API + path, {
+      method: 'POST',
+      headers: authedFetchHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload)
+    }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (body) {
+        if (res.status === 401) { var e = new Error((body && body.error) || 'Your session has expired.'); e.status = 401; throw e; }
+        if (!res.ok) throw new Error((body && body.error) || (path + ' failed (' + res.status + ')'));
+        return body;
+      });
+    });
+  }
+
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
@@ -191,16 +205,28 @@
   function labelFor(perm) { return (CATALOG_META[perm] && CATALOG_META[perm].label) || perm; }
   function isPageKey(perm) { return !!(CATALOG_META[perm] && CATALOG_META[perm].isPage); }
 
-  var ROLE_LABEL = {
+  // ROLE_LABEL_FALLBACK covers the seven shipped roles even if a request
+  // somehow returns no labels map (older cached response, mid-deploy skew).
+  // Anything beyond those seven -- i.e. every role created via this page --
+  // comes entirely from state.roleLabels, loaded fresh from GET /api/roles.
+  var ROLE_LABEL_FALLBACK = {
     admin: 'Admin', qam: 'QA Manager', cm: 'Construction Manager', ccr: 'Customer Care',
     leadership: 'Division Leadership', concierge: 'Concierge', sandbox: 'Sandbox'
   };
-  var ROLE_ORDER = ['admin', 'qam', 'cm', 'ccr', 'leadership', 'concierge', 'sandbox'];
+  var ROLE_ORDER_FALLBACK = ['admin', 'qam', 'cm', 'ccr', 'leadership', 'concierge', 'sandbox'];
+  function roleLabelFor(slug) { return (state.roleLabels && state.roleLabels[slug]) || ROLE_LABEL_FALLBACK[slug] || slug; }
+  function roleOrder() {
+    var known = Object.keys(state.roles || {});
+    var ordered = ROLE_ORDER_FALLBACK.filter(function (s) { return known.indexOf(s) >= 0; });
+    known.forEach(function (s) { if (ordered.indexOf(s) < 0) ordered.push(s); });
+    return ordered;
+  }
 
   var state = {
     user: null, can: [], loading: true, error: '',
-    roles: {}, perms: [], users: [],
-    selUserId: '', saving: false, statusMsg: '', statusOk: false
+    roles: {}, roleLabels: {}, perms: [], users: [],
+    selUserId: '', saving: false, statusMsg: '', statusOk: false,
+    roleCreating: false, roleCreateMsg: '', roleCreateOk: false
   };
 
   /* ---- Data loads -------------------------------------------------------- */
@@ -214,6 +240,7 @@
     return apiGet('/roles').then(function (data) {
       state.roles = data.roles || {};
       state.perms = data.perms || [];
+      state.roleLabels = data.labels || {};
     });
   }
   function loadUsers() {
@@ -239,8 +266,8 @@
   }
 
   function renderMatrixTable() {
-    var rolesPresent = ROLE_ORDER.filter(function (r) { return state.roles[r]; });
-    var html = '<tr><th>Permission</th>' + rolesPresent.map(function (r) { return '<th>' + ROLE_LABEL[r] + '</th>'; }).join('') + '</tr>';
+    var rolesPresent = roleOrder().filter(function (r) { return state.roles[r]; });
+    var html = '<tr><th>Permission</th>' + rolesPresent.map(function (r) { return '<th>' + esc(roleLabelFor(r)) + '</th>'; }).join('') + '</tr>';
     state.perms.forEach(function (perm) {
       html += '<tr><td>' + esc(labelFor(perm)) + ' <span class="mono" style="color:var(--muted);font-size:10px">(' + esc(perm) + ')</span></td>';
       rolesPresent.forEach(function (r) {
@@ -297,7 +324,7 @@
 
     var userOpts = state.users.map(function (u) {
       return '<option value="' + esc(u.id) + '"' + (u.id === user.id ? ' selected' : '') + '>' +
-        esc(u.name) + ' \u2014 ' + esc(ROLE_LABEL[u.role] || u.role) + ' (' + esc(u.division || '\u2014') + ')' +
+        esc(u.name) + ' \u2014 ' + esc(roleLabelFor(u.role)) + ' (' + esc(u.division || '\u2014') + ')' +
         (u.active === false ? ' [inactive]' : '') + (u.pending ? ' [pending]' : '') + '</option>';
     }).join('');
 
@@ -319,7 +346,7 @@
         '<div class="stack"><label>User (live Users table row)</label>' +
         '<select id="userSelect">' + userOpts + '</select></div>' +
       '</div>' +
-      '<div class="note">Base role: <b>' + esc(ROLE_LABEL[user.role] || user.role) + '</b> &nbsp;\u2022&nbsp; Division: <b>' + esc(user.division || '\u2014') + '</b> ' +
+      '<div class="note">Base role: <b>' + esc(roleLabelFor(user.role)) + '</b> &nbsp;\u2022&nbsp; Division: <b>' + esc(user.division || '\u2014') + '</b> ' +
         '&nbsp;\u2022&nbsp; Email: <span class="mono">' + esc(user.email) + '</span>' +
         (user.active === false ? ' &nbsp;\u2022&nbsp; <span class="pill locked">inactive</span>' : '') +
         (user.pending ? ' &nbsp;\u2022&nbsp; <span class="pill locked">pending invite</span>' : '') + '</div>' +
@@ -354,10 +381,10 @@
   function renderScopeTable() {
     var divisions = divisionsFromUsers();
     if (!divisions.length) return '<div class="empty">No division data on the loaded Users rows.</div>';
-    var roleSlugs = ROLE_ORDER.filter(function (r) { return r !== 'admin'; });
+    var roleSlugs = roleOrder().filter(function (r) { return r !== 'admin'; });
     var html = '<tr><th>Role</th>' + divisions.map(function (d) { return '<th>' + esc(d) + '</th>'; }).join('') + '</tr>';
     roleSlugs.forEach(function (role) {
-      html += '<tr><td>' + esc(ROLE_LABEL[role]) + '</td>';
+      html += '<tr><td>' + esc(roleLabelFor(role)) + '</td>';
       divisions.forEach(function (div) {
         var count = state.users.filter(function (u) { return u.role === role && u.division === div; }).length;
         html += '<td class="cap-cell">' + (count ? ('<span class="pill base">' + count + ' user' + (count === 1 ? '' : 's') + '</span>') : '<span class="mono" style="color:var(--faint);font-size:11px">\u2014</span>') + '</td>';
@@ -365,6 +392,20 @@
       html += '</tr>';
     });
     return html;
+  }
+
+  function renderCreateRoleCard() {
+    return '' +
+      '<div class="card">' +
+        '<h2>Create a role</h2>' +
+        '<div class="desc">Writes a new row to the live Roles table. Starts with only <span class="mono">suite.view</span> \u2014 someone can sign in and land on an empty All Views, nothing else \u2014 so you check boxes for it in this page\u2019s permission catalog above once it exists. It will also appear in admin.html\u2019s Roles &amp; Permissions grid and its three Role pickers automatically.</div>' +
+        '<div class="row-flex">' +
+          '<div class="stack"><label>Role name</label><input id="newRoleLabel" type="text" placeholder="e.g. Homebuyer Success" style="height:32px;padding:0 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-width:220px"></div>' +
+          '<div class="stack"><label>Role id (optional)</label><input id="newRoleSlug" type="text" placeholder="auto from name" style="height:32px;padding:0 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-width:160px" class="mono"></div>' +
+          '<button id="createRoleBtn" class="small"' + (state.roleCreating ? ' disabled' : '') + ' style="align-self:flex-end;height:32px">Create Role</button>' +
+        '</div>' +
+        (state.roleCreateMsg ? '<div class="note" style="color:' + (state.roleCreateOk ? 'var(--green-ink)' : 'var(--red-ink)') + '">' + esc(state.roleCreateMsg) + '</div>' : '') +
+      '</div>';
   }
 
   function contentHtml() {
@@ -375,6 +416,8 @@
     return '' +
       usersNote +
       '<div class="banner info">Live GET /api/roles' + (state.usersError ? '' : ' + GET /api/users') + '. Grant/revoke below writes to Airtable via PATCH /api/users/:id and takes effect on that user\u2019s next request \u2014 no sign-out needed. An admin\u2019s suite.view/roster.manage/page.admin can never be revoked this way; the server re-enforces that regardless of what\u2019s submitted. Division-scoped roles (shown in the design doc, docs/proposals/permission-system-prototype.html) are not built yet.</div>' +
+
+      renderCreateRoleCard() +
 
       '<div class="card">' +
         '<h2>Live permission catalog</h2>' +
@@ -413,6 +456,46 @@
     }
     content.innerHTML = contentHtml();
     wireUserPanel();
+    wireCreateRoleButton();
+  }
+
+  function onCreateRoleClick() {
+    var labelEl = document.getElementById('newRoleLabel');
+    var slugEl = document.getElementById('newRoleSlug');
+    var label = labelEl ? labelEl.value.trim() : '';
+    var slug = slugEl ? slugEl.value.trim() : '';
+    if (!label) {
+      state.roleCreateOk = false;
+      state.roleCreateMsg = 'Enter a name for the role.';
+      document.getElementById('content').innerHTML = contentHtml();
+      wireUserPanel();
+      wireCreateRoleButton();
+      return;
+    }
+    state.roleCreating = true;
+    state.roleCreateMsg = '';
+    document.getElementById('content').innerHTML = contentHtml();
+    wireUserPanel();
+    wireCreateRoleButton();
+    apiPost('/roles', { label: label, slug: slug || undefined }).then(function (data) {
+      state.roleCreating = false;
+      state.roleCreateOk = true;
+      state.roleCreateMsg = 'Created "' + label + '" (id: ' + (data && data.slug) + '). It starts with sign-in access only -- grant it pages/capabilities in the catalog below.';
+      state.roles = data.roles || state.roles;
+      state.perms = data.perms || state.perms;
+      state.roleLabels = state.roleLabels || {};
+      if (data && data.slug && data.label) state.roleLabels[data.slug] = data.label;
+      render();
+    }).catch(function (err) {
+      state.roleCreating = false;
+      state.roleCreateOk = false;
+      state.roleCreateMsg = 'Could not create the role: ' + (err && err.message ? err.message : String(err));
+      render();
+    });
+  }
+  function wireCreateRoleButton() {
+    var btn = document.getElementById('createRoleBtn');
+    if (btn) btn.addEventListener('click', onCreateRoleClick);
   }
 
   function refreshUserPanel() {

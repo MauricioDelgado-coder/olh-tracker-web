@@ -403,19 +403,86 @@ const ROLE_LABEL = {
   sandbox: 'Sandbox'
 };
 
-/** Unknown roles collapse to the least-privileged role, never to admin. */
-const roleSlug = (r) => ROLE_ALIAS[String(r || '').toLowerCase().trim()] || 'leadership';
-const roleLabel = (slug) => ROLE_LABEL[roleSlug(slug)];
+/**
+ * Dynamic role registry, sourced from the Roles table's Role (slug) + Label
+ * (display name) fields. Roles are no longer only the seven shipped in
+ * DEFAULT_ROLES -- an admin can create new ones (see createRole below) --
+ * so ROLE_ALIAS/ROLE_LABEL alone are not a complete answer to "what roles
+ * exist" any more. They remain the bootstrap defaults (what a brand-new,
+ * empty Roles table falls back to) and the fast path for the seven original
+ * roles, which never needs a network round trip to resolve.
+ *
+ * Populated as a side effect of loadMatrix() (which already reads the whole
+ * Roles table every ~60s) rather than its own separate fetch. On a genuine
+ * cold start, before the first loadMatrix() call in this process, dyn is
+ * null and roleSlug()/roleLabel() fall through to the static maps plus the
+ * slug-shaped passthrough below -- which is exactly correct for the one
+ * thing that matters on a cold start: recognizing the Roles table's own
+ * Role field, which is already a slug, not a label needing translation.
+ */
+let roleRegistryCache = { at: 0, value: null };
+
+function buildRoleRegistry(recs) {
+  const alias = Object.assign({}, ROLE_ALIAS);
+  const label = Object.assign({}, ROLE_LABEL);
+  const slugs = Object.keys(DEFAULT_ROLES);
+  for (const r of recs) {
+    const f = (r && r.fields) || {};
+    const slug = String(f.Role || '').trim().toLowerCase();
+    if (!slug) continue;
+    const disp = String(f.Label || '').trim();
+    alias[slug] = slug;
+    if (disp) alias[disp.toLowerCase()] = slug;
+    label[slug] = disp || label[slug] || slug;
+    if (slugs.indexOf(slug) < 0) slugs.push(slug);
+  }
+  return { alias, label, slugs };
+}
+
+/**
+ * A slug this process has never seen a Roles row for yet (freshly created,
+ * cache not refreshed here since) is still recognized as itself rather than
+ * collapsed to leadership -- it must already look like a slug we would have
+ * generated (lowercase, starts with a letter, alnum/hyphen/underscore only,
+ * 2-40 chars) so arbitrary garbage still falls through to the safe default.
+ */
+const SLUG_SHAPE = /^[a-z][a-z0-9_-]{1,40}$/;
+
+function roleSlug(r) {
+  const key = String(r || '').toLowerCase().trim();
+  if (ROLE_ALIAS[key]) return ROLE_ALIAS[key];
+  const dyn = roleRegistryCache.value;
+  if (dyn && dyn.alias[key]) return dyn.alias[key];
+  if (SLUG_SHAPE.test(key)) return key;
+  return 'leadership';
+}
+function roleLabel(input) {
+  const slug = roleSlug(input);
+  const dyn = roleRegistryCache.value;
+  if (dyn && dyn.label[slug]) return dyn.label[slug];
+  return ROLE_LABEL[slug] || slug;
+}
+/** All role slugs known to this process right now (static + whatever the last Roles table read found). */
+function knownRoleSlugs() {
+  const dyn = roleRegistryCache.value;
+  return dyn ? dyn.slugs.slice() : Object.keys(DEFAULT_ROLES);
+}
 
 /**
  * The same normalisation the frontend applies, enforced here so a hand-edited
  * Roles row cannot lock every admin out of the console or grant an editing
  * permission without the view permission it depends on.
+ *
+ * roleSlugs defaults to the seven shipped roles for any caller that hasn't
+ * loaded the dynamic registry yet (e.g. dev/check-page-perms.js, which calls
+ * this directly with no Airtable access at all); loadMatrix passes the full
+ * dynamic set once it has one.
  */
-function normalizeMatrix(src) {
+function normalizeMatrix(src, roleSlugs) {
   const out = {};
-  for (const slug of Object.keys(DEFAULT_ROLES)) {
-    let can = (src && Array.isArray(src[slug])) ? src[slug].slice() : DEFAULT_ROLES[slug].slice();
+  for (const slug of (roleSlugs || Object.keys(DEFAULT_ROLES))) {
+    const base = DEFAULT_ROLES[slug] ? DEFAULT_ROLES[slug].slice() : ['suite.view'];
+    let can = (src && Array.isArray(src[slug])) ? src[slug].slice() : base;
     can = can.filter((p) => PERMS.indexOf(p) >= 0);
     for (const p of (ROLE_LOCKS[slug] || [])) if (can.indexOf(p) < 0) can.push(p);
     if (can.some((p) => IMPLIES_VIEW.indexOf(p) >= 0) && can.indexOf('suite.view') < 0) {
@@ -479,8 +546,9 @@ async function loadMatrix(bust) {
   const now = Date.now();
   if (!bust && matrixCache.value && now - matrixCache.at < MATRIX_TTL_MS) return matrixCache.value;
   let stored = null;
+  let recs = [];
   try {
-    const recs = await listRecords(TABLES.roles);
+    recs = await listRecords(TABLES.roles);
     if (recs.length) {
       stored = {};
       for (const r of recs) {
@@ -494,13 +562,19 @@ async function loadMatrix(bust) {
     // shipped defaults rather than to "no permissions".
     stored = null;
   }
-  const value = normalizeMatrix(stored);
+  // Side effect: refresh the dynamic role registry from the same read, so a
+  // role created since the last cache cycle becomes resolvable by roleSlug/
+  // roleLabel everywhere (not just inside this one matrix computation)
+  // without a second network round trip.
+  roleRegistryCache = { at: now, value: buildRoleRegistry(recs) };
+  const value = normalizeMatrix(stored, knownRoleSlugs());
   matrixCache = { at: now, value };
   return value;
 }
 
 async function saveMatrix(next, byName) {
-  const norm = normalizeMatrix(next);
+  const roleSlugs = Array.from(new Set(knownRoleSlugs().concat(Object.keys(next || {}))));
+  const norm = normalizeMatrix(next, roleSlugs);
   const existing = await listRecords(TABLES.roles);
   const bySlug = new Map(existing.map((r) => [roleSlug(r.fields && r.fields.Role), r]));
   const stamp = new Date().toISOString();
@@ -518,6 +592,74 @@ async function saveMatrix(next, byName) {
   }
   matrixCache = { at: Date.now(), value: norm };
   return norm;
+}
+
+/**
+ * Create a brand-new role. Admin-only (enforced by the caller via
+ * requirePerm(session, 'roster.manage') before this runs -- this function
+ * itself does not check a session, same as saveMatrix).
+ *
+ * label is required and becomes the Roles table's Label field (what people
+ * see). slug is optional -- if omitted, it's derived from label the same way
+ * a human would abbreviate it (lowercase, spaces to hyphens, strip anything
+ * that isn't alnum/hyphen/underscore). Either way the final slug must be
+ * SLUG_SHAPE-valid and must not collide with an existing role.
+ *
+ * The new role starts with only suite.view -- a role that can sign in and
+ * see nothing, ready for an admin to check boxes for it on the Roles &
+ * Permissions grid. Granting it real access is a second, deliberate step,
+ * not a guess this function makes on the admin's behalf.
+ */
+async function createRole(label, slug, byName) {
+  const cleanLabel = String(label || '').trim();
+  if (!cleanLabel) {
+    const e = new Error('Enter a name for the role.');
+    e.statusCode = 400;
+    throw e;
+  }
+  if (cleanLabel.length > 60) {
+    const e = new Error('Role name is too long (60 characters max).');
+    e.statusCode = 400;
+    throw e;
+  }
+  let cleanSlug = String(slug || '').trim().toLowerCase();
+  if (!cleanSlug) {
+    cleanSlug = cleanLabel.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  }
+  if (!SLUG_SHAPE.test(cleanSlug)) {
+    const e = new Error('That name does not reduce to a usable role id. Try something simpler, or provide one.');
+    e.statusCode = 400;
+    throw e;
+  }
+  await loadMatrix(true); // ensure the registry reflects the latest Roles table before checking collisions
+  const existingSlugs = knownRoleSlugs();
+  if (existingSlugs.indexOf(cleanSlug) >= 0) {
+    const e = new Error('A role with that id already exists.');
+    e.statusCode = 409;
+    throw e;
+  }
+  const dyn = roleRegistryCache.value;
+  const labelTaken = dyn && Object.keys(dyn.alias).indexOf(cleanLabel.toLowerCase()) >= 0 &&
+    dyn.alias[cleanLabel.toLowerCase()] !== cleanSlug;
+  if (labelTaken) {
+    const e = new Error('That name is already used by another role.');
+    e.statusCode = 409;
+    throw e;
+  }
+  const stamp = new Date().toISOString();
+  await createRecord(TABLES.roles, {
+    Role: cleanSlug,
+    Label: cleanLabel,
+    Permissions: ['suite.view'],
+    'Updated At': stamp,
+    'Updated By': byName || ''
+  });
+  // Bust both caches so the admin who just created this role sees it on
+  // their very next request rather than waiting out MATRIX_TTL_MS.
+  matrixCache = { at: 0, value: null };
+  roleRegistryCache = { at: 0, value: null };
+  const roles = await loadMatrix(true);
+  return { roles, slug: cleanSlug, label: cleanLabel };
 }
 
 /* ---- Users ---------------------------------------------------------------- */
@@ -700,7 +842,7 @@ module.exports = {
   caseAgingExceptionsApprovedCount,
   hashPassword, verifyPassword, checkPolicy,
   sha256, randomToken, mintSession, readSession, SESSION_TTL_MS,
-  roleSlug, roleLabel, normalizeMatrix, applyOverrides, loadMatrix, saveMatrix,
+  roleSlug, roleLabel, knownRoleSlugs, normalizeMatrix, applyOverrides, loadMatrix, saveMatrix, createRole,
   publicUser, normEmail, userByEmail, userById, userByTokenHash,
   bearer, requireSession, requirePerm
 };

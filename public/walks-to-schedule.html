@@ -459,10 +459,17 @@
      present, and anything that edits implies being able to view. Both the
      saved matrix and the grid's in-progress draft run through this, so what
      an admin sees is exactly what gets written. */
+  function knownRoleKeys(src) {
+    var out = Object.keys(DEFAULT_ROLES).slice();
+    Object.keys(src || {}).forEach(function (r) { if (out.indexOf(r) < 0) out.push(r); });
+    return out;
+  }
+
   function normalizeMatrix(src) {
     var out = {};
-    Object.keys(DEFAULT_ROLES).forEach(function (r) {
-      var can = (src && src[r]) ? src[r].slice() : DEFAULT_ROLES[r].can.slice();
+    knownRoleKeys(src).forEach(function (r) {
+      var base = DEFAULT_ROLES[r] ? DEFAULT_ROLES[r].can.slice() : ["suite.view"];
+      var can = (src && src[r]) ? src[r].slice() : base;
       (ROLE_LOCKS[r] || []).forEach(function (p) { if (can.indexOf(p) < 0) can.push(p); });
       if (can.some(function (p) { return IMPLIES_VIEW.indexOf(p) >= 0; }) && can.indexOf("suite.view") < 0)
         can.push("suite.view");
@@ -477,8 +484,8 @@
 
   function applyMatrix(src) {
     var norm = normalizeMatrix(src);
-    Object.keys(DEFAULT_ROLES).forEach(function (r) {
-      ROLES[r] = { label: DEFAULT_ROLES[r].label, can: norm[r] };
+    Object.keys(norm).forEach(function (r) {
+      ROLES[r] = { label: (DEFAULT_ROLES[r] && DEFAULT_ROLES[r].label) || titleCase(r), can: norm[r] };
     });
   }
   applyMatrix(readStoreEarly(ROLES_KEY));
@@ -513,7 +520,12 @@
   function readStore(k, d) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
   function writeStore(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
 
-  function normRole(r) { return ROLE_ALIAS[String(r || "").toLowerCase().trim()] || "leadership"; }
+  function normRole(r) {
+    var k = String(r || "").toLowerCase().trim();
+    if (ROLE_ALIAS[k]) return ROLE_ALIAS[k];
+    if (/^[a-z][a-z0-9_-]{1,40}$/.test(k)) return k;
+    return "leadership";
+  }
   function initials(n) {
     return String(n || "?").split(/[\s,]+/).filter(Boolean).slice(0, 2)
       .map(function (p) { return p[0].toUpperCase(); }).join("");
