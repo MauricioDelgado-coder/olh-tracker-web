@@ -433,6 +433,44 @@ function normalizeMatrix(src) {
   return out;
 }
 
+/**
+ * Per-user permission overrides, applied on top of the role matrix.
+ *
+ * grants/revokes are each filtered through PERMS first -- an unknown value
+ * stored on the Users record (a stale permission key from before a catalog
+ * change, or hand-typed junk) is dropped rather than passed through.
+ *
+ * Order matters: grants apply, then revokes remove (so a revoke always wins
+ * over a grant of the same key -- there is no case where you'd want a grant to
+ * survive its own explicit revoke), then the same two invariants
+ * normalizeMatrix enforces on the role matrix are re-applied here so an
+ * override can never produce a state the role grid itself couldn't produce:
+ *
+ *   - an editing capability without the page it acts on is useless, so
+ *     granting one still drags its page along (NEEDS_PAGE)
+ *   - page.admin is admin-only even by override; granting it to a non-admin
+ *     role here has no effect, same as normalizeMatrix does for the role grid
+ *   - an admin's suite.view/roster.manage/page.admin can never be revoked via
+ *     override -- ROLE_LOCKS is re-enforced last so no combination of grants
+ *     and revokes can lock an admin out of the console that fixes overrides
+ */
+function applyOverrides(baseCan, role, grants, revokes) {
+  const g = (Array.isArray(grants) ? grants : []).filter((p) => PERMS.indexOf(p) >= 0);
+  const r = (Array.isArray(revokes) ? revokes : []).filter((p) => PERMS.indexOf(p) >= 0);
+  let can = baseCan.slice();
+  for (const p of g) if (can.indexOf(p) < 0) can.push(p);
+  can = can.filter((p) => r.indexOf(p) < 0);
+  if (role !== 'admin') can = can.filter((p) => ADMIN_ONLY_PAGES.indexOf(p) < 0);
+  if (can.some((p) => IMPLIES_VIEW.indexOf(p) >= 0) && can.indexOf('suite.view') < 0) {
+    can.push('suite.view');
+  }
+  for (const cap of Object.keys(NEEDS_PAGE)) {
+    if (can.indexOf(cap) >= 0 && can.indexOf(NEEDS_PAGE[cap]) < 0) can.push(NEEDS_PAGE[cap]);
+  }
+  if (role === 'admin') for (const p of (ROLE_LOCKS.admin || [])) if (can.indexOf(p) < 0) can.push(p);
+  return PERMS.filter((p) => can.indexOf(p) >= 0);
+}
+
 // 60s cache: the matrix is read on every authenticated request.
 let matrixCache = { at: 0, value: null };
 const MATRIX_TTL_MS = 60 * 1000;
@@ -487,6 +525,8 @@ async function saveMatrix(next, byName) {
 /** The only user shape that may cross the wire. No hash, no token, no expiry. */
 function publicUser(rec) {
   const f = (rec && rec.fields) || {};
+  const grants = f['Permission Grants'];
+  const revokes = f['Permission Revokes'];
   return {
     id: rec.id,
     name: f.Name || '',
@@ -494,7 +534,9 @@ function publicUser(rec) {
     role: roleSlug(f.Role),
     division: f.Division || '',
     active: !!f.Active,
-    pending: !!f.Pending
+    pending: !!f.Pending,
+    grants: Array.isArray(grants) ? grants : (grants ? [grants] : []),
+    revokes: Array.isArray(revokes) ? revokes : (revokes ? [revokes] : [])
   };
 }
 
@@ -580,7 +622,8 @@ async function requireSession(event) {
     throw e;
   }
   const matrix = await loadMatrix();
-  const can = matrix[user.role] || [];
+  const baseCan = matrix[user.role] || [];
+  const can = applyOverrides(baseCan, user.role, user.grants, user.revokes);
   if (can.indexOf('suite.view') < 0) {
     const e = new Error('Your account does not have access to the OLH Suite yet. Ask an admin to grant it.');
     e.statusCode = 403;
@@ -657,7 +700,7 @@ module.exports = {
   caseAgingExceptionsApprovedCount,
   hashPassword, verifyPassword, checkPolicy,
   sha256, randomToken, mintSession, readSession, SESSION_TTL_MS,
-  roleSlug, roleLabel, normalizeMatrix, loadMatrix, saveMatrix,
+  roleSlug, roleLabel, normalizeMatrix, applyOverrides, loadMatrix, saveMatrix,
   publicUser, normEmail, userByEmail, userById, userByTokenHash,
   bearer, requireSession, requirePerm
 };

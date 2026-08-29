@@ -1,10 +1,19 @@
 /**
  * User administration for the OLH Suite. Every route requires roster.manage.
  *
- *   GET    /api/users          -> {users:[{id,name,email,role,division,active,pending}]}
+ *   GET    /api/users          -> {users:[{id,name,email,role,division,active,pending,grants,revokes}]}
  *   POST   /api/users   {user} -> {user, inviteUrl, expiresAt}
- *   PATCH  /api/users/:id      -> {user}
+ *   PATCH  /api/users/:id {name?,email?,division?,role?,active?,grants?,revokes?} -> {user}
  *   DELETE /api/users/:id      -> {ok:true}
+ *
+ * grants/revokes are per-user permission overrides applied on top of the
+ * role matrix (see applyOverrides in olh-auth.js). Each is a full replacement
+ * array, same as every other PATCH field here -- send the complete list you
+ * want stored, not a delta. Filtered through PERMS both here at write time and
+ * again in applyOverrides at read time, so a stale or invented permission key
+ * never survives either point. An admin's suite.view/roster.manage/page.admin
+ * cannot be revoked this way regardless of what's sent -- applyOverrides
+ * re-enforces that invariant unconditionally.
  *
  * Guard rails, all enforced here rather than only in the admin UI:
  *   - You cannot change your own role, suspend yourself, or delete yourself.
@@ -158,6 +167,21 @@ async function patch(event, id) {
       fields.Active = active;
       if (!active) bumpEpoch = true; // cut existing sessions immediately
     }
+  }
+
+  // Per-user permission overrides. Filtered through PERMS here too (not just
+  // in applyOverrides at read time) so what gets stored on the Users record
+  // already matches what will actually take effect -- an admin looking at
+  // Airtable directly should not see a value that the server silently ignores.
+  if (body.grants !== undefined) {
+    fields['Permission Grants'] = Array.isArray(body.grants)
+      ? body.grants.filter((p) => A.PERMS.indexOf(p) >= 0)
+      : [];
+  }
+  if (body.revokes !== undefined) {
+    fields['Permission Revokes'] = Array.isArray(body.revokes)
+      ? body.revokes.filter((p) => A.PERMS.indexOf(p) >= 0)
+      : [];
   }
 
   if (!Object.keys(fields).length) {
