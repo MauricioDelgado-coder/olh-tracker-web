@@ -34,7 +34,9 @@ const TABLES = {
   bonusSource: 'tbl8eMWVp2Dx1YcDg',
   caseAgingExceptions: 'tblF6CAPJkW4WgZmS',
   dailySummary: 'tbllmzusPJehWJDxj',
-  monthly1on1: 'tbl2GraVFEzPi7Myx'
+  monthly1on1: 'tbl2GraVFEzPi7Myx',
+  qaBonusSource: 'tblQokbgOBiRZ8bDM',
+  qaBonusSubmissions: 'tblnV7tfJAULckLiV'
 };
 
 /* ---- HTTP plumbing (shape matches the existing jobs.js) ------------------- */
@@ -320,7 +322,7 @@ const ALL_PAGES = [
   'page.home', 'page.mywalks', 'page.tracker', 'page.completion', 'page.walks', 'page.game',
   'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload',
   'page.walkstoschedule', 'page.admin', 'page.keys', 'page.sanmpr', 'page.synchistory', 'page.redflags',
-  'page.bonus', 'page.bonusapproval', 'page.caseaging', 'page.dailysummary', 'page.monthly1on1'
+  'page.bonus', 'page.bonusapproval', 'page.caseaging', 'page.dailysummary', 'page.monthly1on1', 'page.qabonus'
 ];
 
 // Mirrors DEFAULT_ROLES in the frontend auth module. Used when the Roles table
@@ -351,7 +353,9 @@ const DEFAULT_ROLES = {
   // associate-side check-in too, same as ccr/cm below -- everyone with a
   // monthly one-on-one has the associate half of the page even if their role
   // otherwise carries no other tracker/case pages.
-  qam: ['suite.view', 'walk.complete', 'page.home', 'page.mywalks', 'page.monthly1on1'],
+  // 2026-08-31: page.qabonus added -- QAMs self-report their own monthly
+  // bonus here, same as page.bonus does for ccr below.
+  qam: ['suite.view', 'walk.complete', 'page.home', 'page.mywalks', 'page.monthly1on1', 'page.qabonus'],
   cm: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.completion', 'page.walks', 'page.redflags',
     'page.monthly1on1'],
   ccr: ['suite.view', 'tracker.edit', 'page.home', 'page.tracker', 'page.walks', 'page.qamgmt', 'page.missedwalks',
@@ -807,10 +811,11 @@ const PAGE_LABEL = {
   'page.synchistory': 'Sync History',
   'page.redflags': 'Red Flags',
   'page.bonus': 'CCR Monthly Bonus',
-  'page.bonusapproval': 'Approvals (Bonus + Case Aging)',
+  'page.bonusapproval': 'Approvals (Bonus + Case Aging + QA Bonus)',
   'page.caseaging': 'Case Aging Exception Request',
   'page.dailysummary': 'Daily Summary',
-  'page.monthly1on1': 'Monthly One-on-One'
+  'page.monthly1on1': 'Monthly One-on-One',
+  'page.qabonus': 'QA Manager Monthly Bonus'
 };
 const DENY = {
   'suite.view': 'Your account does not have access to the OLH Suite yet. Ask an admin to grant it.',

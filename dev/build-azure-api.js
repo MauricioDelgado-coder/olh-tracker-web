@@ -63,6 +63,9 @@ const FUNCTIONS = [
   'bonus-source.js',
   'case-aging.js',
   'case-aging-approvals.js',
+  'qa-bonus.js',
+  'qa-bonus-source.js',
+  'qa-bonus-approvals.js',
   'daily-summary.js',
   'monthly-1on1.js'
 ];

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.olh.qabonus-sync</string>
+
+  <!-- Refreshes the QA Bonus Source Airtable table from Salesforce -- walk
+       completions and 30-day quality rate per QA Manager. The wrapper reads
+       the Airtable token from the Keychain at run time, so no secret is
+       stored in this file. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/mauricio.delgado/olh-tracker-web/dev/run-weekly-qabonus-sync.sh</string>
+  </array>
+
+  <!-- Monday mornings at 06:30 -- after the 06:15 daily COE sync has had
+       time to finish, and well before anyone opens qa-bonus.html. -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key><integer>1</integer>
+    <key>Hour</key><integer>6</integer>
+    <key>Minute</key><integer>30</integer>
+  </dict>
+
+  <!-- Do not run on load. Loading this should not trigger a write; the
+       schedule decides when data changes. -->
+  <key>RunAtLoad</key>
+  <false/>
+
+  <!-- If the Mac was asleep at 06:30 Monday, run once it wakes rather than
+       skipping the week. -->
+  <key>StartCalendarIntervalPolicy</key>
+  <dict>
+    <key>LaunchOnlyOnce</key>
+    <false/>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/Users/mauricio.delgado/.qa_bonus_sync/launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/mauricio.delgado/.qa_bonus_sync/launchd.err.log</string>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>

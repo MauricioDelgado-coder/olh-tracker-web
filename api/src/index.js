@@ -133,6 +133,16 @@ const ROUTES = [
   // (page.bonusapproval -- shared with bonus-approvals.js, see that file)
   ['caseAgingApprovals', 'case-aging-approvals', 'case-aging-approvals'],
 
+  // ---- QA Manager monthly bonus self-reporting -> qa-bonus.js (page.qabonus)
+  ['qaBonus', 'qa-bonus', 'qa-bonus'],
+
+  // ---- Salesforce-sourced QA bonus pre-fill -> qa-bonus-source.js (page.qabonus)
+  ['qaBonusSource', 'qa-bonus-source', 'qa-bonus-source'],
+
+  // ---- QA bonus leadership review -> qa-bonus-approvals.js
+  // (page.bonusapproval -- shared with bonus-approvals.js, see that file)
+  ['qaBonusApprovals', 'qa-bonus-approvals', 'qa-bonus-approvals'],
+
   // ---- Daily Summary self-reporting -> daily-summary.js (page.dailysummary)
   ['dailySummary', 'daily-summary', 'daily-summary'],
 

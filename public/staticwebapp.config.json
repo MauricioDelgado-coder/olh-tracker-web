@@ -37,6 +37,7 @@
     { "route": "/bonus", "rewrite": "/bonus.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
     { "route": "/bonus-approval", "rewrite": "/bonus-approval.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
     { "route": "/case-aging", "rewrite": "/case-aging.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
+    { "route": "/qa-bonus", "rewrite": "/qa-bonus.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
     { "route": "/permissions-preview", "rewrite": "/permissions-preview.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
     { "route": "/daily-summary", "rewrite": "/daily-summary.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
     { "route": "/monthly-1on1", "rewrite": "/monthly-1on1.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },

@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>QA Manager Monthly Bonus — OLH Tracker</title>
+<style>
+  :root{
+    --navy:#1B2A58; --ink:#2B2620; --muted:#6F6963; --faint:#908A82;
+    --border:#E4DED2; --bg:#FBF8F3; --card:#ffffff;
+    --amber-bg:#FFF8E1; --amber-ink:#7C4A03; --amber-border:#F0DFAE;
+    --red-bg:#FDECEA; --red-ink:#7F1D1D; --red-border:#F3C6C2;
+    --green-bg:#EAF6EE; --green-ink:#1E5B34; --green-border:#C6E6D2;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  }
+  a{color:var(--navy)}
+  header.top{
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    padding:14px 20px; background:var(--navy); border-bottom:1px solid var(--border);
+    position:sticky; top:0; z-index:50; flex-wrap:wrap;
+  }
+  header.top h1{
+    margin:0; font:400 22px/1.2 Georgia,"Times New Roman",serif; color:#fff;
+    letter-spacing:-.01em;
+  }
+  .who{ font-size:12px; color:#C7BFB2; }
+  header.top a.home{
+    display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 13px;
+    border:1px solid rgba(255,255,255,.28); border-radius:4px; background:transparent;
+    color:#C7BFB2; font-size:13px; font-weight:500; text-decoration:none; white-space:nowrap;
+  }
+  header.top a.home:hover{ background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.45); color:#fff; }
+
+  main{ max-width:900px; margin:0 auto; padding:22px 20px 80px; }
+  #banners{ margin-bottom:16px; }
+  .banner{ padding:12px 16px; border-radius:8px; font-size:13.5px; margin-bottom:8px; }
+  .banner.error{ background:var(--red-bg); color:var(--red-ink); border:1px solid var(--red-border); }
+  .banner.ok{ background:var(--green-bg); color:var(--green-ink); border:1px solid var(--green-border); }
+
+  .card{ background:var(--card); border:1px solid var(--border); border-radius:10px; padding:20px 22px; margin-bottom:18px; }
+  .card h2{ margin:0 0 14px; font:400 18px/1.2 Georgia,"Times New Roman",serif; color:var(--navy); }
+  .grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  .grid.two{ grid-template-columns:repeat(2,1fr); }
+  label{ display:block; font-size:11.5px; font-weight:600; color:var(--muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:.03em; }
+  input, select{ width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:6px; font-size:14px; background:#fff; color:var(--ink); }
+  input:read-only{ background:var(--bg); color:var(--muted); }
+  input:focus, select:focus{ outline:2px solid var(--navy); outline-offset:1px; }
+  .hint{ font-size:11px; color:var(--faint); margin-top:3px; font-weight:400; text-transform:none; letter-spacing:0; }
+  textarea{ width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:6px; font-size:13.5px; font-family:inherit; resize:vertical; min-height:56px; }
+  textarea:focus{ outline:2px solid var(--navy); outline-offset:1px; }
+  .sf-box{ display:flex; flex-wrap:wrap; gap:10px 24px; align-items:center; padding:12px 14px; border-radius:8px; background:var(--bg); border:1px solid var(--border); margin-top:2px; }
+  .sf-box .sf-stat{ font-size:13px; }
+  .sf-box .sf-stat b{ font-variant-numeric:tabular-nums; }
+  button.small{ padding:6px 12px; font-size:12.5px; }
+
+  table.calc{ width:100%; border-collapse:collapse; font-size:14px; }
+  table.calc td{ padding:9px 2px; border-bottom:1px solid #EFE9DD; }
+  table.calc td:last-child{ text-align:right; font-weight:600; font-variant-numeric:tabular-nums; }
+  table.calc tr.total td{ border-top:2px solid var(--navy); border-bottom:none; font-size:16px; padding-top:14px; }
+  .pill{ display:inline-block; padding:2px 8px; border-radius:10px; font-size:10.5px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; }
+  .pill.ok{ background:var(--green-bg); color:var(--green-ink); }
+  .pill.mid{ background:var(--amber-bg); color:var(--amber-ink); }
+  .pill.no{ background:var(--red-bg); color:var(--red-ink); }
+
+  .actions{ display:flex; gap:10px; margin-top:18px; flex-wrap:wrap; }
+  button{ cursor:pointer; border:none; border-radius:6px; padding:10px 18px; font-size:14px; font-weight:600; }
+  button.primary{ background:var(--navy); color:#fff; }
+  button.primary:disabled{ background:var(--faint); cursor:not-allowed; }
+  button.secondary{ background:#fff; color:var(--navy); border:1px solid var(--navy); }
+  #status{ font-size:13px; margin-top:10px; }
+  #status.err{ color:var(--red-ink); } #status.ok{ color:var(--green-ink); }
+
+  table.history{ width:100%; border-collapse:collapse; font-size:13px; margin-top:8px; }
+  table.history th, table.history td{ text-align:left; padding:7px 8px; border-bottom:1px solid var(--border); }
+  table.history th{ font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); }
+  table.history td.num{ text-align:right; font-variant-numeric:tabular-nums; }
+  .badge-status{ font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:10px; text-transform:uppercase; }
+  .empty{ color:var(--muted); font-size:13px; padding:10px 2px; }
+
+  @media print{
+    header.top, .actions, #status, .no-print{ display:none !important; }
+    main{ margin:0; max-width:100%; padding:0; }
+    body{ background:#fff; }
+    .card{ border:none; box-shadow:none; padding:0 0 18px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div>
+    <h1>QA Manager Monthly Bonus</h1>
+    <div class="who" id="whoLine">Loading…</div>
+  </div>
+  <a class="home" href="/">All Views</a>
+</header>
+
+<main>
+  <div id="banners"></div>
+  <div id="content">Loading…</div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  var API = '/api';
+  var SESSION_KEY = 'olh.session.v1';
+
+  /* ---- Auth (mirrors bonus.html's shared OLHAuth session contract) --- */
+  function getSession() {
+    try { var v = localStorage.getItem(SESSION_KEY); return v ? JSON.parse(v) : null; }
+    catch (e) { return null; }
+  }
+  function authHeaders(extra) {
+    var h = Object.assign({ Accept: 'application/json' }, extra || {});
+    var s = getSession();
+    var tok = s && s.token;
+    if (tok) { h.Authorization = 'Bearer ' + tok; h['X-OLH-Token'] = 'Bearer ' + tok; }
+    return h;
+  }
+  function authedFetchHeaders(extra) {
+    if (!getSession() || !getSession().token) {
+      throw new Error('You are not signed in. Sign in at the OLH Tracker home page, then reload this page.');
+    }
+    return authHeaders(extra);
+  }
+  function apiGet(path) {
+    return fetch(API + path, { headers: authedFetchHeaders() }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (body) {
+        if (res.status === 401) { var e = new Error((body && body.error) || 'Your session has expired.'); e.status = 401; throw e; }
+        if (!res.ok || !body) throw new Error((body && body.error) || (path + ' failed (' + res.status + ')'));
+        return body;
+      });
+    });
+  }
+  function apiPost(path, payload) {
+    return fetch(API + path, {
+      method: 'POST', headers: authedFetchHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(payload)
+    }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (body) {
+        if (!res.ok) throw new Error((body && body.error) || (path + ' failed (' + res.status + ')'));
+        return body;
+      });
+    });
+  }
+
+  var state = {
+    user: null, can: [], loading: true, error: '',
+    submissions: [], submitting: false, statusMsg: '', statusOk: false,
+    sfSource: null, sfFound: false, sfLoading: false, sfMonth: ''
+  };
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  var fmt = function (n) { return '$' + (Math.round(n * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+
+  /* ---- Bonus math, per the Quality Assurance Manager (QAM) Bonus Agreement
+     (1/30/2025). Mirrored client-side ONLY for the live preview -- the
+     server (qa-bonus.js) recomputes and stores the authoritative numbers at
+     submit time and this copy is never trusted for the write itself.
+
+     NHO/NHA are the Bonus Agreement's own names for what Salesforce calls
+     Celebration and Acceptance on Homesite__c -- see qa-bonus-source.js. */
+  var QAI_NHO_RATE = 60, QAA_NHA_RATE = 40;
+  function walkCompletionBonus(qai, nho, qaa, nha) { return (qai + nho) * QAI_NHO_RATE + (qaa + nha) * QAA_NHA_RATE; }
+  function qualityBonus(homesClosed, issues) {
+    if (homesClosed <= 0) return { avg: 0, tier: '0 homes closed', bonus: 0 };
+    var avg = Math.round((issues / homesClosed) * 100) / 100;
+    if (avg < 1.0) return { avg: avg, tier: '<1.0 defects/home', bonus: 1000 };
+    if (avg <= 1.3) return { avg: avg, tier: '1.0-1.3 defects/home', bonus: 500 };
+    return { avg: avg, tier: '>1.3 defects/home', bonus: 0 };
+  }
+
+  /* Dropdown, not a free native month-picker -- mirrors bonus.html exactly. */
+  var MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+    'August', 'September', 'October', 'November', 'December'];
+  var BONUS_MONTHS_START = { y: 2026, m: 7 }; // July 2026, same program start as CCR bonus
+  function pad2(n) { return n < 10 ? '0' + n : String(n); }
+  function monthOptions() {
+    var now = new Date();
+    var curY = now.getFullYear(), curM = now.getMonth() + 1;
+    var out = [];
+    var y = BONUS_MONTHS_START.y, m = BONUS_MONTHS_START.m;
+    while (y < curY || (y === curY && m < curM)) {
+      out.push({ value: y + '-' + pad2(m), label: MONTH_NAMES[m - 1] + ' ' + y });
+      m++; if (m > 12) { m = 1; y++; }
+    }
+    out.push({ value: curY + '-' + pad2(curM), label: MONTH_NAMES[curM - 1] + ' ' + curY + ' (Current)' });
+    out.reverse();
+    return out;
+  }
+  var DEFAULT_MONTH = (function () {
+    var opts = monthOptions();
+    return opts.length > 1 ? opts[1].value : opts[0].value; // default to the most recently completed month
+  })();
+  function monthOptionsHtml(selected) {
+    return monthOptions().map(function (o) {
+      return '<option value="' + o.value + '"' + (o.value === selected ? ' selected' : '') + '>' + esc(o.label) + '</option>';
+    }).join('');
+  }
+
+  /* ---- Salesforce source (pre-fill + comparison) -------------------------
+     Synced weekly by dev/sync_qa_bonus_source.py into the QA Bonus Source
+     Airtable table. Convenience pre-fill only -- the QAM can always type
+     their own number, and the server snapshots + flags a discrepancy at
+     submit time regardless of whether this fetch even succeeded. */
+  function loadSfSource(month) {
+    if (!month) { state.sfSource = null; state.sfFound = false; state.sfMonth = ''; return Promise.resolve(); }
+    state.sfLoading = true;
+    state.sfMonth = month;
+    return apiGet('/qa-bonus-source?month=' + encodeURIComponent(month)).then(function (data) {
+      state.sfLoading = false;
+      state.sfFound = !!data.found;
+      state.sfSource = data.source || null;
+    }).catch(function () {
+      state.sfLoading = false;
+      state.sfFound = false;
+      state.sfSource = null;
+    });
+  }
+
+  function timeAgo(iso) {
+    if (!iso) return '';
+    var ms = Date.now() - new Date(iso).getTime();
+    var mins = Math.round(ms / 60000);
+    if (mins < 60) return mins + ' min ago';
+    var hrs = Math.round(mins / 60);
+    if (hrs < 48) return hrs + ' hr ago';
+    return Math.round(hrs / 24) + ' days ago';
+  }
+
+  function sfHint(fieldId, sfVal) {
+    if (!state.sfFound || state.sfSource == null) return '<div id="sfhint-' + fieldId + '"></div>';
+    return '<div id="sfhint-' + fieldId + '">' + sfHintInner(fieldId, sfVal) + '</div>';
+  }
+  function sfHintInner(fieldId, sfVal) {
+    var el = document.getElementById(fieldId);
+    var entered = el ? (parseFloat(el.value) || 0) : 0;
+    var mismatch = Math.abs(entered - sfVal) > 0.05;
+    return '<div class="hint" style="color:' + (mismatch ? 'var(--amber-ink)' : 'var(--faint)') + '">' +
+      'Salesforce: ' + sfVal + (mismatch ? ' \u2014 differs from what you entered' : '') + '</div>';
+  }
+  var SF_HINT_FIELDS = ['qaiWalks', 'qaaWalks', 'nhoWalks', 'nhaWalks', 'homesClosed', 'issuesWithin30'];
+  function updateSfHints() {
+    if (!state.sfFound || !state.sfSource) return;
+    var s = state.sfSource;
+    var map = {
+      qaiWalks: s.qaiWalks, qaaWalks: s.qaaWalks, nhoWalks: s.nhoWalks, nhaWalks: s.nhaWalks,
+      homesClosed: s.homesClosed, issuesWithin30: s.issuesWithin30
+    };
+    SF_HINT_FIELDS.forEach(function (id) {
+      var el = document.getElementById('sfhint-' + id);
+      if (el) el.innerHTML = sfHintInner(id, map[id]);
+    });
+  }
+
+  function readForm() {
+    var val = function (id) { var el = document.getElementById(id); return el ? parseFloat(el.value) || 0 : 0; };
+    return {
+      bonusMonth: (document.getElementById('bonusMonth') || {}).value || '',
+      qaiWalks: val('qaiWalks'), qaaWalks: val('qaaWalks'),
+      nhoWalks: val('nhoWalks'), nhaWalks: val('nhaWalks'),
+      homesClosed: val('homesClosed'), issuesWithin30: val('issuesWithin30'),
+      discrepancyNotes: (document.getElementById('discrepancyNotes') || {}).value || ''
+    };
+  }
+
+  function calc(f) {
+    var walkBonus = walkCompletionBonus(f.qaiWalks, f.nhoWalks, f.qaaWalks, f.nhaWalks);
+    var quality = qualityBonus(f.homesClosed, f.issuesWithin30);
+    return { walkBonus: walkBonus, quality: quality, total: walkBonus + quality.bonus };
+  }
+
+  function tierPill(tier) {
+    if (tier === '<1.0 defects/home') return '<span class="pill ok">' + esc(tier) + '</span>';
+    if (tier === '1.0-1.3 defects/home') return '<span class="pill mid">' + esc(tier) + '</span>';
+    return '<span class="pill no">' + esc(tier) + '</span>';
+  }
+
+  function historyRows() {
+    if (!state.submissions.length) return '<div class="empty">No submissions yet.</div>';
+    var rows = state.submissions.map(function (s) {
+      var statusColor = s.status === 'Rejected' ? 'var(--red-ink)' : (s.status === 'Paid' || s.status === 'Approved' ? 'var(--green-ink)' : 'var(--amber-ink)');
+      var statusBg = s.status === 'Rejected' ? 'var(--red-bg)' : (s.status === 'Paid' || s.status === 'Approved' ? 'var(--green-bg)' : 'var(--amber-bg)');
+      return '<tr><td>' + esc(s.bonusMonth) + '</td><td class="num">' + s.homesClosed + '</td>' +
+        '<td class="num">' + s.avgIssuesPerHome + '</td>' +
+        '<td class="num">' + fmt(s.total) + '</td>' +
+        '<td><span class="badge-status" style="color:' + statusColor + ';background:' + statusBg + '">' + esc(s.status) + '</span></td></tr>';
+    }).join('');
+    return '<table class="history"><thead><tr><th>Month</th><th>Homes Closed</th><th>Avg Issues/Home</th><th>Total</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function sfSummaryHtml() {
+    if (state.sfLoading) return '<div class="card no-print" id="sfBox"><div class="hint">Checking Salesforce\u2026</div></div>';
+    if (!state.sfFound || !state.sfSource) {
+      return '<div class="card no-print" id="sfBox">' +
+        '<h2>Salesforce Data</h2>' +
+        '<div class="empty">No synced Salesforce data yet for ' + esc(state.sfMonth || 'this month') + '. Enter your numbers manually below \u2014 the sync runs weekly and this will fill in automatically once it has data for this month.</div>' +
+      '</div>';
+    }
+    var s = state.sfSource;
+    return '<div class="card no-print" id="sfBox">' +
+      '<h2>Salesforce Data</h2>' +
+      '<div class="sf-box">' +
+        '<span class="sf-stat">QAI Walks: <b>' + s.qaiWalks + '</b></span>' +
+        '<span class="sf-stat">QAA Walks: <b>' + s.qaaWalks + '</b></span>' +
+        '<span class="sf-stat">NHO Walks: <b>' + s.nhoWalks + '</b></span>' +
+        '<span class="sf-stat">NHA Walks: <b>' + s.nhaWalks + '</b></span>' +
+        '<span class="sf-stat">Homes Closed: <b>' + s.homesClosed + '</b></span>' +
+        '<span class="sf-stat">Issues (0-29 days): <b>' + s.issuesWithin30 + '</b></span>' +
+      '</div>' +
+      '<div class="hint" style="margin-top:8px">Synced ' + esc(timeAgo(s.lastSynced)) + '. <button type="button" class="secondary small" id="useSfBtn" style="margin-left:6px">Use These Numbers</button></div>' +
+    '</div>';
+  }
+
+  function formHtml() {
+    var defaultMonth = DEFAULT_MONTH;
+    return '' +
+      '<div class="card no-print">' +
+        '<h2>QA Manager &amp; Period</h2>' +
+        '<div class="grid two">' +
+          '<div><label>Associate Name</label><input value="' + esc(state.user.name) + '" readonly></div>' +
+          '<div><label>Division</label><input value="' + esc(state.user.division || '') + '" readonly></div>' +
+        '</div>' +
+        '<div class="grid" style="margin-top:14px;max-width:340px">' +
+          '<div><label for="bonusMonth">Bonus Month</label><select id="bonusMonth">' + monthOptionsHtml(defaultMonth) + '</select></div>' +
+        '</div>' +
+      '</div>' +
+
+      sfSummaryHtml() +
+
+      '<div class="card no-print">' +
+        '<h2>Walks Completed <span style="text-transform:none;font-weight:400;color:var(--faint)">(Frequency Bonus)</span></h2>' +
+        '<div class="grid two">' +
+          '<div><label for="qaiWalks">QAI Walks <span style="text-transform:none;font-weight:400">($60 each)</span></label><input id="qaiWalks" type="number" min="0" step="1" placeholder="0">' +
+            sfHint('qaiWalks', state.sfSource ? state.sfSource.qaiWalks : 0) + '</div>' +
+          '<div><label for="nhoWalks">NHO Walks <span style="text-transform:none;font-weight:400">($60 each)</span></label><input id="nhoWalks" type="number" min="0" step="1" placeholder="0">' +
+            '<div class="hint">New Home Orientation \u2014 called "Celebration" on the tracker.</div>' + sfHint('nhoWalks', state.sfSource ? state.sfSource.nhoWalks : 0) + '</div>' +
+          '<div><label for="qaaWalks">QAA Walks <span style="text-transform:none;font-weight:400">($40 each)</span></label><input id="qaaWalks" type="number" min="0" step="1" placeholder="0">' +
+            sfHint('qaaWalks', state.sfSource ? state.sfSource.qaaWalks : 0) + '</div>' +
+          '<div><label for="nhaWalks">NHA Walks <span style="text-transform:none;font-weight:400">($40 each)</span></label><input id="nhaWalks" type="number" min="0" step="1" placeholder="0">' +
+            '<div class="hint">New Home Acceptance \u2014 called "Acceptance" on the tracker.</div>' + sfHint('nhaWalks', state.sfSource ? state.sfSource.nhaWalks : 0) + '</div>' +
+        '</div>' +
+      '</div>' +
+
+      '<div class="card no-print">' +
+        '<h2>Quality <span style="text-transform:none;font-weight:400;color:var(--faint)">(homes you completed the QAI on)</span></h2>' +
+        '<div class="grid two">' +
+          '<div><label for="homesClosed">Homes Closed (QAI)</label><input id="homesClosed" type="number" min="0" step="1" placeholder="0">' +
+            '<div class="hint">Homes you did the QAI on that closed this bonus month.</div>' + sfHint('homesClosed', state.sfSource ? state.sfSource.homesClosed : 0) + '</div>' +
+          '<div><label for="issuesWithin30">Issues Within 30 Days</label><input id="issuesWithin30" type="number" min="0" step="1" placeholder="0">' +
+            '<div class="hint">Work orders opened 0-29 days after COE on those homes.</div>' + sfHint('issuesWithin30', state.sfSource ? state.sfSource.issuesWithin30 : 0) + '</div>' +
+        '</div>' +
+      '</div>' +
+
+      '<div class="card" id="calcCard"></div>' +
+
+      '<div class="card no-print">' +
+        '<h2>Past Submissions</h2>' +
+        '<div id="historyBox">' + historyRows() + '</div>' +
+      '</div>';
+  }
+
+  function calcHtml() {
+    var f = readForm();
+    var c = calc(f);
+    var mismatch = state.sfFound && state.sfSource && (
+      Math.abs(f.qaiWalks - state.sfSource.qaiWalks) > 0.05 ||
+      Math.abs(f.qaaWalks - state.sfSource.qaaWalks) > 0.05 ||
+      Math.abs(f.nhoWalks - state.sfSource.nhoWalks) > 0.05 ||
+      Math.abs(f.nhaWalks - state.sfSource.nhaWalks) > 0.05 ||
+      Math.abs(f.homesClosed - state.sfSource.homesClosed) > 0.05 ||
+      Math.abs(f.issuesWithin30 - state.sfSource.issuesWithin30) > 0.05
+    );
+    return '<h2>Bonus Calculation</h2>' +
+      '<table class="calc">' +
+        '<tr><td>Walk Completion Bonus <span class="hint" style="text-transform:none">(' + f.qaiWalks + ' QAI + ' + f.nhoWalks + ' NHO at $60, ' + f.qaaWalks + ' QAA + ' + f.nhaWalks + ' NHA at $40)</span></td><td>' + fmt(c.walkBonus) + '</td></tr>' +
+        '<tr><td>Quality Bonus ' + tierPill(c.quality.tier) + ' <span class="hint" style="text-transform:none">(' + c.quality.avg + ' avg issues/home)</span></td><td>' + fmt(c.quality.bonus) + '</td></tr>' +
+        '<tr class="total"><td>Total Bonus</td><td>' + fmt(c.total) + '</td></tr>' +
+      '</table>' +
+      (mismatch ?
+        '<div class="no-print" style="margin-top:14px">' +
+          '<label for="discrepancyNotes">Discrepancy Notes <span style="text-transform:none;font-weight:400">(one or more numbers above differ from Salesforce \u2014 briefly explain why)</span></label>' +
+          '<textarea id="discrepancyNotes" placeholder="e.g. Salesforce hasn\u2019t picked up a walk I completed on the last day of the month.">' + esc(f.discrepancyNotes) + '</textarea>' +
+        '</div>'
+        : '<textarea id="discrepancyNotes" style="display:none">' + esc(f.discrepancyNotes) + '</textarea>') +
+      '<div class="actions no-print">' +
+        '<button class="primary" id="submitBtn"' + (state.submitting ? ' disabled' : '') + '>' + (state.submitting ? 'Submitting…' : 'Submit for the Month') + '</button>' +
+        '<button class="secondary" id="exportBtn">Export to PDF</button>' +
+      '</div>' +
+      (state.statusMsg ? '<div id="status" class="' + (state.statusOk ? 'ok' : 'err') + '">' + esc(state.statusMsg) + '</div>' : '');
+  }
+
+  function recalc() {
+    var el = document.getElementById('calcCard');
+    if (el) el.innerHTML = calcHtml();
+    wireCalcCard();
+    updateSfHints();
+  }
+
+  function wireCalcCard() {
+    var submitBtn = document.getElementById('submitBtn');
+    if (submitBtn) submitBtn.addEventListener('click', submitQaBonus);
+    var exportBtn = document.getElementById('exportBtn');
+    if (exportBtn) exportBtn.addEventListener('click', function () { window.print(); });
+  }
+
+  function applySfToFields() {
+    if (!state.sfSource) return;
+    var s = state.sfSource;
+    var map = {
+      qaiWalks: s.qaiWalks, qaaWalks: s.qaaWalks, nhoWalks: s.nhoWalks, nhaWalks: s.nhaWalks,
+      homesClosed: s.homesClosed, issuesWithin30: s.issuesWithin30
+    };
+    Object.keys(map).forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.value = map[id];
+    });
+    recalc();
+  }
+
+  function wireForm() {
+    var monthSel = document.getElementById('bonusMonth');
+    if (monthSel) {
+      monthSel.addEventListener('change', function () {
+        state.sfSource = null; state.sfFound = false;
+        refreshFormOnly();
+        loadSfSource(monthSel.value).then(function () { refreshFormOnly(); });
+      });
+    }
+    ['qaiWalks', 'qaaWalks', 'nhoWalks', 'nhaWalks', 'homesClosed', 'issuesWithin30'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener('input', recalc);
+    });
+    var useSfBtn = document.getElementById('useSfBtn');
+    if (useSfBtn) useSfBtn.addEventListener('click', applySfToFields);
+    recalc();
+  }
+
+  function submitQaBonus() {
+    var f = readForm();
+    if (!f.bonusMonth) { state.statusOk = false; state.statusMsg = 'Select a bonus month.'; recalc(); return; }
+
+    state.submitting = true; state.statusMsg = ''; recalc();
+    apiPost('/qa-bonus', {
+      submissionId: 'qb' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+      bonusMonth: f.bonusMonth,
+      qaiWalks: f.qaiWalks, qaaWalks: f.qaaWalks, nhoWalks: f.nhoWalks, nhaWalks: f.nhaWalks,
+      homesClosed: f.homesClosed, issuesWithin30: f.issuesWithin30,
+      discrepancyNotes: f.discrepancyNotes
+    }).then(function (data) {
+      state.submitting = false;
+      state.statusOk = true;
+      state.statusMsg = data.duplicate
+        ? 'This submission was already sent.'
+        : 'Submitted for ' + f.bonusMonth + ' — pending manager approval.';
+      return loadHistory();
+    }).then(function () {
+      render();
+    }).catch(function (err) {
+      state.submitting = false;
+      state.statusOk = false;
+      state.statusMsg = 'Submit failed: ' + (err && err.message ? err.message : String(err));
+      recalc();
+    });
+  }
+
+  function refreshFormOnly() {
+    var content = document.getElementById('content');
+    if (content) content.innerHTML = formHtml();
+    wireForm();
+  }
+
+  function loadSession() {
+    return apiGet('/session').then(function (data) {
+      state.user = data.user || null;
+      state.can = data.can || [];
+    });
+  }
+  function loadHistory() {
+    return apiGet('/qa-bonus').then(function (data) {
+      state.submissions = Array.isArray(data.submissions) ? data.submissions : [];
+    });
+  }
+
+  function render() {
+    document.getElementById('whoLine').textContent = state.user
+      ? (state.user.name + (state.user.division ? ' · ' + state.user.division : ''))
+      : 'Not signed in';
+
+    var content = document.getElementById('content');
+    if (state.loading) { content.innerHTML = ''; return; }
+    if (state.error) { content.innerHTML = '<div class="empty">' + esc(state.error) + '</div>'; return; }
+
+    if (state.can.indexOf('page.qabonus') < 0) {
+      content.innerHTML = '<div class="empty">Your role does not have access to the QA Manager Monthly Bonus page.</div>';
+      return;
+    }
+
+    content.innerHTML = formHtml();
+    wireForm();
+  }
+
+  /* ---- Boot ------------------------------------------------------------ */
+  var session = getSession();
+  if (!session || !session.token) {
+    document.getElementById('content').innerHTML =
+      '<div class="empty">You are not signed in. <a href="/">Sign in at the OLH Tracker home page</a>, then reload this page.</div>';
+    document.getElementById('whoLine').textContent = 'Not signed in';
+  } else {
+    loadSession()
+      .then(function () { return loadSfSource(DEFAULT_MONTH); })
+      .then(loadHistory)
+      .then(function () {
+        state.loading = false;
+        render();
+      })
+      .catch(function (err) {
+        state.loading = false;
+        if (err && err.status === 401) {
+          state.error = 'Your session has expired. Sign in again at the OLH Tracker home page, then reload this page.';
+        } else {
+          state.error = 'Could not load this page: ' + (err && err.message ? err.message : String(err));
+        }
+        render();
+      });
+  }
+})();
+</script>
+</body>
+</html>

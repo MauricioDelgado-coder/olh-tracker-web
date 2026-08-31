@@ -156,11 +156,13 @@
 
   var state = {
     user: null, can: [], loading: true, error: '',
-    type: 'bonus', // 'bonus' | 'caseAging'
+    type: 'bonus', // 'bonus' | 'caseAging' | 'qaBonus'
     submissions: [], reports: [], isAdmin: false, viewingAll: false,
     filterStatus: '', filterMonth: '', viewAll: false,
     caseAgingRequests: [], caseAgingReports: [], caseAgingIsAdmin: false, caseAgingViewingAll: false,
     caseAgingFilterStatus: '', caseAgingViewAll: false,
+    qaBonusSubmissions: [], qaBonusReports: [], qaBonusIsAdmin: false, qaBonusViewingAll: false,
+    qaBonusFilterStatus: '', qaBonusFilterMonth: '', qaBonusViewAll: false,
     rowState: {} // recordId -> {saving, msg, ok}
   };
 
@@ -183,6 +185,7 @@
     return '<div class="type-tabs">' +
       '<button class="type-tab' + (state.type === 'bonus' ? ' active' : '') + '" data-type="bonus">Bonus</button>' +
       '<button class="type-tab' + (state.type === 'caseAging' ? ' active' : '') + '" data-type="caseAging">Case Aging</button>' +
+      '<button class="type-tab' + (state.type === 'qaBonus' ? ' active' : '') + '" data-type="qaBonus">QA Bonus</button>' +
     '</div>';
   }
 
@@ -250,6 +253,33 @@
   function filteredCaseAgingRequests() {
     return state.caseAgingRequests.filter(function (r) {
       if (state.caseAgingFilterStatus && r.status !== state.caseAgingFilterStatus) return false;
+      return true;
+    });
+  }
+
+  function qaBonusToolbarHtml() {
+    var monthOpts = Array.from(new Set(state.qaBonusSubmissions.map(function (s) { return s.bonusMonth; }))).sort().reverse();
+    return '' +
+      '<div class="card">' +
+        '<div class="toolbar">' +
+          '<div><label for="fQbStatus">Status</label><select id="fQbStatus">' +
+            '<option value="">All</option>' +
+            STATUSES.map(function (s) { return '<option value="' + esc(s) + '"' + (state.qaBonusFilterStatus === s ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') +
+          '</select></div>' +
+          '<div><label for="fQbMonth">Bonus Month</label><select id="fQbMonth">' +
+            '<option value="">All</option>' +
+            monthOpts.map(function (m) { return '<option value="' + esc(m) + '"' + (state.qaBonusFilterMonth === m ? ' selected' : '') + '>' + esc(m) + '</option>'; }).join('') +
+          '</select></div>' +
+          (state.qaBonusIsAdmin ? '<div class="chk"><label style="margin:0;display:flex;gap:6px;align-items:center;text-transform:none;font-weight:400;color:var(--ink)"><input type="checkbox" id="fQbAll"' + (state.qaBonusViewAll ? ' checked' : '') + '> View all QAM submissions (Admin)</label></div>' : '') +
+        '</div>' +
+        (!state.qaBonusViewingAll ? reportsStripHtml(state.qaBonusReports, state.qaBonusSubmissions, 'associateEmail', 'bonusMonth', state.qaBonusFilterMonth) : '') +
+      '</div>';
+  }
+
+  function filteredQaBonusSubmissions() {
+    return state.qaBonusSubmissions.filter(function (s) {
+      if (state.qaBonusFilterStatus && s.status !== state.qaBonusFilterStatus) return false;
+      if (state.qaBonusFilterMonth && s.bonusMonth !== state.qaBonusFilterMonth) return false;
       return true;
     });
   }
@@ -369,6 +399,73 @@
     return rows.map(caseAgingHtml).join('');
   }
 
+  function qaTierPill(tier) {
+    var bg = 'var(--amber-bg)', ink = 'var(--amber-ink)';
+    if (tier === '<1.0 defects/home') { bg = 'var(--green-bg)'; ink = 'var(--green-ink)'; }
+    else if (tier === '>1.3 defects/home') { bg = 'var(--red-bg)'; ink = 'var(--red-ink)'; }
+    return '<span class="badge-status" style="color:' + ink + ';background:' + bg + '">' + esc(tier) + '</span>';
+  }
+
+  function qaBonusSfCompareHtml(s) {
+    return '<div style="margin-top:14px">' +
+      '<label class="notes-label" style="margin-top:0">Entered vs. Salesforce</label>' +
+      '<table class="calc" style="margin-top:4px">' +
+        '<tr><td></td><td class="num" style="font-weight:600">QAM Entered</td><td class="num" style="font-weight:600;color:var(--muted)">Salesforce</td></tr>' +
+        sfRow('QAI Walks', s.qaiWalks, s.sfQaiWalks) +
+        sfRow('QAA Walks', s.qaaWalks, s.sfQaaWalks) +
+        sfRow('NHO Walks', s.nhoWalks, s.sfNhoWalks) +
+        sfRow('NHA Walks', s.nhaWalks, s.sfNhaWalks) +
+        sfRow('Homes Closed (QAI)', s.homesClosed, s.sfHomesClosed) +
+        sfRow('Issues Within 30 Days', s.issuesWithin30, s.sfIssuesWithin30) +
+      '</table>' +
+      (s.discrepancyNotes ? '<div class="subm-meta" style="margin-top:6px"><strong>QAM\u2019s note:</strong> ' + esc(s.discrepancyNotes) + '</div>' : '') +
+    '</div>';
+  }
+
+  function qaBonusHtml(s) {
+    var colors = statusColors(s.status);
+    var rs = state.rowState[s.recordId] || {};
+    return '' +
+      '<details class="subm">' +
+        '<summary>' +
+          '<div>' +
+            '<div class="subm-who">' + esc(s.associateName) + '<span class="subm-meta"> · ' + esc(s.division || '\u2014') + '</span></div>' +
+            '<div class="subm-meta">' + esc(s.bonusMonth) + ' · ' + s.homesClosed + ' homes closed · ' + s.avgIssuesPerHome + ' issues/home</div>' +
+          '</div>' +
+          '<div style="display:flex;align-items:center;gap:8px">' +
+            (s.hasDiscrepancy ? '<span class="badge-status" style="color:var(--red-ink);background:var(--red-bg)">SF mismatch</span>' : '') +
+            '<span class="subm-total">' + fmt(s.total) + '</span>' +
+            '<span class="badge-status" style="color:' + colors.ink + ';background:' + colors.bg + '">' + esc(s.status) + '</span>' +
+          '</div>' +
+        '</summary>' +
+        '<div class="subm-body">' +
+          '<table class="calc">' +
+            '<tr><td>Walk Completion Bonus <span style="color:var(--faint)">(' + s.qaiWalks + ' QAI + ' + s.nhoWalks + ' NHO @ $60, ' + s.qaaWalks + ' QAA + ' + s.nhaWalks + ' NHA @ $40)</span></td><td>' + fmt(s.walkBonus) + '</td></tr>' +
+            '<tr><td>Quality Bonus ' + qaTierPill(s.qualityTier) + '</td><td>' + fmt(s.qualityBonus) + '</td></tr>' +
+            '<tr class="total"><td>Total Bonus</td><td>' + fmt(s.total) + '</td></tr>' +
+          '</table>' +
+          (s.sfFound ? qaBonusSfCompareHtml(s) : '<div class="subm-meta" style="margin-top:10px;font-style:italic">No Salesforce data was available for this QAM/month at submission time.</div>') +
+          '<div class="subm-meta" style="margin-top:10px">Submitted by ' + esc(s.submittedBy) + (s.submittedAt ? ' · ' + esc(new Date(s.submittedAt).toLocaleString()) : '') + '</div>' +
+          (s.reviewedBy ? '<div class="subm-meta">Last reviewed by ' + esc(s.reviewedBy) + (s.reviewedAt ? ' · ' + esc(new Date(s.reviewedAt).toLocaleString()) : '') + '</div>' : '') +
+          '<label class="notes-label" for="qb-notes-' + s.recordId + '">Leadership Notes</label>' +
+          '<textarea id="qb-notes-' + s.recordId + '" data-record="' + s.recordId + '">' + esc(s.notes) + '</textarea>' +
+          '<div class="actions">' +
+            '<button class="review" data-qb-action="Under Review" data-record="' + s.recordId + '"' + (rs.saving ? ' disabled' : '') + '>Mark Under Review</button>' +
+            '<button class="approve" data-qb-action="Approved" data-record="' + s.recordId + '"' + (rs.saving ? ' disabled' : '') + '>Approve</button>' +
+            '<button class="reject" data-qb-action="Rejected" data-record="' + s.recordId + '"' + (rs.saving ? ' disabled' : '') + '>Reject</button>' +
+            '<button class="paid" data-qb-action="Paid" data-record="' + s.recordId + '"' + (rs.saving ? ' disabled' : '') + '>Mark Paid</button>' +
+          '</div>' +
+          (rs.msg ? '<div class="row-status ' + (rs.ok ? 'ok' : 'err') + '">' + esc(rs.msg) + '</div>' : '') +
+        '</div>' +
+      '</details>';
+  }
+
+  function qaBonusListHtml() {
+    var rows = filteredQaBonusSubmissions();
+    if (!rows.length) return '<div class="card"><div class="empty">No QA bonus submissions match these filters.</div></div>';
+    return rows.map(qaBonusHtml).join('');
+  }
+
   function render() {
     document.getElementById('whoLine').textContent = state.user
       ? (state.user.name + (state.user.division ? ' · ' + state.user.division : ''))
@@ -383,8 +480,12 @@
       return;
     }
 
-    content.innerHTML = typeTabsHtml() +
-      (state.type === 'bonus' ? (toolbarHtml() + listHtml()) : (caseAgingToolbarHtml() + caseAgingListHtml()));
+    var body;
+    if (state.type === 'bonus') body = toolbarHtml() + listHtml();
+    else if (state.type === 'caseAging') body = caseAgingToolbarHtml() + caseAgingListHtml();
+    else body = qaBonusToolbarHtml() + qaBonusListHtml();
+
+    content.innerHTML = typeTabsHtml() + body;
     wireControls();
   }
 
@@ -412,11 +513,21 @@
     var fCaAll = document.getElementById('fCaAll');
     if (fCaAll) fCaAll.addEventListener('change', function () { state.caseAgingViewAll = fCaAll.checked; state.loading = true; render(); load().then(function () { state.loading = false; render(); }); });
 
+    var fQbStatus = document.getElementById('fQbStatus');
+    if (fQbStatus) fQbStatus.addEventListener('change', function () { state.qaBonusFilterStatus = fQbStatus.value; render(); });
+    var fQbMonth = document.getElementById('fQbMonth');
+    if (fQbMonth) fQbMonth.addEventListener('change', function () { state.qaBonusFilterMonth = fQbMonth.value; render(); });
+    var fQbAll = document.getElementById('fQbAll');
+    if (fQbAll) fQbAll.addEventListener('change', function () { state.qaBonusViewAll = fQbAll.checked; state.loading = true; render(); load().then(function () { state.loading = false; render(); }); });
+
     Array.prototype.forEach.call(document.querySelectorAll('button[data-action]'), function (btn) {
       btn.addEventListener('click', function () { doReview(btn.getAttribute('data-record'), btn.getAttribute('data-action')); });
     });
     Array.prototype.forEach.call(document.querySelectorAll('button[data-ca-action]'), function (btn) {
       btn.addEventListener('click', function () { doCaseAgingReview(btn.getAttribute('data-record'), btn.getAttribute('data-ca-action')); });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('button[data-qb-action]'), function (btn) {
+      btn.addEventListener('click', function () { doQaBonusReview(btn.getAttribute('data-record'), btn.getAttribute('data-qb-action')); });
     });
   }
 
@@ -452,6 +563,22 @@
     });
   }
 
+  function doQaBonusReview(recordId, status) {
+    var ta = document.getElementById('qb-notes-' + recordId);
+    var notes = ta ? ta.value : undefined;
+    state.rowState[recordId] = { saving: true };
+    render();
+    apiPost('/qa-bonus-approvals', { recordId: recordId, status: status, notes: notes }).then(function (data) {
+      var idx = state.qaBonusSubmissions.findIndex(function (s) { return s.recordId === recordId; });
+      if (idx >= 0 && data.submission) state.qaBonusSubmissions[idx] = data.submission;
+      state.rowState[recordId] = { saving: false, ok: true, msg: 'Set to ' + status + '.' };
+      render();
+    }).catch(function (err) {
+      state.rowState[recordId] = { saving: false, ok: false, msg: 'Failed: ' + (err && err.message ? err.message : String(err)) };
+      render();
+    });
+  }
+
   function loadSession() {
     return apiGet('/session').then(function (data) {
       state.user = data.user || null;
@@ -466,6 +593,15 @@
         state.caseAgingReports = Array.isArray(data.reports) ? data.reports : [];
         state.caseAgingIsAdmin = !!data.isAdmin;
         state.caseAgingViewingAll = !!data.viewingAll;
+      });
+    }
+    if (state.type === 'qaBonus') {
+      var qbQs = state.qaBonusViewAll ? '?all=1' : '';
+      return apiGet('/qa-bonus-approvals' + qbQs).then(function (data) {
+        state.qaBonusSubmissions = Array.isArray(data.submissions) ? data.submissions : [];
+        state.qaBonusReports = Array.isArray(data.reports) ? data.reports : [];
+        state.qaBonusIsAdmin = !!data.isAdmin;
+        state.qaBonusViewingAll = !!data.viewingAll;
       });
     }
     var qs = state.viewAll ? '?all=1' : '';
