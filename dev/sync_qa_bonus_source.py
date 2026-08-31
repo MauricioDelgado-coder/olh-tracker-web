@@ -87,11 +87,15 @@ NAME_ALIASES = {
     'Jeffrey Boyd': 'Jeff Boyd',
 }
 
-# Salesforce shows QAI/CEL/ACC manager activity under these names too, but
-# neither has a QA Manager account in the Users table (both are Customer
-# Care) -- see the module docstring. Excluded from the roster; any
-# Salesforce activity under these names is logged, not synced.
-KNOWN_NON_QAM_NAMES = {'Kimberly Neuman', 'Yalimar Gonzalez'}
+# Salesforce regularly shows QAI/QAA/NHO/NHA manager activity under names
+# that hold a real Suite account but not a QA Manager one -- e.g. a Customer
+# Care rep facilitating a New Home Orientation walk. Originally handled as a
+# hardcoded set of specific names (Kimberly Neuman, Yalimar Gonzalez), which
+# needed a manual edit every time a new case showed up -- and one did, within
+# the first week: Amy Kober, Jennifer McAvoy, Katrina Beard, Mathew Olguin,
+# Miranda Vita, Moniquie Bolden, Rajmani Ramdeo all turned up the same way in
+# testing, none of them typos. Replaced by load_all_accounts_by_name() below,
+# which classifies ANY name dynamically against the live Users table instead.
 
 # ---------------------------------------------------------------------------
 # Case filter criteria for the Quality Bonus's "issues within 30 days" count.
@@ -349,10 +353,11 @@ def write_batches(verb, payload):
     return done
 
 
-def load_qam_roster():
+def load_qam_roster(users):
     """QA Manager Users-table accounts, keyed by both their own Name and any
-    alias that points at them, so Salesforce names resolve either way."""
-    users = fetch_all(USERS_TABLE)
+    alias that points at them, so Salesforce names resolve either way.
+    Takes the already-fetched Users records so main() only hits Airtable for
+    this table once."""
     roster = {}  # display name (as it appears on Homesite__c) -> {name, email}
     for u in users:
         f = u.get('fields') or {}
@@ -375,6 +380,23 @@ def load_qam_roster():
     return by_alias
 
 
+def load_all_accounts_by_name(users):
+    """Every Users-table row's Role, keyed by Name -- regardless of role.
+    Used only for the diagnostic: a Salesforce walk-manager name that matches
+    a real account here (any role) is a known person doing a walk outside
+    their usual job, not a data-quality concern; a name that matches nothing
+    here at all is the case actually worth a human's attention (typo,
+    departed employee, or someone who was never given a Suite account)."""
+    by_name = {}
+    for u in users:
+        f = u.get('fields') or {}
+        name = str(f.get('Name', '')).strip()
+        role = str(f.get('Role', '')).strip()
+        if name:
+            by_name[name] = role or '(no role set)'
+    return by_name
+
+
 # ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
@@ -390,7 +412,9 @@ def main():
 
     check_org(args.alias)
 
-    roster = load_qam_roster()
+    users = fetch_all(USERS_TABLE)
+    roster = load_qam_roster(users)
+    all_accounts = load_all_accounts_by_name(users)
     print('%d QA Manager account(s) in the Users table (OLH).' % len(set(v['email'] for v in roster.values())), flush=True)
 
     months = months_to_sync(args.month)
@@ -408,9 +432,8 @@ def main():
     walk_records = run_sf_query(build_walk_query(pad_start, pad_end), args.alias)
     print('  %d OLH homesites with a walk in this window.' % len(walk_records), flush=True)
 
-    # Surface Salesforce activity under names with no QAM account at all
-    # (roster miss) or under the two known non-QAM names, once per run
-    # rather than once per month -- the set doesn't change month to month.
+    # Surface Salesforce activity under names outside the QAM roster once per
+    # run rather than once per month -- the set doesn't change month to month.
     all_walk_managers = set()
     for r in walk_records:
         for field in ('QAI_Manager__r.Name', 'QAA_Manager__r.Name',
@@ -418,14 +441,20 @@ def main():
             n = g(r, field)
             if n:
                 all_walk_managers.add(n)
-    unmatched = sorted(n for n in all_walk_managers if n not in roster and n not in KNOWN_NON_QAM_NAMES)
-    non_qam_active = sorted(n for n in all_walk_managers if n in KNOWN_NON_QAM_NAMES)
-    if unmatched:
-        print('NOTE: Salesforce walk-manager name(s) with no QA Manager account match: %s'
-              % ', '.join(unmatched), flush=True)
-    if non_qam_active:
-        print('NOTE: Salesforce QAI/walk activity for non-QAM accounts (excluded from sync): %s'
-              % ', '.join(non_qam_active), flush=True)
+    # Every non-roster name is one of two very different things, and the
+    # difference is exactly what a human would want to know at a glance:
+    #   - matches a real Suite account, just not a QA Manager one -> a known
+    #     person doing a walk outside their usual job. Not a concern.
+    #   - matches no Suite account at all -> the case actually worth a look
+    #     (typo, departed employee, or field staff with no Suite login).
+    no_account = sorted(n for n in all_walk_managers if n not in roster and n not in all_accounts)
+    wrong_role = sorted(n for n in all_walk_managers if n not in roster and n in all_accounts)
+    if no_account:
+        print('NOTE: Salesforce walk-manager name(s) matching no Suite account at all: %s'
+              % ', '.join(no_account), flush=True)
+    if wrong_role:
+        print('NOTE: Salesforce walk-manager name(s) with a real Suite account but not QA Manager: %s'
+              % ', '.join('%s (%s)' % (n, all_accounts[n]) for n in wrong_role), flush=True)
 
     for year, mon, month_label in months:
         print('\n=== %s ===' % month_label, flush=True)
@@ -492,7 +521,7 @@ def main():
         existing = fetch_existing_for_month(month_label) if not args.dry_run else {}
 
         # Union of every manager name seen in either metric group this month,
-        # restricted to the known roster (see KNOWN_NON_QAM_NAMES/unmatched above).
+        # restricted to the known roster (see all_accounts/wrong_role above).
         all_names = sorted(set(walk_counts.keys()) | set(homes_by_mgr.keys()))
         creates, updates = [], []
         for name in all_names:
