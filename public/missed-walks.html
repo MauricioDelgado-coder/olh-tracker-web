@@ -526,7 +526,7 @@
     "sandbox": "sandbox", "concierge": "concierge"
   };
 
-  var state = { user: null, token: null, demo: false, base: "/api", ready: false };
+  var state = { user: null, token: null, can: null, demo: false, base: "/api", ready: false };
   var listeners = [];
   function emit() { listeners.slice().forEach(function (fn) { try { fn(state.user); } catch (e) {} }); }
 
@@ -630,6 +630,13 @@
     roleLabel: function (r) { var x = ROLES[r || (state.user && state.user.role)]; return x ? x.label : "Viewer"; },
     can: function (perm) {
       var u = state.user; if (!u) return false;
+      /* Per-user permission overrides (Permission Grants/Revokes on the Users
+         record) are applied server-side in applyOverrides() and returned as
+         `can` on both /sign-in and /session. Trust that list when we have it
+         -- recomputing from the role grid alone silently drops every
+         override. Demo mode (no backend) never gets a server `can`, so it
+         still falls back to the plain role grid below. */
+      if (state.can) return state.can.indexOf(perm) >= 0;
       var r = ROLES[u.role]; return !!(r && r.can.indexOf(perm) >= 0);
     },
     denyReason: function (perm) { return DENY[perm] || "You do not have access to that."; },
@@ -644,17 +651,18 @@
       state._restoring = Promise.race([api("/session"), timeout]).then(function (data) {
         if (!data || !data.user) throw Object.assign(new Error("no session"), { status: 401 });
         state.user = Object.assign({}, data.user, { role: normRole(data.user.role) });
+        state.can = Array.isArray(data.can) ? data.can : null;
         state.demo = false;
       }).catch(function (err) {
         // A backend that ANSWERED -- 401 for no session, 403 for suspended --
         // is a live backend, and being signed out is not preview mode. Only a
         // network failure or the timeout above may fall back to demo.
         if (err && err.status) {
-          state.demo = false; state.user = null; state.token = null;
+          state.demo = false; state.user = null; state.token = null; state.can = null;
           try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
           return;
         }
-        state.demo = true;
+        state.demo = true; state.can = null;
         state.user = stored && stored.user ? stored.user : null;
       }).then(function () {
         return Auth.loadMatrix().catch(function () {});
@@ -668,6 +676,7 @@
       return api("/sign-in", { method: "POST", body: { email: email, password: password } })
         .then(function (data) {
           state.user = Object.assign({}, data.user, { role: normRole(data.user.role) });
+          state.can = Array.isArray(data.can) ? data.can : null;
           state.token = data.token || null; state.demo = false; state.ready = true;
           writeStore(SESSION_KEY, { user: state.user, token: state.token });
           emit(); return state.user;
@@ -684,7 +693,7 @@
           var q = String(email || "").toLowerCase().trim();
           var hit = dir.find(function (u) { return u.email === q || u.name.toLowerCase() === q; });
           if (!hit) throw new Error(state.demo ? "Cannot reach the OLH server, so sign-in is unavailable. Check your connection and try again." : (err.message || "Sign-in failed."));
-          state.user = hit; state.token = null; state.demo = true; state.ready = true;
+          state.user = hit; state.token = null; state.can = null; state.demo = true; state.ready = true;
           writeStore(SESSION_KEY, { user: hit, token: null });
           emit(); return hit;
         });
@@ -692,7 +701,7 @@
 
     signOut: function () {
       var done = function () {
-        state.user = null; state.token = null;
+        state.user = null; state.token = null; state.can = null;
         state._restoring = Promise.resolve(null);
         try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
         emit();
@@ -711,7 +720,14 @@
     /* Pages this role can open, in catalog order — drives the home tiles and
        the "where do I send them" fallback after sign-in. */
     allowedPages: function (role) {
-      var can = (ROLES[role || (state.user && state.user.role)] || { can: [] }).can;
+      /* An explicit role argument means "what does this role grant" (the
+         admin grid previewing a role definition) -- pure role grid, no
+         per-user overrides apply there. No argument means "what can the
+         signed-in person actually do", which must include their overrides
+         the same way Auth.can() does. */
+      var can = role
+        ? (ROLES[role] || { can: [] }).can
+        : (state.can || (ROLES[state.user && state.user.role] || { can: [] }).can);
       return PAGES.filter(function (p) { return can.indexOf(p.key) >= 0; });
     },
     canViewPage: function (key) { return Auth.can(key); },

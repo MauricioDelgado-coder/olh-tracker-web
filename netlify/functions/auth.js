@@ -84,7 +84,11 @@ async function signIn(event) {
   if (!ok) return A.reply(401, { error: SAME_FOR_BOTH });
 
   const matrix = await A.loadMatrix();
-  const can = matrix[user.role] || [];
+  const baseCan = matrix[user.role] || [];
+  // Same as session()'s use of requireSession()'s s.can -- a sign-in that
+  // skipped applyOverrides would hand back a `can` with every per-user grant
+  // and revoke silently dropped for the life of that token.
+  const can = A.applyOverrides(baseCan, user.role, user.grants, user.revokes);
   if (can.indexOf('suite.view') < 0) {
     return A.reply(403, { error: A.DENY['suite.view'] });
   }
