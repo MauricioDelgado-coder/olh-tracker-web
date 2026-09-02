@@ -402,6 +402,8 @@
     { key: "page.caseaging", label: "Case Aging Exception Request", href: "case-aging.html", note: "Request (or, for leadership, approve) a case aging exception -- pauses the aging clock on a case that closed later than the bonus month would otherwise credit." },
     { key: "page.dailysummary", label: "Daily Summary", href: "daily-summary.html", note: "End-of-shift report -- aged cases, open work orders, and anything a supervisor should know." },
     { key: "page.monthly1on1", label: "Monthly One-on-One", href: "monthly-1on1.html", note: "Monthly check-in between an associate and their manager -- metrics, challenges, and support needed." },
+    { key: "page.teamdaily", label: "Team Daily Summaries", href: "team-daily-summaries.html", note: "An Area Manager\u2019s rollup of every direct report\u2019s daily summary, day by day \u2014 including who has not submitted. Separate from Daily Summary, which is where an associate files their own." },
+    { key: "page.team1on1", label: "Team One-on-Ones", href: "team-1on1s.html", note: "An Area Manager\u2019s rollup of every direct report\u2019s monthly one-on-one \u2014 read Parts 1 and 2, write Part 3, and see who still owes a check-in." },
     { key: "page.admin", label: "User Administration", href: "admin.html", note: "This console \u2014 the roster and this grid." }
   ];
 
@@ -459,7 +461,7 @@
     qam: { label: "QA Manager", can: ["suite.view", "walk.complete", "page.home", "page.mywalks", "page.monthly1on1"] },
     cm: { label: "Construction Manager", can: ["suite.view", "tracker.edit", "page.home", "page.tracker", "page.completion", "page.walks", "page.redflags", "page.monthly1on1"] },
     ccr: { label: "Customer Care", can: ["suite.view", "tracker.edit", "page.home", "page.tracker", "page.walks", "page.qamgmt", "page.missedwalks", "page.walkstoschedule", "page.bonus", "page.caseaging", "page.dailysummary", "page.monthly1on1"] },
-    leadership: { label: "Division Leadership", can: ["suite.view", "page.home", "page.tracker", "page.completion", "page.walks", "page.qamgmt", "page.missedwalks", "page.walkstoschedule", "page.scheduler", "page.timeoff", "page.workload", "page.keys", "page.synchistory", "page.redflags", "page.bonusapproval", "page.dailysummary", "page.monthly1on1"] },
+    leadership: { label: "Division Leadership", can: ["suite.view", "page.home", "page.tracker", "page.completion", "page.walks", "page.qamgmt", "page.missedwalks", "page.walkstoschedule", "page.scheduler", "page.timeoff", "page.workload", "page.keys", "page.synchistory", "page.redflags", "page.bonusapproval", "page.dailysummary", "page.monthly1on1", "page.teamdaily", "page.team1on1"] },
     concierge: { label: "Concierge", can: ["suite.view", "page.home", "page.tracker", "page.scheduler"] }
   };
   var ROLE_LOCKS = { admin: ["suite.view", "roster.manage", "page.admin"] };

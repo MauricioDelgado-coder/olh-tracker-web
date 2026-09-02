@@ -67,7 +67,9 @@ const FUNCTIONS = [
   'qa-bonus-source.js',
   'qa-bonus-approvals.js',
   'daily-summary.js',
-  'monthly-1on1.js'
+  'monthly-1on1.js',
+  'team-daily-summary.js',
+  'team-1on1.js'
 ];
 
 /** Shared helpers. Kept outside functions/ on Netlify so it is never itself an

@@ -322,7 +322,8 @@ const ALL_PAGES = [
   'page.home', 'page.mywalks', 'page.tracker', 'page.completion', 'page.walks', 'page.game',
   'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload',
   'page.walkstoschedule', 'page.admin', 'page.keys', 'page.sanmpr', 'page.synchistory', 'page.redflags',
-  'page.bonus', 'page.bonusapproval', 'page.caseaging', 'page.dailysummary', 'page.monthly1on1', 'page.qabonus'
+  'page.bonus', 'page.bonusapproval', 'page.caseaging', 'page.dailysummary', 'page.monthly1on1', 'page.qabonus',
+  'page.teamdaily', 'page.team1on1'
 ];
 
 // Mirrors DEFAULT_ROLES in the frontend auth module. Used when the Roles table
@@ -368,7 +369,12 @@ const DEFAULT_ROLES = {
   leadership: ['suite.view', 'page.home', 'page.tracker', 'page.completion',
     'page.walks', 'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload',
     'page.walkstoschedule', 'page.keys', 'page.synchistory', 'page.redflags', 'page.bonusapproval',
-    'page.dailysummary', 'page.monthly1on1'],
+    'page.dailysummary', 'page.monthly1on1',
+    // The Area Manager rollups. Kept separate from page.dailysummary /
+    // page.monthly1on1 on purpose: those two are the associate-authored
+    // halves and every associate role holds them, so reading your team's
+    // submissions has to be its own grant or every CCR would inherit it.
+    'page.teamdaily', 'page.team1on1'],
   // View-only: the tracker grid, the schedule optimizer, and homesite.html
   // (which has no permission of its own -- it checks only suite.view and is
   // reached by drilling into a record from the tracker). No tracker.edit,
@@ -815,7 +821,9 @@ const PAGE_LABEL = {
   'page.caseaging': 'Case Aging Exception Request',
   'page.dailysummary': 'Daily Summary',
   'page.monthly1on1': 'Monthly One-on-One',
-  'page.qabonus': 'QA Manager Monthly Bonus'
+  'page.qabonus': 'QA Manager Monthly Bonus',
+  'page.teamdaily': 'Team Daily Summaries',
+  'page.team1on1': 'Team One-on-Ones'
 };
 const DENY = {
   'suite.view': 'Your account does not have access to the OLH Suite yet. Ask an admin to grant it.',

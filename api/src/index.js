@@ -147,7 +147,15 @@ const ROUTES = [
   ['dailySummary', 'daily-summary', 'daily-summary'],
 
   // ---- Monthly One-on-One check-ins -> monthly-1on1.js (page.monthly1on1)
-  ['monthly1on1', 'monthly-1on1', 'monthly-1on1']
+  ['monthly1on1', 'monthly-1on1', 'monthly-1on1'],
+
+  // ---- Area Manager rollup of their team's daily summaries
+  // -> team-daily-summary.js (page.teamdaily, NOT page.dailysummary)
+  ['teamDailySummary', 'team-daily-summary', 'team-daily-summary'],
+
+  // ---- Area Manager rollup of their team's one-on-ones
+  // -> team-1on1.js (page.team1on1, NOT page.monthly1on1)
+  ['team1on1', 'team-1on1', 'team-1on1']
 ];
 
 for (const [name, route, netlifyFunction] of ROUTES) {

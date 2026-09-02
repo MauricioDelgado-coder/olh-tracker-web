@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>Team One-on-Ones — OLH Tracker</title>
+<style>
+  :root{
+    --navy:#1B2A58; --ink:#2B2620; --muted:#6F6963; --faint:#908A82;
+    --border:#E4DED2; --bg:#FBF8F3; --card:#ffffff;
+    --amber-bg:#FFF8E1; --amber-ink:#7C4A03; --amber-border:#F0DFAE;
+    --red-bg:#FDECEA; --red-ink:#7F1D1D; --red-border:#F3C6C2;
+    --green-bg:#EAF6EE; --green-ink:#1E5B34; --green-border:#C6E6D2;
+    --blue-bg:#EAF1FB; --blue-ink:#1B3E7C; --blue-border:#C6D8F3;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  }
+  a{color:var(--navy)}
+  header.top{
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    padding:14px 20px; background:var(--navy); border-bottom:1px solid var(--border);
+    position:sticky; top:0; z-index:50; flex-wrap:wrap;
+  }
+  header.top h1{ margin:0; font:400 22px/1.2 Georgia,"Times New Roman",serif; color:#fff; letter-spacing:-.01em; }
+  .who{ font-size:12px; color:#C7BFB2; }
+  header.top a.home{
+    display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 13px;
+    border:1px solid rgba(255,255,255,.28); border-radius:4px; background:transparent;
+    color:#C7BFB2; font-size:13px; font-weight:500; text-decoration:none; white-space:nowrap;
+  }
+  header.top a.home:hover{ background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.45); color:#fff; }
+
+  main{ max-width:1060px; margin:0 auto; padding:22px 20px 80px; }
+  #banners{ margin-bottom:16px; }
+  .banner{ padding:12px 16px; border-radius:8px; font-size:13.5px; margin-bottom:8px; }
+  .banner.error{ background:var(--red-bg); color:var(--red-ink); border:1px solid var(--red-border); }
+  .banner.ok{ background:var(--green-bg); color:var(--green-ink); border:1px solid var(--green-border); }
+
+  .card{ background:var(--card); border:1px solid var(--border); border-radius:10px; padding:20px 22px; margin-bottom:18px; }
+  .card h2{ margin:0 0 14px; font:400 18px/1.2 Georgia,"Times New Roman",serif; color:var(--navy); }
+
+  .toolbar{ display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end; }
+  .toolbar label{ display:block; font-size:11px; font-weight:600; color:var(--muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:.03em; }
+  .toolbar select,.toolbar input{ padding:7px 9px; border:1px solid var(--border); border-radius:6px; font-size:13.5px; background:#fff; color:var(--ink); }
+  .toolbar .chk{ display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); padding-bottom:8px; }
+
+  .stats{ display:flex; gap:26px; flex-wrap:wrap; margin-top:16px; }
+  .stat{ min-width:104px; }
+  .stat .n{ font:400 26px/1 Georgia,serif; color:var(--navy); font-variant-numeric:tabular-nums; }
+  .stat .l{ font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); margin-top:5px; }
+  .bar{ height:7px; border-radius:4px; background:#EFE9DD; overflow:hidden; margin-top:14px; }
+  .bar > span{ display:block; height:100%; background:var(--green-ink); }
+
+  .subm{ border:1px solid var(--border); border-radius:10px; margin-bottom:10px; overflow:hidden; background:var(--card); }
+  .subm summary{ list-style:none; cursor:pointer; padding:13px 16px; display:flex; align-items:center; gap:12px; justify-content:space-between; flex-wrap:wrap; }
+  .subm summary::-webkit-details-marker{ display:none; }
+  .subm summary:hover{ background:#FCFAF6; }
+  .subm-who{ font-weight:600; }
+  .subm-meta{ font-size:12px; color:var(--muted); }
+  .subm-flags{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .subm-body{ padding:4px 16px 18px; border-top:1px solid #EFE9DD; }
+  .subm.awaiting{ border-color:var(--red-border); background:#FFFCFB; }
+
+  .badge-status{ font-size:10.5px; font-weight:700; padding:2px 9px; border-radius:10px; text-transform:uppercase; letter-spacing:.02em; }
+  .pill{ font-size:11px; font-weight:600; padding:2px 8px; border-radius:10px; background:#F1EBE1; color:var(--muted); }
+  .pill.hot{ background:var(--amber-bg); color:var(--amber-ink); border:1px solid var(--amber-border); }
+
+  .part{ margin-top:16px; }
+  .part-head{ display:flex; align-items:baseline; gap:8px; margin-bottom:7px; }
+  .part-head .num{ font:400 13px/1 Georgia,serif; color:var(--faint); }
+  .part-head h4{ margin:0; font:600 12.5px/1.3 -apple-system,sans-serif; color:var(--ink); text-transform:uppercase; letter-spacing:.03em; }
+
+  table.metrics{ width:100%; border-collapse:collapse; font-size:13px; }
+  table.metrics th{ text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); font-weight:600; padding:5px 10px 5px 0; border-bottom:1px solid var(--border); }
+  table.metrics th.n,table.metrics td.n{ text-align:right; font-variant-numeric:tabular-nums; width:96px; }
+  table.metrics td{ padding:7px 10px 7px 0; border-bottom:1px solid #F2EDE4; vertical-align:top; }
+  table.metrics td.name{ font-weight:600; }
+  .delta{ font-size:11.5px; font-weight:700; padding:1px 7px; border-radius:9px; }
+  .delta.up{ background:var(--green-bg); color:var(--green-ink); }
+  .delta.down{ background:var(--red-bg); color:var(--red-ink); }
+  .delta.flat{ background:#F1EBE1; color:var(--muted); }
+  .mnote{ font-size:12.5px; color:var(--muted); }
+
+  .prose{ font-size:13.5px; white-space:pre-wrap; padding:11px 13px; background:#FAF7F1; border:1px solid var(--border); border-radius:7px; }
+  .prose.empty-note{ color:var(--faint); font-style:italic; }
+  .prose.win{ background:var(--green-bg); border-color:var(--green-border); color:var(--green-ink); }
+
+  label.field-label{ display:block; font-size:11px; font-weight:600; color:var(--muted); margin-top:14px; text-transform:uppercase; letter-spacing:.03em; }
+  textarea{ width:100%; padding:9px 11px; border:1px solid var(--border); border-radius:6px; font-size:13.5px; font-family:inherit; resize:vertical; min-height:72px; margin-top:6px; background:#fff; color:var(--ink); }
+
+  .actions{ display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; align-items:center; }
+  button{ cursor:pointer; border:none; border-radius:6px; padding:8px 14px; font-size:13px; font-weight:600; }
+  button.save{ background:#fff; color:var(--navy); border:1px solid var(--navy); }
+  button.complete{ background:var(--green-ink); color:#fff; }
+  button:disabled{ opacity:.5; cursor:not-allowed; }
+  .row-status{ font-size:12.5px; }
+  .row-status.err{ color:var(--red-ink); } .row-status.ok{ color:var(--green-ink); }
+
+  .missing-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 16px; border:1px solid var(--red-border); background:var(--red-bg); border-radius:10px; margin-bottom:8px; flex-wrap:wrap; }
+  .missing-row .n{ font-weight:600; color:var(--red-ink); }
+  .missing-row .m{ font-size:12.5px; color:var(--red-ink); }
+
+  h3.group{ margin:26px 2px 10px; font:400 17px/1.2 Georgia,"Times New Roman",serif; color:var(--navy); }
+  .empty{ color:var(--muted); font-size:13px; padding:14px 2px; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div>
+    <h1>Team One-on-Ones</h1>
+    <div class="who" id="whoLine">Loading…</div>
+  </div>
+  <a class="home" href="/">All Views</a>
+</header>
+
+<main>
+  <div id="banners"></div>
+  <div id="content">Loading…</div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  var API = '/api';
+  var SESSION_KEY = 'olh.session.v1';
+
+  /* Mirrors the metric rows in monthly-1on1.html. `good` is the direction of
+     improvement, which is what lets the delta chip be green or red instead of
+     just signed -- cycle time and aged cases going up is bad, everything else
+     going up is good. */
+  var METRICS = [
+    { key:'casesClosed', label:'Cases Closed MTD',   good:'up',   unit:'' },
+    { key:'cycleTime',   label:'MTD Cycle Time',     good:'down', unit:' d' },
+    { key:'under7Day',   label:'MTD Under 7-Day %',  good:'up',   unit:'%' },
+    { key:'agedCases',   label:'Aged Cases',         good:'down', unit:'' },
+    { key:'totalOpen',   label:'Total Open Cases',   good:'down', unit:'' }
+  ];
+
+  function getSession() {
+    try { var v = localStorage.getItem(SESSION_KEY); return v ? JSON.parse(v) : null; }
+    catch (e) { return null; }
+  }
+  function authHeaders(extra) {
+    var h = Object.assign({ Accept: 'application/json' }, extra || {});
+    var s = getSession();
+    var tok = s && s.token;
+    if (tok) { h.Authorization = 'Bearer ' + tok; h['X-OLH-Token'] = 'Bearer ' + tok; }
+    return h;
+  }
+  function authedFetchHeaders(extra) {
+    if (!getSession() || !getSession().token) {
+      throw new Error('You are not signed in. Sign in at the OLH Tracker home page, then reload this page.');
+    }
+    return authHeaders(extra);
+  }
+  function apiGet(path) {
+    return fetch(API + path, { headers: authedFetchHeaders() }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (body) {
+        if (res.status === 401) { var e = new Error((body && body.error) || 'Your session has expired.'); e.status = 401; throw e; }
+        if (!res.ok || !body) throw new Error((body && body.error) || (path + ' failed (' + res.status + ')'));
+        return body;
+      });
+    });
+  }
+  function apiPatch(path, payload) {
+    return fetch(API + path, {
+      method: 'PATCH', headers: authedFetchHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(payload)
+    }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (body) {
+        if (!res.ok) throw new Error((body && body.error) || (path + ' failed (' + res.status + ')'));
+        return body;
+      });
+    });
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+
+  function thisMonthISO() {
+    var d = new Date(); var off = d.getTimezoneOffset();
+    return new Date(d.getTime() - off * 60000).toISOString().slice(0, 7);
+  }
+  function prettyMonth(ym) {
+    if (!ym) return '';
+    var d = new Date(ym + '-01T12:00:00');
+    if (isNaN(d)) return ym;
+    return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  }
+  function prettyStamp(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d)) return iso;
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  }
+  /** Last 18 months, newest first -- the picker's range. */
+  function monthOptions() {
+    var out = [], d = new Date();
+    for (var i = 0; i < 18; i++) {
+      out.push(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - i, 1)).toISOString().slice(0, 7));
+    }
+    return out;
+  }
+
+  var state = {
+    user: null, can: [], loading: true, error: '', okMsg: '',
+    month: thisMonthISO(),
+    checkins: [], roster: [], isAdmin: false, viewingAll: false, viewAll: false,
+    rowState: {} // recordId -> {saving, msg, ok}
+  };
+
+  function statusColors(status) {
+    if (status === 'Completed') return { bg: 'var(--green-bg)', ink: 'var(--green-ink)' };
+    if (status === 'Submitted') return { bg: 'var(--amber-bg)', ink: 'var(--amber-ink)' };
+    return { bg: '#F1EBE1', ink: '#6F6963' }; // Draft
+  }
+
+  function fmtNum(v, unit) {
+    if (v == null || v === '') return '—';
+    var n = Number(v);
+    if (!isFinite(n)) return esc(String(v));
+    return (Math.round(n * 100) / 100).toLocaleString() + (unit || '');
+  }
+
+  function deltaHtml(metric, row) {
+    var a = Number(row.thisMonth), b = Number(row.lastMonth);
+    if (row.thisMonth == null || row.lastMonth == null || !isFinite(a) || !isFinite(b)) {
+      return '<span class="delta flat">—</span>';
+    }
+    var d = a - b;
+    if (Math.abs(d) < 1e-9) return '<span class="delta flat">no change</span>';
+    var improving = metric.good === 'up' ? d > 0 : d < 0;
+    var sign = d > 0 ? '+' : '';
+    return '<span class="delta ' + (improving ? 'up' : 'down') + '">' + sign +
+      (Math.round(d * 100) / 100).toLocaleString() + (metric.unit || '') + '</span>';
+  }
+
+  function metricsHtml(c) {
+    var rows = METRICS.map(function (m) {
+      var row = (c.metrics && c.metrics[m.key]) || {};
+      return '<tr>' +
+        '<td class="name">' + esc(m.label) + '</td>' +
+        '<td class="n">' + fmtNum(row.lastMonth, m.unit) + '</td>' +
+        '<td class="n">' + fmtNum(row.thisMonth, m.unit) + '</td>' +
+        '<td class="n">' + deltaHtml(m, row) + '</td>' +
+        '<td class="mnote">' + esc(row.notes || '') + '</td>' +
+      '</tr>';
+    }).join('');
+    return '<table class="metrics"><thead><tr>' +
+      '<th>Metric</th><th class="n">Last month</th><th class="n">This month</th><th class="n">Change</th><th>Associate notes</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function proseBlock(text, cls, emptyMsg) {
+    var t = String(text == null ? '' : text).trim();
+    if (!t) return '<div class="prose empty-note">' + esc(emptyMsg) + '</div>';
+    return '<div class="prose ' + (cls || '') + '">' + esc(t) + '</div>';
+  }
+
+  function checkinHtml(c) {
+    var sc = statusColors(c.status);
+    var rs = state.rowState[c.recordId] || {};
+    var awaiting = c.status !== 'Completed';
+
+    var flags = '<span class="badge-status" style="background:' + sc.bg + ';color:' + sc.ink + '">' + esc(c.status) + '</span>' +
+      (String(c.challenges || '').trim() ? '<span class="pill hot">Challenges raised</span>' : '') +
+      (String(c.wins || '').trim() ? '<span class="pill">Wins</span>' : '');
+
+    var body =
+      '<div class="part"><div class="part-head"><span class="num">1.</span><h4>Metrics</h4></div>' + metricsHtml(c) + '</div>' +
+
+      '<div class="part"><div class="part-head"><span class="num">2.</span><h4>Challenges and Barriers</h4></div>' +
+        proseBlock(c.challenges, '', 'Nothing raised.') + '</div>' +
+
+      (String(c.wins || '').trim()
+        ? '<div class="part"><div class="part-head"><span class="num">&#9733;</span><h4>Wins Worth Noting</h4></div>' +
+            proseBlock(c.wins, 'win', '') + '</div>'
+        : '') +
+
+      '<div class="part"><div class="part-head"><span class="num">3.</span><h4>Support Needed — your half</h4></div>' +
+        '<label class="field-label" for="dn-' + esc(c.recordId) + '">Discussion notes</label>' +
+        '<textarea id="dn-' + esc(c.recordId) + '" placeholder="What came up in the conversation...">' + esc(c.discussionNotes || '') + '</textarea>' +
+        '<label class="field-label" for="sa-' + esc(c.recordId) + '">Support actions agreed</label>' +
+        '<textarea id="sa-' + esc(c.recordId) + '" placeholder="One per line, e.g. Shadow a senior CCR on aged-case calls / Jodie Lacy / 9/15">' + esc(c.supportActions || '') + '</textarea>' +
+        '<div class="actions">' +
+          '<button class="save" data-save="' + esc(c.recordId) + '"' + (rs.saving ? ' disabled' : '') + '>Save notes</button>' +
+          '<button class="complete" data-complete="' + esc(c.recordId) + '"' + (rs.saving ? ' disabled' : '') + '>' +
+            (c.status === 'Completed' ? 'Save &amp; keep completed' : 'Save &amp; mark completed') + '</button>' +
+          (c.completedBy ? '<span class="subm-meta">Completed by ' + esc(c.completedBy) + (c.completedAt ? ' · ' + esc(prettyStamp(c.completedAt)) : '') + '</span>' : '') +
+          (rs.msg ? '<span class="row-status ' + (rs.ok ? 'ok' : 'err') + '">' + esc(rs.msg) + '</span>' : '') +
+        '</div>' +
+      '</div>';
+
+    return '<details class="subm' + (awaiting ? ' awaiting' : '') + '">' +
+      '<summary>' +
+        '<span><span class="subm-who">' + esc(c.associateName || c.associateEmail) + '</span>' +
+          (c.division ? ' <span class="subm-meta">· ' + esc(c.division) + '</span>' : '') +
+          (c.submittedAt ? ' <span class="subm-meta">· submitted ' + esc(prettyStamp(c.submittedAt)) + '</span>' : '') +
+        '</span>' +
+        '<span class="subm-flags">' + flags + '</span>' +
+      '</summary>' +
+      '<div class="subm-body">' + body + '</div>' +
+    '</details>';
+  }
+
+  function toolbarHtml() {
+    var expected = state.roster.filter(function (r) { return r.active !== false && r.email; });
+    var have = {};
+    state.checkins.forEach(function (c) { have[String(c.associateEmail || '').toLowerCase()] = c; });
+    var submitted = state.checkins.length;
+    var completed = state.checkins.filter(function (c) { return c.status === 'Completed'; }).length;
+    var missing = expected.filter(function (r) { return !have[r.email]; }).length;
+    var pct = expected.length ? Math.round(completed / expected.length * 100) : 0;
+
+    return '<div class="card">' +
+      '<div class="toolbar">' +
+        '<div><label for="fMonth">Check-in month</label><select id="fMonth">' +
+          monthOptions().map(function (m) {
+            return '<option value="' + esc(m) + '"' + (state.month === m ? ' selected' : '') + '>' + esc(prettyMonth(m)) + '</option>';
+          }).join('') +
+        '</select></div>' +
+        (state.isAdmin ? '<div class="chk"><label style="margin:0;display:flex;gap:6px;align-items:center;text-transform:none;font-weight:400;color:var(--ink)">' +
+          '<input type="checkbox" id="fAll"' + (state.viewAll ? ' checked' : '') + '> View all associates (Admin)</label></div>' : '') +
+      '</div>' +
+      (expected.length && !state.viewingAll
+        ? '<div class="stats">' +
+            '<div class="stat"><div class="n">' + expected.length + '</div><div class="l">Direct reports</div></div>' +
+            '<div class="stat"><div class="n">' + submitted + '</div><div class="l">Parts 1 &amp; 2 in</div></div>' +
+            '<div class="stat"><div class="n">' + completed + '</div><div class="l">Meetings completed</div></div>' +
+            '<div class="stat"><div class="n">' + missing + '</div><div class="l">Not started</div></div>' +
+          '</div><div class="bar"><span style="width:' + pct + '%"></span></div>'
+        : '') +
+    '</div>';
+  }
+
+  function render() {
+    var who = document.getElementById('whoLine');
+    who.textContent = state.user
+      ? (state.user.name || state.user.email) + (state.user.division ? ' · ' + state.user.division : '')
+      : 'Not signed in';
+
+    var banners = '';
+    if (state.error) banners += '<div class="banner error">' + esc(state.error) + '</div>';
+    if (state.okMsg) banners += '<div class="banner ok">' + esc(state.okMsg) + '</div>';
+    document.getElementById('banners').innerHTML = banners;
+
+    var el = document.getElementById('content');
+    if (state.loading) { el.innerHTML = '<div class="empty">Loading…</div>'; return; }
+    if (state.error && !state.user) { el.innerHTML = ''; return; }
+
+    if (state.can.indexOf('page.team1on1') < 0) {
+      el.innerHTML = '<div class="card"><div class="empty">Your role does not have access to the Team One-on-Ones page. ' +
+        'Ask an admin to grant it on the Roles &amp; Permissions grid.</div></div>';
+      return;
+    }
+
+    var body = toolbarHtml();
+
+    if (!state.roster.length && !state.viewingAll) {
+      body += '<div class="card"><div class="empty">No direct reports are linked to you yet. ' +
+        'Ask an admin to set the Manager field for your team on the Users table — that link is what scopes this page.</div></div>';
+      el.innerHTML = body;
+      wire();
+      return;
+    }
+
+    var byEmail = {};
+    state.checkins.forEach(function (c) { byEmail[String(c.associateEmail || '').toLowerCase()] = c; });
+
+    // Awaiting your Part 3 first -- that is the manager's actual queue.
+    var awaiting = state.checkins.filter(function (c) { return c.status !== 'Completed'; });
+    var done = state.checkins.filter(function (c) { return c.status === 'Completed'; });
+    var sortByName = function (a, b) { return String(a.associateName || '').localeCompare(String(b.associateName || '')); };
+    awaiting.sort(sortByName); done.sort(sortByName);
+
+    var expected = state.roster.filter(function (r) { return r.active !== false && r.email; });
+    var missing = expected.filter(function (r) { return !byEmail[r.email]; }).sort(function (a, b) {
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+
+    if (awaiting.length) {
+      body += '<h3 class="group">Awaiting your Part 3 — ' + awaiting.length + '</h3>' + awaiting.map(checkinHtml).join('');
+    }
+    if (missing.length) {
+      body += '<h3 class="group">Not started — ' + missing.length + '</h3>' + missing.map(function (r) {
+        return '<div class="missing-row"><span class="n">' + esc(r.name || r.email) + '</span>' +
+          '<span class="m">No check-in filed for ' + esc(prettyMonth(state.month)) + '. Parts 1 and 2 are the associate\u2019s to complete first.</span></div>';
+      }).join('');
+    }
+    if (done.length) {
+      body += '<h3 class="group">Completed — ' + done.length + '</h3>' + done.map(checkinHtml).join('');
+    }
+    if (!awaiting.length && !missing.length && !done.length) {
+      body += '<div class="card"><div class="empty">Nothing to show for ' + esc(prettyMonth(state.month)) + '.</div></div>';
+    }
+
+    el.innerHTML = body;
+    wire();
+  }
+
+  function wire() {
+    var m = document.getElementById('fMonth');
+    if (m) m.addEventListener('change', function () { state.month = m.value; reload(); });
+
+    var all = document.getElementById('fAll');
+    if (all) all.addEventListener('change', function () { state.viewAll = all.checked; reload(); });
+
+    Array.prototype.forEach.call(document.querySelectorAll('[data-save]'), function (b) {
+      b.addEventListener('click', function (ev) { ev.preventDefault(); doSave(b.getAttribute('data-save'), false); });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-complete]'), function (b) {
+      b.addEventListener('click', function (ev) { ev.preventDefault(); doSave(b.getAttribute('data-complete'), true); });
+    });
+  }
+
+  function doSave(recordId, markComplete) {
+    var dn = document.getElementById('dn-' + recordId);
+    var sa = document.getElementById('sa-' + recordId);
+    var payload = {
+      recordId: recordId,
+      discussionNotes: dn ? dn.value : undefined,
+      supportActions: sa ? sa.value : undefined,
+      managerName: state.user ? state.user.name : undefined
+    };
+    if (markComplete) payload.complete = true;
+
+    state.rowState[recordId] = { saving: true };
+    render();
+    apiPatch('/team-1on1', payload).then(function (data) {
+      var idx = state.checkins.findIndex(function (c) { return c.recordId === recordId; });
+      if (idx >= 0 && data.checkin) state.checkins[idx] = data.checkin;
+      state.rowState[recordId] = { saving: false, ok: true, msg: markComplete ? 'Marked completed.' : 'Saved.' };
+      render();
+    }).catch(function (err) {
+      state.rowState[recordId] = { saving: false, ok: false, msg: 'Failed: ' + (err && err.message ? err.message : String(err)) };
+      render();
+    });
+  }
+
+  function loadSession() {
+    return apiGet('/session').then(function (data) {
+      state.user = data.user || null;
+      state.can = data.can || [];
+    });
+  }
+  function load() {
+    var qs = '?month=' + encodeURIComponent(state.month) + (state.viewAll ? '&all=1' : '');
+    return apiGet('/team-1on1' + qs).then(function (data) {
+      state.checkins = Array.isArray(data.checkins) ? data.checkins : [];
+      state.roster = Array.isArray(data.roster) ? data.roster : [];
+      state.isAdmin = !!data.isAdmin;
+      state.viewingAll = !!data.viewingAll;
+      if (data.month) state.month = data.month;
+    });
+  }
+  function reload() {
+    state.loading = true; state.error = ''; state.okMsg = '';
+    render();
+    load().then(function () { state.loading = false; render(); })
+      .catch(function (err) {
+        state.loading = false;
+        state.error = 'Could not load that month: ' + (err && err.message ? err.message : String(err));
+        render();
+      });
+  }
+
+  /* ---- Boot ------------------------------------------------------------ */
+  var session = getSession();
+  if (!session || !session.token) {
+    document.getElementById('content').innerHTML =
+      '<div class="empty">You are not signed in. <a href="/">Sign in at the OLH Tracker home page</a>, then reload this page.</div>';
+    document.getElementById('whoLine').textContent = 'Not signed in';
+  } else {
+    loadSession()
+      .then(load)
+      .then(function () { state.loading = false; render(); })
+      .catch(function (err) {
+        state.loading = false;
+        if (err && err.status === 401) {
+          state.error = 'Your session has expired. Sign in again at the OLH Tracker home page, then reload this page.';
+        } else {
+          state.error = 'Could not load this page: ' + (err && err.message ? err.message : String(err));
+        }
+        render();
+      });
+  }
+})();
+</script>
+</body>
+</html>

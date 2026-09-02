@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>Team Daily Summaries — OLH Tracker</title>
+<style>
+  :root{
+    --navy:#1B2A58; --ink:#2B2620; --muted:#6F6963; --faint:#908A82;
+    --border:#E4DED2; --bg:#FBF8F3; --card:#ffffff;
+    --amber-bg:#FFF8E1; --amber-ink:#7C4A03; --amber-border:#F0DFAE;
+    --red-bg:#FDECEA; --red-ink:#7F1D1D; --red-border:#F3C6C2;
+    --green-bg:#EAF6EE; --green-ink:#1E5B34; --green-border:#C6E6D2;
+    --blue-bg:#EAF1FB; --blue-ink:#1B3E7C; --blue-border:#C6D8F3;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  }
+  a{color:var(--navy)}
+  header.top{
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    padding:14px 20px; background:var(--navy); border-bottom:1px solid var(--border);
+    position:sticky; top:0; z-index:50; flex-wrap:wrap;
+  }
+  header.top h1{ margin:0; font:400 22px/1.2 Georgia,"Times New Roman",serif; color:#fff; letter-spacing:-.01em; }
+  .who{ font-size:12px; color:#C7BFB2; }
+  header.top a.home{
+    display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 13px;
+    border:1px solid rgba(255,255,255,.28); border-radius:4px; background:transparent;
+    color:#C7BFB2; font-size:13px; font-weight:500; text-decoration:none; white-space:nowrap;
+  }
+  header.top a.home:hover{ background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.45); color:#fff; }
+
+  main{ max-width:1060px; margin:0 auto; padding:22px 20px 80px; }
+  #banners{ margin-bottom:16px; }
+  .banner{ padding:12px 16px; border-radius:8px; font-size:13.5px; margin-bottom:8px; }
+  .banner.error{ background:var(--red-bg); color:var(--red-ink); border:1px solid var(--red-border); }
+  .banner.ok{ background:var(--green-bg); color:var(--green-ink); border:1px solid var(--green-border); }
+
+  .card{ background:var(--card); border:1px solid var(--border); border-radius:10px; padding:20px 22px; margin-bottom:18px; }
+  .card h2{ margin:0 0 14px; font:400 18px/1.2 Georgia,"Times New Roman",serif; color:var(--navy); }
+
+  .toolbar{ display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end; }
+  .toolbar label{ display:block; font-size:11px; font-weight:600; color:var(--muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:.03em; }
+  .toolbar select,.toolbar input{ padding:7px 9px; border:1px solid var(--border); border-radius:6px; font-size:13.5px; background:#fff; color:var(--ink); }
+  .toolbar .chk{ display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); padding-bottom:8px; }
+  .presets{ display:flex; gap:6px; padding-bottom:1px; }
+  .preset{ background:#fff; color:var(--muted); border:1px solid var(--border); border-radius:999px; padding:6px 13px; font-size:12.5px; font-weight:600; cursor:pointer; }
+  .preset:hover{ border-color:var(--navy); color:var(--navy); }
+
+  .coverage{ display:flex; align-items:baseline; gap:10px; margin-top:16px; flex-wrap:wrap; }
+  .cov-num{ font:400 26px/1 Georgia,serif; color:var(--navy); font-variant-numeric:tabular-nums; }
+  .cov-label{ font-size:12.5px; color:var(--muted); }
+  .bar{ height:7px; border-radius:4px; background:#EFE9DD; overflow:hidden; margin-top:10px; }
+  .bar > span{ display:block; height:100%; background:var(--green-ink); }
+
+  .reports-strip{ display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+  .report-chip{ display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border-radius:999px; font-size:12px; border:1px solid var(--border); background:#fff; }
+  .report-chip .dot{ width:7px; height:7px; border-radius:50%; }
+  .report-chip.has .dot{ background:var(--green-ink); }
+  .report-chip.missing{ background:var(--red-bg); border-color:var(--red-border); color:var(--red-ink); }
+  .report-chip.missing .dot{ background:var(--red-ink); }
+
+  .day{ margin-bottom:26px; }
+  .day-head{ display:flex; align-items:baseline; gap:12px; margin:0 2px 10px; flex-wrap:wrap; }
+  .day-head h3{ margin:0; font:400 17px/1.2 Georgia,"Times New Roman",serif; color:var(--navy); }
+  .day-count{ font-size:12.5px; color:var(--muted); }
+
+  .subm{ border:1px solid var(--border); border-radius:10px; margin-bottom:10px; overflow:hidden; background:var(--card); }
+  .subm summary{ list-style:none; cursor:pointer; padding:13px 16px; display:flex; align-items:center; gap:12px; justify-content:space-between; flex-wrap:wrap; }
+  .subm summary::-webkit-details-marker{ display:none; }
+  .subm summary:hover{ background:#FCFAF6; }
+  .subm-who{ font-weight:600; }
+  .subm-meta{ font-size:12px; color:var(--muted); }
+  .subm-flags{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .subm-body{ padding:4px 16px 16px; border-top:1px solid #EFE9DD; }
+
+  .badge-status{ font-size:10.5px; font-weight:700; padding:2px 9px; border-radius:10px; text-transform:uppercase; letter-spacing:.02em; }
+  .pill{ font-size:11px; font-weight:600; padding:2px 8px; border-radius:10px; background:#F1EBE1; color:var(--muted); }
+  .pill.hot{ background:var(--amber-bg); color:var(--amber-ink); border:1px solid var(--amber-border); }
+
+  .sec{ margin-top:14px; }
+  .sec-head{ display:flex; align-items:baseline; gap:8px; }
+  .sec-head .num{ font:400 12px/1 Georgia,serif; color:var(--faint); }
+  .sec-head h4{ margin:0; font:600 12.5px/1.3 -apple-system,sans-serif; color:var(--ink); text-transform:uppercase; letter-spacing:.03em; }
+  .sec-none{ font-size:12.5px; color:var(--faint); font-style:italic; margin-top:3px; }
+  table.rows{ width:100%; border-collapse:collapse; font-size:13px; margin-top:7px; }
+  table.rows th{ text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); font-weight:600; padding:5px 8px 5px 0; border-bottom:1px solid var(--border); }
+  table.rows td{ padding:6px 8px 6px 0; border-bottom:1px solid #F2EDE4; vertical-align:top; }
+  pre.raw{ margin:7px 0 0; padding:9px 11px; background:#FAF7F1; border:1px solid var(--border); border-radius:6px; font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre-wrap; word-break:break-word; }
+
+  .notes{ margin-top:14px; padding:11px 13px; background:var(--amber-bg); border:1px solid var(--amber-border); border-radius:7px; font-size:13.5px; color:var(--amber-ink); white-space:pre-wrap; }
+  .notes strong{ display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.03em; margin-bottom:4px; }
+
+  .actions{ display:flex; gap:8px; margin-top:16px; flex-wrap:wrap; align-items:center; }
+  button{ cursor:pointer; border:none; border-radius:6px; padding:8px 14px; font-size:13px; font-weight:600; }
+  button.review{ background:var(--green-ink); color:#fff; }
+  button.followup{ background:var(--amber-ink); color:#fff; }
+  button:disabled{ opacity:.5; cursor:not-allowed; }
+  .row-status{ font-size:12.5px; }
+  .row-status.err{ color:var(--red-ink); } .row-status.ok{ color:var(--green-ink); }
+
+  .empty{ color:var(--muted); font-size:13px; padding:14px 2px; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div>
+    <h1>Team Daily Summaries</h1>
+    <div class="who" id="whoLine">Loading…</div>
+  </div>
+  <a class="home" href="/">All Views</a>
+</header>
+
+<main>
+  <div id="banners"></div>
+  <div id="content">Loading…</div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  var API = '/api';
+  var SESSION_KEY = 'olh.session.v1';
+
+  /* Mirrors SECTIONS in daily-summary.html -- same keys, same order, same
+     column labels. The associate page flattens each row to
+     "Label: value | Label: value" joined by newlines, so the column list here
+     is what lets this page turn that back into a table instead of showing the
+     raw pipe soup. If a section gains a column there, add it here too; the
+     renderer falls back to raw text on any row it cannot parse, so a drift
+     degrades to ugly rather than to wrong. */
+  var SECTIONS = [
+    { key:'aged_case',      num:'01', title:'Aged Case Updates',                    cols:['Case Number','EDOC','Remaining Items','Delay Reason'] },
+    { key:'open_wo_aged',   num:'02', title:'Open Work Orders on Aged Cases',       cols:['WO Number','Item','Trade','WO Status','Reason'] },
+    { key:'overdue_wo',     num:'03', title:'Overdue Work Orders',                  cols:['WO Number','Item','Overdue Reason'] },
+    { key:'expired_trade',  num:'04', title:'Expired Trade Assignments',            cols:['WO Number','Item','Trade','Reason Expired'] },
+    { key:'unscheduled_wo', num:'05', title:'Unscheduled Work Orders Over 9 Days',  cols:['WO Number','Item','Trade','Status','Reason'] },
+    { key:'buildpro',       num:'06', title:'BuildPro Access Needed',               cols:['Community','Address'] }
+  ];
+
+  function getSession() {
+    try { var v = localStorage.getItem(SESSION_KEY); return v ? JSON.parse(v) : null; }
+    catch (e) { return null; }
+  }
+  function authHeaders(extra) {
+    var h = Object.assign({ Accept: 'application/json' }, extra || {});
+    var s = getSession();
+    var tok = s && s.token;
+    if (tok) { h.Authorization = 'Bearer ' + tok; h['X-OLH-Token'] = 'Bearer ' + tok; }
+    return h;
+  }
+  function authedFetchHeaders(extra) {
+    if (!getSession() || !getSession().token) {
+      throw new Error('You are not signed in. Sign in at the OLH Tracker home page, then reload this page.');
+    }
+    return authHeaders(extra);
+  }
+  function apiGet(path) {
+    return fetch(API + path, { headers: authedFetchHeaders() }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (body) {
+        if (res.status === 401) { var e = new Error((body && body.error) || 'Your session has expired.'); e.status = 401; throw e; }
+        if (!res.ok || !body) throw new Error((body && body.error) || (path + ' failed (' + res.status + ')'));
+        return body;
+      });
+    });
+  }
+  function apiPatch(path, payload) {
+    return fetch(API + path, {
+      method: 'PATCH', headers: authedFetchHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(payload)
+    }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (body) {
+        if (!res.ok) throw new Error((body && body.error) || (path + ' failed (' + res.status + ')'));
+        return body;
+      });
+    });
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+
+  /* Local-time YYYY-MM-DD, matching todayISO() in daily-summary.html so the
+     manager's "today" is the same day the associate filed against. */
+  function todayISO() {
+    var d = new Date(); var off = d.getTimezoneOffset();
+    return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
+  }
+  function shiftISO(iso, days) {
+    var d = new Date(iso + 'T12:00:00');
+    d.setDate(d.getDate() + days);
+    var off = d.getTimezoneOffset();
+    return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
+  }
+  function prettyDate(iso) {
+    if (!iso) return '';
+    var d = new Date(iso + 'T12:00:00');
+    if (isNaN(d)) return iso;
+    return d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+  }
+  function prettyStamp(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d)) return iso;
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  }
+
+  var state = {
+    user: null, can: [], loading: true, error: '', okMsg: '',
+    from: shiftISO(todayISO(), -6), to: todayISO(),
+    reports: [], roster: [], isAdmin: false, viewingAll: false, viewAll: false,
+    onlyMissing: false,
+    rowState: {} // recordId -> {saving, msg, ok}
+  };
+
+  function statusColors(status) {
+    if (status === 'Reviewed') return { bg: 'var(--green-bg)', ink: 'var(--green-ink)' };
+    if (status === 'Needs Follow-up') return { bg: 'var(--amber-bg)', ink: 'var(--amber-ink)' };
+    return { bg: '#F1EBE1', ink: '#6F6963' }; // Submitted
+  }
+
+  /* "Label: value | Label: value" -> {Label: value}. Returns null when the
+     line does not look like that at all, which is the signal to fall back to
+     showing it raw rather than inventing a table out of it. */
+  function parseRow(line) {
+    var parts = String(line).split('|');
+    var out = {}, matched = 0;
+    parts.forEach(function (p) {
+      var i = p.indexOf(':');
+      if (i < 0) return;
+      var k = p.slice(0, i).trim();
+      if (!k) return;
+      out[k] = p.slice(i + 1).trim();
+      matched += 1;
+    });
+    return matched ? out : null;
+  }
+
+  function isNone(v) {
+    var s = String(v == null ? '' : v).trim();
+    return !s || s.toLowerCase() === 'none';
+  }
+  /* How many sections on this report actually carry content. Drives the
+     "3 of 6 with activity" pill so a manager can see at a glance which
+     reports are substantive without opening every one. */
+  function activeSectionCount(rep) {
+    return SECTIONS.filter(function (s) { return !isNone(rep.sections && rep.sections[s.key]); }).length;
+  }
+
+  function sectionHtml(section, raw) {
+    var head = '<div class="sec-head"><span class="num">' + section.num + '</span><h4>' + esc(section.title) + '</h4></div>';
+    if (isNone(raw)) {
+      return '<div class="sec">' + head + '<div class="sec-none">None reported.</div></div>';
+    }
+    var lines = String(raw).split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+    var parsed = lines.map(parseRow);
+    if (parsed.some(function (p) { return !p; })) {
+      return '<div class="sec">' + head + '<pre class="raw">' + esc(String(raw)) + '</pre></div>';
+    }
+    var cols = section.cols.slice();
+    // Tolerate a column the associate page added that this page has not
+    // learned about yet -- show it rather than silently dropping the value.
+    parsed.forEach(function (p) {
+      Object.keys(p).forEach(function (k) { if (cols.indexOf(k) < 0) cols.push(k); });
+    });
+    var thead = '<tr>' + cols.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') + '</tr>';
+    var tbody = parsed.map(function (p) {
+      return '<tr>' + cols.map(function (c) { return '<td>' + esc(p[c] || '') + '</td>'; }).join('') + '</tr>';
+    }).join('');
+    return '<div class="sec">' + head + '<table class="rows"><thead>' + thead + '</thead><tbody>' + tbody + '</tbody></table></div>';
+  }
+
+  function submissionHtml(rep) {
+    var sc = statusColors(rep.status);
+    var rs = state.rowState[rep.recordId] || {};
+    var active = activeSectionCount(rep);
+    var hasNotes = !!String(rep.notes || '').trim();
+
+    var flags = '<span class="badge-status" style="background:' + sc.bg + ';color:' + sc.ink + '">' + esc(rep.status) + '</span>' +
+      '<span class="pill' + (active ? ' hot' : '') + '">' + active + ' of ' + SECTIONS.length + ' with activity</span>' +
+      (hasNotes ? '<span class="pill hot">Note</span>' : '');
+
+    var body = SECTIONS.map(function (s) { return sectionHtml(s, rep.sections && rep.sections[s.key]); }).join('') +
+      (hasNotes ? '<div class="notes"><strong>Notes &amp; escalations</strong>' + esc(rep.notes) + '</div>' : '') +
+      '<div class="actions">' +
+        '<button class="review" data-review="' + esc(rep.recordId) + '" data-status="Reviewed"' + (rs.saving ? ' disabled' : '') + '>Mark Reviewed</button>' +
+        '<button class="followup" data-review="' + esc(rep.recordId) + '" data-status="Needs Follow-up"' + (rs.saving ? ' disabled' : '') + '>Needs Follow-up</button>' +
+        (rep.reviewedBy ? '<span class="subm-meta">Reviewed by ' + esc(rep.reviewedBy) + (rep.reviewedAt ? ' · ' + esc(prettyStamp(rep.reviewedAt)) : '') + '</span>' : '') +
+        (rs.msg ? '<span class="row-status ' + (rs.ok ? 'ok' : 'err') + '">' + esc(rs.msg) + '</span>' : '') +
+      '</div>';
+
+    return '<details class="subm">' +
+      '<summary>' +
+        '<span><span class="subm-who">' + esc(rep.associateName || rep.associateEmail) + '</span>' +
+          (rep.division ? ' <span class="subm-meta">· ' + esc(rep.division) + '</span>' : '') +
+          (rep.submittedAt ? ' <span class="subm-meta">· filed ' + esc(prettyStamp(rep.submittedAt)) + '</span>' : '') +
+        '</span>' +
+        '<span class="subm-flags">' + flags + '</span>' +
+      '</summary>' +
+      '<div class="subm-body">' + body + '</div>' +
+    '</details>';
+  }
+
+  /** Every date in [from, to], newest first -- including days nobody filed on. */
+  function daysInRange() {
+    var out = [], cur = state.to;
+    var guard = 0;
+    while (cur >= state.from && guard < 400) { out.push(cur); cur = shiftISO(cur, -1); guard += 1; }
+    return out;
+  }
+
+  function dayHtml(iso) {
+    var rows = state.reports.filter(function (r) { return r.reportDate === iso; });
+    var filed = {};
+    rows.forEach(function (r) { filed[String(r.associateEmail || '').toLowerCase()] = true; });
+    var expected = state.roster.filter(function (r) { return r.active !== false && r.email; });
+    var missing = expected.filter(function (r) { return !filed[r.email]; });
+
+    if (state.onlyMissing && !missing.length) return '';
+
+    var pct = expected.length ? Math.round((expected.length - missing.length) / expected.length * 100) : 0;
+
+    var chips = '';
+    if (expected.length && !state.viewingAll) {
+      chips = '<div class="reports-strip">' + expected.map(function (r) {
+        var has = !!filed[r.email];
+        return '<span class="report-chip ' + (has ? 'has' : 'missing') + '"><span class="dot"></span>' +
+          esc(r.name || r.email) + (has ? '' : ' — no summary') + '</span>';
+      }).join('') + '</div>';
+    }
+
+    var counts = expected.length
+      ? (expected.length - missing.length) + ' of ' + expected.length + ' submitted'
+      : rows.length + ' submitted';
+
+    var list = rows.length
+      ? rows.slice().sort(function (a, b) {
+          return String(a.associateName || '').localeCompare(String(b.associateName || ''));
+        }).map(submissionHtml).join('')
+      : '<div class="empty">No summaries filed for this day.</div>';
+
+    return '<section class="day">' +
+      '<div class="day-head"><h3>' + esc(prettyDate(iso)) + '</h3><span class="day-count">' + esc(counts) + '</span></div>' +
+      (expected.length && !state.viewingAll ? '<div class="bar"><span style="width:' + pct + '%"></span></div>' + chips : '') +
+      '<div style="margin-top:12px">' + list + '</div>' +
+    '</section>';
+  }
+
+  function toolbarHtml() {
+    var expected = state.roster.filter(function (r) { return r.active !== false && r.email; });
+    var days = daysInRange();
+    var expectedTotal = expected.length * days.length;
+    var filedTotal = state.reports.length;
+    var pct = expectedTotal ? Math.round(filedTotal / expectedTotal * 100) : 0;
+
+    return '<div class="card">' +
+      '<div class="toolbar">' +
+        '<div><label for="fFrom">From</label><input type="date" id="fFrom" value="' + esc(state.from) + '"></div>' +
+        '<div><label for="fTo">To</label><input type="date" id="fTo" value="' + esc(state.to) + '"></div>' +
+        '<div class="presets">' +
+          '<button class="preset" data-preset="today">Today</button>' +
+          '<button class="preset" data-preset="yesterday">Yesterday</button>' +
+          '<button class="preset" data-preset="7">Last 7 days</button>' +
+          '<button class="preset" data-preset="30">Last 30 days</button>' +
+        '</div>' +
+        '<div class="chk"><label style="margin:0;display:flex;gap:6px;align-items:center;text-transform:none;font-weight:400;color:var(--ink)">' +
+          '<input type="checkbox" id="fMissing"' + (state.onlyMissing ? ' checked' : '') + '> Only days with a gap</label></div>' +
+        (state.isAdmin ? '<div class="chk"><label style="margin:0;display:flex;gap:6px;align-items:center;text-transform:none;font-weight:400;color:var(--ink)">' +
+          '<input type="checkbox" id="fAll"' + (state.viewAll ? ' checked' : '') + '> View all associates (Admin)</label></div>' : '') +
+      '</div>' +
+      (expectedTotal && !state.viewingAll
+        ? '<div class="coverage"><span class="cov-num">' + pct + '%</span>' +
+            '<span class="cov-label">submission coverage — ' + filedTotal + ' of ' + expectedTotal +
+            ' expected across ' + expected.length + ' associate' + (expected.length === 1 ? '' : 's') +
+            ' and ' + days.length + ' day' + (days.length === 1 ? '' : 's') + '</span></div>' +
+          '<div class="bar"><span style="width:' + pct + '%"></span></div>'
+        : '') +
+    '</div>';
+  }
+
+  function render() {
+    var who = document.getElementById('whoLine');
+    who.textContent = state.user
+      ? (state.user.name || state.user.email) + (state.user.division ? ' · ' + state.user.division : '')
+      : 'Not signed in';
+
+    var banners = '';
+    if (state.error) banners += '<div class="banner error">' + esc(state.error) + '</div>';
+    if (state.okMsg) banners += '<div class="banner ok">' + esc(state.okMsg) + '</div>';
+    document.getElementById('banners').innerHTML = banners;
+
+    var el = document.getElementById('content');
+    if (state.loading) { el.innerHTML = '<div class="empty">Loading…</div>'; return; }
+    if (state.error && !state.user) { el.innerHTML = ''; return; }
+
+    if (state.can.indexOf('page.teamdaily') < 0) {
+      el.innerHTML = '<div class="card"><div class="empty">Your role does not have access to the Team Daily Summaries page. ' +
+        'Ask an admin to grant it on the Roles &amp; Permissions grid.</div></div>';
+      return;
+    }
+
+    var body = toolbarHtml();
+
+    if (!state.roster.length && !state.viewingAll) {
+      body += '<div class="card"><div class="empty">No direct reports are linked to you yet. ' +
+        'Ask an admin to set the Manager field for your team on the Users table — that link is what scopes this page.</div></div>';
+    }
+
+    var days = daysInRange().map(dayHtml).join('');
+    body += days.trim() ? days
+      : '<div class="card"><div class="empty">Nothing to show for this range.</div></div>';
+
+    el.innerHTML = body;
+    wire();
+  }
+
+  function wire() {
+    var from = document.getElementById('fFrom');
+    var to = document.getElementById('fTo');
+    if (from) from.addEventListener('change', function () { state.from = from.value || state.from; reload(); });
+    if (to) to.addEventListener('change', function () { state.to = to.value || state.to; reload(); });
+
+    Array.prototype.forEach.call(document.querySelectorAll('.preset'), function (b) {
+      b.addEventListener('click', function () {
+        var p = b.getAttribute('data-preset');
+        var today = todayISO();
+        if (p === 'today') { state.from = today; state.to = today; }
+        else if (p === 'yesterday') { var y = shiftISO(today, -1); state.from = y; state.to = y; }
+        else { state.from = shiftISO(today, -(Number(p) - 1)); state.to = today; }
+        reload();
+      });
+    });
+
+    var miss = document.getElementById('fMissing');
+    if (miss) miss.addEventListener('change', function () { state.onlyMissing = miss.checked; render(); });
+
+    var all = document.getElementById('fAll');
+    if (all) all.addEventListener('change', function () { state.viewAll = all.checked; reload(); });
+
+    Array.prototype.forEach.call(document.querySelectorAll('[data-review]'), function (b) {
+      b.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        doReview(b.getAttribute('data-review'), b.getAttribute('data-status'));
+      });
+    });
+  }
+
+  function doReview(recordId, status) {
+    state.rowState[recordId] = { saving: true };
+    render();
+    apiPatch('/team-daily-summary', { recordId: recordId, status: status }).then(function (data) {
+      var idx = state.reports.findIndex(function (r) { return r.recordId === recordId; });
+      if (idx >= 0 && data.report) state.reports[idx] = data.report;
+      state.rowState[recordId] = { saving: false, ok: true, msg: 'Set to ' + status + '.' };
+      render();
+    }).catch(function (err) {
+      state.rowState[recordId] = { saving: false, ok: false, msg: 'Failed: ' + (err && err.message ? err.message : String(err)) };
+      render();
+    });
+  }
+
+  function loadSession() {
+    return apiGet('/session').then(function (data) {
+      state.user = data.user || null;
+      state.can = data.can || [];
+    });
+  }
+  function load() {
+    var qs = '?from=' + encodeURIComponent(state.from) + '&to=' + encodeURIComponent(state.to) +
+      (state.viewAll ? '&all=1' : '');
+    return apiGet('/team-daily-summary' + qs).then(function (data) {
+      state.reports = Array.isArray(data.reports) ? data.reports : [];
+      state.roster = Array.isArray(data.roster) ? data.roster : [];
+      state.isAdmin = !!data.isAdmin;
+      state.viewingAll = !!data.viewingAll;
+      if (data.from) state.from = data.from;
+      if (data.to) state.to = data.to;
+    });
+  }
+  function reload() {
+    state.loading = true; state.error = ''; state.okMsg = '';
+    render();
+    load().then(function () { state.loading = false; render(); })
+      .catch(function (err) {
+        state.loading = false;
+        state.error = 'Could not load this range: ' + (err && err.message ? err.message : String(err));
+        render();
+      });
+  }
+
+  /* ---- Boot ------------------------------------------------------------ */
+  var session = getSession();
+  if (!session || !session.token) {
+    document.getElementById('content').innerHTML =
+      '<div class="empty">You are not signed in. <a href="/">Sign in at the OLH Tracker home page</a>, then reload this page.</div>';
+    document.getElementById('whoLine').textContent = 'Not signed in';
+  } else {
+    loadSession()
+      .then(load)
+      .then(function () { state.loading = false; render(); })
+      .catch(function (err) {
+        state.loading = false;
+        if (err && err.status === 401) {
+          state.error = 'Your session has expired. Sign in again at the OLH Tracker home page, then reload this page.';
+        } else {
+          state.error = 'Could not load this page: ' + (err && err.message ? err.message : String(err));
+        }
+        render();
+      });
+  }
+})();
+</script>
+</body>
+</html>
