@@ -65,6 +65,16 @@
   table.history td.num{ text-align:right; font-variant-numeric:tabular-nums; }
   .badge-status{ font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:10px; text-transform:uppercase; }
   .empty{ color:var(--muted); font-size:13px; padding:10px 2px; }
+
+  /* Admin-only "Testing as" picker -- same pattern and markup as my-walks.html. */
+  .viewas{ display:flex; align-items:center; gap:8px; }
+  .viewas label{ font-size:11px; color:#C7BFB2; font-weight:600; text-transform:uppercase; letter-spacing:.05em; }
+  .viewas select{
+    height:30px; padding:0 8px; border:1px solid rgba(255,255,255,.35); border-radius:4px;
+    background:rgba(255,255,255,.08); color:#fff; font-size:12.5px; cursor:pointer;
+  }
+  .viewas select option{ color:#000; }
+  .banner.impersonate{ background:var(--amber-bg); color:var(--amber-ink); border:1px solid var(--amber-border); font-weight:500; }
 </style>
 </head>
 <body>
@@ -73,6 +83,10 @@
   <div>
     <h1>Case Aging Exception</h1>
     <div class="who" id="whoLine">Loading…</div>
+  </div>
+  <div class="viewas" id="viewAsWrap" style="display:none">
+    <label for="viewAsSelect">Testing as</label>
+    <select id="viewAsSelect"><option value="">Myself</option></select>
   </div>
   <a class="home" href="/">All Views</a>
 </header>
@@ -145,8 +159,18 @@
   }
 
   var state = {
-    user: null, can: [], loading: true, error: '', requests: [], submitting: false, statusMsg: '', statusOk: false
+    user: null, can: [], loading: true, error: '', requests: [], submitting: false, statusMsg: '', statusOk: false,
+    /* Admin-only "Testing as" -- mirrors my-walks.html's viewAsId/viewAsName
+       contract. '' means viewing self. allRequests holds the admin's ?all=1
+       pull (everyone's rows); requests is always the filtered view actually
+       on screen, same variable the rest of the page already reads. */
+    roster: [], viewAsEmail: '', viewAsName: '', allRequests: []
   };
+
+  function isAdmin() { return state.can.indexOf('roster.manage') >= 0; }
+  function viewingSelf() { return !state.viewAsEmail; }
+  function effectiveName() { return viewingSelf() ? (state.user && state.user.name) : state.viewAsName; }
+  function effectiveEmail() { return (viewingSelf() ? (state.user && state.user.email) : state.viewAsEmail) || ''; }
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
@@ -208,15 +232,28 @@
     });
   }
 
+  /* The submission form and the "Set closed date" controls only ever act as
+     the REAL signed-in session -- case-aging.js writes Submitted By/Email
+     from the session, never the body, so an admin cannot actually submit a
+     request that reads as belonging to someone else. Testing as someone
+     else therefore shows their history read-only rather than a form that
+     would silently submit under the admin's own name instead. Marking a
+     case closed is different: case-aging.js already lets any admin set
+     Case Closed Date on ANY request (not just their own), so that control
+     stays live even while testing as someone else -- it's a real,
+     already-permitted admin action, not identity spoofing. */
   function formHtml() {
-    return '' +
+    var requestedByCard = viewingSelf() ? (
       '<div class="card no-print">' +
         '<h2>Requested By</h2>' +
         '<div class="grid">' +
           '<div><label>Name</label><input value="' + esc(state.user.name) + '" readonly></div>' +
           '<div><label>Division</label><input value="' + esc(state.user.division || '') + '" readonly></div>' +
         '</div>' +
-      '</div>' +
+      '</div>'
+    ) : '';
+
+    var exceptionCard = viewingSelf() ? (
       '<div class="card no-print">' +
         '<h2>Exception Details</h2>' +
         '<div class="grid">' +
@@ -233,9 +270,12 @@
           '<button class="primary" id="submitBtn"' + (state.submitting ? ' disabled' : '') + '>Submit Request</button>' +
         '</div>' +
         (state.statusMsg ? '<div id="status" class="' + (state.statusOk ? 'ok' : 'err') + '">' + esc(state.statusMsg) + '</div>' : '') +
-      '</div>' +
+      '</div>'
+    ) : '';
+
+    return requestedByCard + exceptionCard +
       '<div class="card">' +
-        '<h2>Your Requests</h2>' +
+        '<h2>' + (viewingSelf() ? 'Your Requests' : esc(effectiveName()) + '\u2019s Requests') + '</h2>' +
         '<div id="historyBox">' + historyRows() + '</div>' +
       '</div>';
   }
@@ -304,16 +344,71 @@
       state.can = data.can || [];
     });
   }
+  /* Admins pull everyone's rows once (?all=1, already supported by
+     case-aging.js) and filter client-side to whoever's picked in "Testing
+     as" -- same shape as my-walks.html's single fetch + effectiveManager()
+     filter, just filtering by email/array-position instead of by manager
+     link. Non-admins never see the picker, so they keep the original
+     self-only request. */
   function loadHistory() {
+    if (isAdmin()) {
+      return apiGet('/case-aging?all=1').then(function (data) {
+        state.allRequests = Array.isArray(data.requests) ? data.requests : [];
+        applyViewFilter();
+      });
+    }
     return apiGet('/case-aging').then(function (data) {
       state.requests = Array.isArray(data.requests) ? data.requests : [];
     });
   }
+  function applyViewFilter() {
+    var email = effectiveEmail().toLowerCase();
+    state.requests = state.allRequests.filter(function (r) {
+      return String(r.submittedByEmail || '').toLowerCase() === email;
+    });
+  }
+  function loadRoster() {
+    if (!isAdmin()) return Promise.resolve();
+    return apiGet('/users').then(function (data) {
+      var mine = String((state.user && state.user.email) || '').toLowerCase();
+      state.roster = (Array.isArray(data.users) ? data.users : [])
+        .filter(function (u) { return u.active && String(u.email || '').toLowerCase() !== mine; })
+        .sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+    }).catch(function () { state.roster = []; }); // advisory only -- picker just stays empty
+  }
+  function populateViewAs() {
+    if (!isAdmin()) return;
+    var wrap = document.getElementById('viewAsWrap');
+    var sel = document.getElementById('viewAsSelect');
+    wrap.style.display = 'flex';
+    sel.innerHTML = '<option value="">Myself</option>' +
+      state.roster.map(function (u) {
+        return '<option value="' + esc(u.email) + '"' + (state.viewAsEmail === u.email ? ' selected' : '') + '>' + esc(u.name) + '</option>';
+      }).join('');
+    sel.onchange = function () { switchViewAs(sel.value); };
+  }
+  /* Picking "Myself" (empty value) always drops back to the real signed-in
+     person -- never a stale cached identity, same guarantee my-walks.html's
+     switchViewAs makes. */
+  function switchViewAs(email) {
+    var u = email ? state.roster.filter(function (x) { return x.email === email; })[0] : null;
+    state.viewAsEmail = u ? u.email : '';
+    state.viewAsName = u ? u.name : '';
+    state.statusMsg = '';
+    applyViewFilter();
+    render();
+  }
 
   function render() {
     document.getElementById('whoLine').textContent = state.user
-      ? (state.user.name + (state.user.division ? ' · ' + state.user.division : ''))
+      ? (state.user.name + (state.user.division ? ' · ' + state.user.division : '') + (viewingSelf() ? '' : ' · testing as ' + effectiveName()))
       : 'Not signed in';
+
+    var banners = document.getElementById('banners');
+    banners.innerHTML = (isAdmin() && !viewingSelf())
+      ? '<div class="banner impersonate">Testing as <b>' + esc(effectiveName()) + '</b> \u2014 showing their case aging history, read-only. ' +
+        'Setting a case\u2019s closed date here still writes for real, on their record, and is logged under your admin account.</div>'
+      : '';
 
     var content = document.getElementById('content');
     if (state.loading) { content.innerHTML = ''; return; }
@@ -341,8 +436,9 @@
     document.getElementById('whoLine').textContent = 'Not signed in';
   } else {
     loadSession()
-      .then(loadHistory)
+      .then(function () { return Promise.all([loadHistory(), loadRoster()]); })
       .then(function () {
+        populateViewAs();
         state.loading = false;
         render();
       })

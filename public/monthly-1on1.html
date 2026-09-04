@@ -192,7 +192,7 @@
     </div>
 
     <div class="manager-panel" id="reportsPanel" style="display:none;">
-      <div class="mp-head"><h2 style="font:400 16px/1.2 Georgia,serif;margin:0;color:var(--ink);">Your Direct Reports — this month</h2></div>
+      <div class="mp-head"><h2 id="reportsPanelTitle" style="font:400 16px/1.2 Georgia,serif;margin:0;color:var(--ink);">Your Direct Reports — this month</h2></div>
       <div class="mp-select">
         <label style="font-family:Arial,Helvetica,sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);">View</label>
         <select id="reportPicker"></select>
@@ -283,6 +283,11 @@
   }
 
   function isSelf() { return !state.isManager || !state.viewingEmail; }
+  /* roster.manage is the same admin gate my-walks.html and every page.*
+     backend check uses (see olh-auth.js ROLE_LOCKS) -- doubles here as
+     "does this session get the full-roster picker, not just direct
+     reports." */
+  function isAdmin() { return state.can.indexOf('roster.manage') >= 0; }
 
   function renderMetricsTable(metrics, readOnly) {
     var tbody = document.querySelector('#metricsTable tbody');
@@ -406,11 +411,19 @@
     });
   }
 
+  /* Direct-report managers (cm/ccr/qam with their own reports) only ever see
+     their own reports -- admin=1 is dropped for them server-side regardless
+     (monthly-1on1.js gates wantEveryone on isAdmin), so sending it unasked
+     for a non-admin session is harmless, but only admins actually get the
+     wider roster back. */
   function loadManagerContext() {
-    return apiGet('/monthly-1on1?month=' + encodeURIComponent(state.checkinMonth) + '&all=1').then(function (data) {
+    var qs = '/monthly-1on1?month=' + encodeURIComponent(state.checkinMonth) + '&all=1' + (isAdmin() ? '&admin=1' : '');
+    return apiGet(qs).then(function (data) {
       state.reports = data.reports || [];
       state.reportCheckins = data.checkins || [];
       var reportsPanel = document.getElementById('reportsPanel');
+      var title = document.getElementById('reportsPanelTitle');
+      if (title) title.textContent = isAdmin() ? 'Testing as — any associate, this month' : 'Your Direct Reports — this month';
       if (state.reports.length) {
         reportsPanel.style.display = '';
         loadReportOptions();

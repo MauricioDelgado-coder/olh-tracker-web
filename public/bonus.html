@@ -81,6 +81,16 @@
   .badge-status{ font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:10px; text-transform:uppercase; }
   .empty{ color:var(--muted); font-size:13px; padding:10px 2px; }
 
+  /* Admin-only "Testing as" picker -- same pattern as my-walks.html / case-aging.html. */
+  .viewas{ display:flex; align-items:center; gap:8px; }
+  .viewas label{ font-size:11px; color:#C7BFB2; font-weight:600; text-transform:uppercase; letter-spacing:.05em; }
+  .viewas select{
+    height:30px; padding:0 8px; border:1px solid rgba(255,255,255,.35); border-radius:4px;
+    background:rgba(255,255,255,.08); color:#fff; font-size:12.5px; cursor:pointer;
+  }
+  .viewas select option{ color:#000; }
+  .banner.impersonate{ background:var(--amber-bg); color:var(--amber-ink); border:1px solid var(--amber-border); font-weight:500; }
+
   @media print{
     header.top, .actions, #status, .no-print{ display:none !important; }
     main{ margin:0; max-width:100%; padding:0; }
@@ -95,6 +105,10 @@
   <div>
     <h1>CCR Monthly Bonus</h1>
     <div class="who" id="whoLine">Loading…</div>
+  </div>
+  <div class="viewas" id="viewAsWrap" style="display:none">
+    <label for="viewAsSelect">Testing as</label>
+    <select id="viewAsSelect"><option value="">Myself</option></select>
   </div>
   <a class="home" href="/">All Views</a>
 </header>
@@ -159,8 +173,23 @@
 
   var state = {
     user: null, can: [], loading: true, error: '', submissions: [], submitting: false, statusMsg: '', statusOk: false,
-    sfSource: null, sfFound: false, sfLoading: false, sfMonth: '', exceptionsApproved: 0
+    sfSource: null, sfFound: false, sfLoading: false, sfMonth: '', exceptionsApproved: 0,
+    /* Admin-only "Testing as" -- read-only, same reasoning as case-aging.html:
+       submit-bonus.js writes Associate Name/Email from the session, never the
+       body, so an admin can never actually submit AS someone else. What
+       testing-as CAN safely show is that person's own past submissions
+       (submit-bonus.js's GET already supports ?all=1 for admins). The
+       Salesforce pre-fill (bonus-source.js) is explicitly scoped to the
+       caller's own email by design -- "not a reporting surface" -- so that
+       stays hidden, along with the calculator and submit button, whenever
+       viewing someone else. */
+    roster: [], viewAsEmail: '', viewAsName: '', allSubmissions: []
   };
+
+  function isAdmin() { return state.can.indexOf('roster.manage') >= 0; }
+  function viewingSelf() { return !state.viewAsEmail; }
+  function effectiveName() { return viewingSelf() ? (state.user && state.user.name) : state.viewAsName; }
+  function effectiveEmail() { return (viewingSelf() ? (state.user && state.user.email) : state.viewAsEmail) || ''; }
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
@@ -352,6 +381,19 @@
 
   function formHtml() {
     var defaultMonth = DEFAULT_MONTH;
+
+    // Testing as someone else: read-only history only. submit-bonus.js
+    // writes Associate Name/Email from the real session, never the body, so
+    // there is no honest way to render a form here that would "submit as"
+    // the selected person -- it would silently submit as the admin instead.
+    // bonus-source.js's Salesforce pre-fill is also self-only by design.
+    if (!viewingSelf()) {
+      return '<div class="card">' +
+          '<h2>' + esc(effectiveName()) + '\u2019s Past Submissions</h2>' +
+          '<div id="historyBox">' + historyRows() + '</div>' +
+        '</div>';
+    }
+
     return '' +
       '<div class="card no-print">' +
         '<h2>Associate &amp; Period</h2>' +
@@ -542,16 +584,66 @@
       state.can = data.can || [];
     });
   }
+  /* Admins pull everyone's rows once (?all=1, already supported by
+     submit-bonus.js) and filter client-side to whoever's picked in "Testing
+     as" -- same shape as case-aging.html. Non-admins keep the original
+     self-only request; they never see the picker. */
   function loadHistory() {
+    if (isAdmin()) {
+      return apiGet('/submit-bonus?all=1').then(function (data) {
+        state.allSubmissions = Array.isArray(data.submissions) ? data.submissions : [];
+        applyViewFilter();
+      });
+    }
     return apiGet('/submit-bonus').then(function (data) {
       state.submissions = Array.isArray(data.submissions) ? data.submissions : [];
     });
   }
+  function applyViewFilter() {
+    var email = effectiveEmail().toLowerCase();
+    state.submissions = state.allSubmissions.filter(function (s) {
+      return String(s.associateEmail || '').toLowerCase() === email;
+    });
+  }
+  function loadRoster() {
+    if (!isAdmin()) return Promise.resolve();
+    return apiGet('/users').then(function (data) {
+      var mine = String((state.user && state.user.email) || '').toLowerCase();
+      state.roster = (Array.isArray(data.users) ? data.users : [])
+        .filter(function (u) { return u.active && String(u.email || '').toLowerCase() !== mine; })
+        .sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+    }).catch(function () { state.roster = []; });
+  }
+  function populateViewAs() {
+    if (!isAdmin()) return;
+    var wrap = document.getElementById('viewAsWrap');
+    var sel = document.getElementById('viewAsSelect');
+    wrap.style.display = 'flex';
+    sel.innerHTML = '<option value="">Myself</option>' +
+      state.roster.map(function (u) {
+        return '<option value="' + esc(u.email) + '"' + (state.viewAsEmail === u.email ? ' selected' : '') + '>' + esc(u.name) + '</option>';
+      }).join('');
+    sel.onchange = function () { switchViewAs(sel.value); };
+  }
+  function switchViewAs(email) {
+    var u = email ? state.roster.filter(function (x) { return x.email === email; })[0] : null;
+    state.viewAsEmail = u ? u.email : '';
+    state.viewAsName = u ? u.name : '';
+    state.statusMsg = '';
+    applyViewFilter();
+    render();
+  }
 
   function render() {
     document.getElementById('whoLine').textContent = state.user
-      ? (state.user.name + (state.user.division ? ' · ' + state.user.division : ''))
+      ? (state.user.name + (state.user.division ? ' · ' + state.user.division : '') + (viewingSelf() ? '' : ' · testing as ' + effectiveName()))
       : 'Not signed in';
+
+    var banners = document.getElementById('banners');
+    banners.innerHTML = (isAdmin() && !viewingSelf())
+      ? '<div class="banner impersonate">Testing as <b>' + esc(effectiveName()) + '</b> \u2014 showing their past bonus submissions, read-only. ' +
+        'The Salesforce pre-fill, calculator, and Submit are hidden here; only that person (or a Case Metrics review directly in Airtable) can act on their bonus.</div>'
+      : '';
 
     var content = document.getElementById('content');
     if (state.loading) { content.innerHTML = ''; return; }
@@ -568,9 +660,11 @@
     }
 
     content.innerHTML = formHtml();
-    wireInputs();
-    applySfToFields();
-    recalc();
+    if (viewingSelf()) {
+      wireInputs();
+      applySfToFields();
+      recalc();
+    }
   }
 
   /* ---- Boot ------------------------------------------------------------ */
@@ -581,9 +675,10 @@
     document.getElementById('whoLine').textContent = 'Not signed in';
   } else {
     loadSession()
-      .then(loadHistory)
+      .then(function () { return Promise.all([loadHistory(), loadRoster()]); })
       .then(function () { return loadSfSource(DEFAULT_MONTH); })
       .then(function () {
+        populateViewAs();
         state.loading = false;
         render();
       })

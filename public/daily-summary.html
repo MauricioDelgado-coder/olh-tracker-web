@@ -38,6 +38,31 @@
   }
   header.suite-top a.home:hover{ background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.45); color:#fff; }
 
+  /* Admin-only "Testing as" picker -- same pattern as my-walks.html / case-aging.html. */
+  .viewas{ display:flex; align-items:center; gap:8px; }
+  .viewas label{ font-size:11px; color:#C7BFB2; font-weight:600; text-transform:uppercase; letter-spacing:.05em; }
+  .viewas select{
+    height:26px; padding:0 8px; border:1px solid rgba(255,255,255,.35); border-radius:4px;
+    background:rgba(255,255,255,.08); color:#fff; font-size:12px; cursor:pointer; font-family:Arial,Helvetica,sans-serif;
+  }
+  .viewas select option{ color:#000; }
+  .impersonate-banner{
+    margin:0 28px 18px; padding:12px 16px; border-radius:4px; font-family:Arial,Helvetica,sans-serif;
+    font-size:12.5px; font-weight:500; background:#FFF8E1; color:#7C4A03; border:1px solid #F0DFAE;
+  }
+  .history-list{ margin:0 28px 22px; }
+  .history-row{ border:1px solid var(--cream-line); border-radius:var(--radius); padding:14px 18px; margin-bottom:10px; background:#faf6f0; }
+  .history-row .hr-head{ display:flex; justify-content:space-between; align-items:center; font-family:Arial,Helvetica,sans-serif; margin-bottom:8px; }
+  .history-row .hr-date{ font-weight:700; font-size:13.5px; color:var(--ink); }
+  .history-row .hr-status{ font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; padding:2px 9px; border-radius:10px; }
+  .history-row .hr-status.submitted{ background:#FFF8E1; color:#7C4A03; }
+  .history-row .hr-status.reviewed{ background:#e6f3ec; color:var(--green); }
+  .history-row .hr-status.needsfollowup{ background:#f6e6e4; color:var(--danger); }
+  .history-row .hr-section{ font-family:Arial,Helvetica,sans-serif; font-size:12.5px; margin-bottom:6px; }
+  .history-row .hr-section b{ display:block; font-size:10px; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); margin-bottom:2px; }
+  .history-row .hr-section pre{ white-space:pre-wrap; margin:0; font-family:inherit; font-size:12.5px; color:var(--ink); }
+  .history-row .hr-notes{ font-family:Georgia,serif; font-size:13px; margin-top:8px; padding-top:8px; border-top:1px solid var(--cream-line); }
+
   .sheet{max-width:880px;margin:0 auto;background:var(--paper);min-height:100vh;box-shadow:0 0 0 1px var(--cream-line);}
   header.top{display:flex;justify-content:space-between;align-items:center;padding:18px 28px;border-bottom:1px solid var(--cream-line);}
   .brand{font-family:Arial,Helvetica,sans-serif;font-weight:700;letter-spacing:1px;color:var(--blue);font-size:15px;}
@@ -97,6 +122,10 @@
 
 <header class="suite-top">
   <div class="who" id="whoLine">Loading…</div>
+  <div class="viewas" id="viewAsWrap" style="display:none">
+    <label for="viewAsSelect">Testing as</label>
+    <select id="viewAsSelect"><option value="">Myself</option></select>
+  </div>
   <a class="home" href="/">All Views</a>
 </header>
 
@@ -111,7 +140,13 @@
     <p class="sub">Complete every section before the end of your shift. If a section has no activity, mark it "None." Every open item needs a reason — no cell is left blank.</p>
   </div>
 
+  <div id="viewAsBanner"></div>
+
   <div id="permMsg" class="empty" style="display:none;"></div>
+
+  <div id="historyArea" style="display:none;">
+    <div class="history-list" id="historyList"></div>
+  </div>
 
   <div id="formArea" style="display:none;">
     <div class="meta">
@@ -192,6 +227,23 @@
   }
 
   var CURRENT_USER = { name: null, email: null, division: null };
+  var APP_CAN = [];
+  /* Admin-only "Testing as" -- read-only, same reasoning as bonus.html:
+     daily-summary.js writes Associate Name/Email from the session, never
+     the body, so an admin can never actually submit AS someone else. What
+     testing-as safely shows instead is that person's own past submissions
+     -- daily-summary.js's GET already supports ?all=1 for any reviewer
+     (roster.manage OR page.bonusapproval), which every admin session has. */
+  var viewAsEmail = '', viewAsName = '', roster = [];
+  function isAdmin() { return APP_CAN.indexOf('roster.manage') >= 0; }
+  function viewingSelf() { return !viewAsEmail; }
+  function effectiveName() { return viewingSelf() ? CURRENT_USER.name : viewAsName; }
+  function effectiveEmail() { return (viewingSelf() ? CURRENT_USER.email : viewAsEmail) || ''; }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
 
   var SECTIONS = [
     { key:'aged_case', num:'01', title:'Aged Case Updates',
@@ -367,25 +419,113 @@
     });
   }
 
+  function sectionTitle(key) {
+    var s = SECTIONS.filter(function (x) { return x.key === key; })[0];
+    return s ? s.title : key;
+  }
+  function historyRowHtml(r) {
+    var statusClass = r.status === 'Reviewed' ? 'reviewed' : (r.status === 'Needs Follow-up' ? 'needsfollowup' : 'submitted');
+    var sectionsHtml = Object.keys(r.sections || {}).map(function (key) {
+      var val = r.sections[key];
+      if (!val || val === 'None') return '';
+      return '<div class="hr-section"><b>' + esc(sectionTitle(key)) + '</b><pre>' + esc(val) + '</pre></div>';
+    }).join('');
+    if (!sectionsHtml) sectionsHtml = '<div class="hr-section" style="color:var(--muted);font-style:italic;">No activity reported.</div>';
+    return '<div class="history-row">' +
+      '<div class="hr-head"><span class="hr-date">' + esc(r.reportDate) + '</span>' +
+        '<span class="hr-status ' + statusClass + '">' + esc(r.status || 'Submitted') + '</span></div>' +
+      sectionsHtml +
+      (r.notes ? '<div class="hr-notes">' + esc(r.notes) + '</div>' : '') +
+    '</div>';
+  }
+  /* Reads via ?all=1 -- daily-summary.js allows this to any reviewer
+     (roster.manage OR page.bonusapproval), which every admin session has --
+     then filters client-side to whoever's picked, same shape as
+     case-aging.html and bonus.html. There is no per-person server filter to
+     ask for instead, so this always re-pulls everyone's rows on switch. */
+  function loadAndRenderHistory() {
+    var list = document.getElementById('historyList');
+    list.innerHTML = '<div class="empty">Loading…</div>';
+    return apiGet('/daily-summary?all=1').then(function (data) {
+      var email = effectiveEmail().toLowerCase();
+      var rows = (Array.isArray(data.reports) ? data.reports : [])
+        .filter(function (r) { return String(r.associateEmail || '').toLowerCase() === email; });
+      list.innerHTML = rows.length
+        ? rows.map(historyRowHtml).join('')
+        : '<div class="empty">No submitted daily summaries yet for ' + esc(effectiveName()) + '.</div>';
+    }).catch(function (err) {
+      list.innerHTML = '<div class="empty">Could not load: ' + esc(err.message || String(err)) + '</div>';
+    });
+  }
+  function renderBanner() {
+    var el = document.getElementById('viewAsBanner');
+    el.innerHTML = (isAdmin() && !viewingSelf())
+      ? '<div class="impersonate-banner">Testing as <b>' + esc(effectiveName()) + '</b> \u2014 showing their submitted daily summaries, read-only. ' +
+        'daily-summary.js always writes a new submission under the real signed-in session, so only they can submit one under their own name.</div>'
+      : '';
+  }
+  /* Picking "Myself" always drops back to the real signed-in person, same
+     guarantee my-walks.html's switchViewAs makes. */
+  function renderView() {
+    document.getElementById('whoLine').textContent = CURRENT_USER.name + (viewingSelf() ? '' : ' · testing as ' + effectiveName());
+    renderBanner();
+    if (viewingSelf()) {
+      document.getElementById('historyArea').style.display = 'none';
+      document.getElementById('formArea').style.display = '';
+    } else {
+      document.getElementById('formArea').style.display = 'none';
+      document.getElementById('historyArea').style.display = '';
+      loadAndRenderHistory();
+    }
+  }
+  function loadRoster() {
+    if (!isAdmin()) return Promise.resolve();
+    return apiGet('/users').then(function (data) {
+      var mine = String(CURRENT_USER.email || '').toLowerCase();
+      roster = (Array.isArray(data.users) ? data.users : [])
+        .filter(function (u) { return u.active && String(u.email || '').toLowerCase() !== mine; })
+        .sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+    }).catch(function () { roster = []; });
+  }
+  function populateViewAs() {
+    if (!isAdmin()) return;
+    var wrap = document.getElementById('viewAsWrap');
+    var sel = document.getElementById('viewAsSelect');
+    wrap.style.display = 'flex';
+    sel.innerHTML = '<option value="">Myself</option>' +
+      roster.map(function (u) { return '<option value="' + esc(u.email) + '">' + esc(u.name) + '</option>'; }).join('');
+    sel.onchange = function () {
+      var u = sel.value ? roster.filter(function (x) { return x.email === sel.value; })[0] : null;
+      viewAsEmail = u ? u.email : '';
+      viewAsName = u ? u.name : '';
+      renderView();
+    };
+  }
+
   function init(){
     apiGet('/session').then(function (data) {
       CURRENT_USER.name = data.user.name;
       CURRENT_USER.email = data.user.email;
       CURRENT_USER.division = data.user.division;
+      APP_CAN = data.can || [];
       document.getElementById('whoLine').textContent = CURRENT_USER.name;
 
-      if ((data.can || []).indexOf('page.dailysummary') < 0) {
+      if (APP_CAN.indexOf('page.dailysummary') < 0) {
         document.getElementById('permMsg').style.display = '';
         document.getElementById('permMsg').textContent = 'Your role does not have access to the Daily Summary page.';
         document.getElementById('formArea').style.display = 'none';
         return;
       }
 
-      document.getElementById('formArea').style.display = '';
       document.getElementById('assocName').value = CURRENT_USER.name;
       document.getElementById('reportDate').value = todayISO();
       renderSections();
       document.getElementById('submitBtn').addEventListener('click', submitReport);
+
+      return loadRoster().then(function () {
+        populateViewAs();
+        renderView();
+      });
     }).catch(function (err) {
       document.getElementById('whoLine').textContent = 'Not signed in';
       document.getElementById('permMsg').style.display = '';
