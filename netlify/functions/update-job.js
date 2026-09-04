@@ -57,6 +57,15 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
  * the same full CEL/ACC eligibility -- there are no manager-specific
  * exceptions in this app. If the walk-review skill's reference doc still
  * lists a different rule for Justin, that doc is stale, not this file.
+ *
+ * Can be bypassed with `force: true` on the request body (added 2026-09).
+ * game.html computes the same two violations client-side before it ever
+ * calls this endpoint and, if it finds any among the walks about to be
+ * saved, makes the person read them and reconfirm before it sets `force`.
+ * This endpoint trusts that reconfirmation and skips the guard entirely
+ * rather than re-deciding whether the override was warranted -- the
+ * calendar check is a guardrail against a silent mistake, not a rule that
+ * may never be broken on purpose.
  */
 const WALK_DURATION_MIN = Object.freeze({ QAI: 120, QAA: 60, CEL: 120, ACC: 60 });
 const DAILY_CAP_MIN = 480; // applies to every manager, no exceptions (incl. Justin Essigmann)
@@ -510,7 +519,7 @@ exports.handler = async (event) => {
     });
   }
 
-  const { recordId, fields } = parsed;
+  const { recordId, fields, force } = parsed;
 
   if (typeof recordId !== 'string' || !RECORD_ID_RE.test(recordId)) {
     return reply(400, {
@@ -520,6 +529,13 @@ exports.handler = async (event) => {
 
   if (!fields || typeof fields !== 'object' || Array.isArray(fields)) {
     return reply(400, { error: 'fields must be a JSON object of field name -> value.' });
+  }
+
+  // Optional escape hatch for the scheduling-conflict guard below (see its
+  // own doc comment). Strictly boolean so a truthy-but-wrong type ("false"
+  // as a string, 1, etc.) fails loud instead of silently forcing.
+  if (force !== undefined && typeof force !== 'boolean') {
+    return reply(400, { error: 'force must be a boolean when present.' });
   }
 
   const submitted = Object.keys(fields);
@@ -589,11 +605,13 @@ exports.handler = async (event) => {
 
   // Scheduling-conflict guard. Only runs when a *Manager field is being
   // written, and needs the record's current state to know the walk's date
-  // when only the manager (not the date) is changing.
+  // when only the manager (not the date) is changing. Skipped entirely when
+  // force is true -- no need to spend the extra GET on a check whose result
+  // will be discarded.
   const touchesManagerField = Object.keys(WALK_TYPES).some((t) =>
     Object.prototype.hasOwnProperty.call(clean, WALK_TYPES[t].managerField)
   );
-  if (touchesManagerField) {
+  if (touchesManagerField && !force) {
     let currentFields = {};
     try {
       const getUrl = `${AIRTABLE_API}/${BASE_ID}/${JOBS_TABLE}/${encodeURIComponent(recordId)}`;

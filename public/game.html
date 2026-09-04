@@ -463,6 +463,30 @@
     return dups;
   }
 
+  /** The same two checks update-job.js runs server-side (exact-time double-
+   *  booking, over-cap), scoped to just the managers named in managerIds --
+   *  reuses columnDuplicateTimes/columnMinutes so this can never disagree
+   *  with what the board already shows for those columns. Returns one
+   *  plain-English line per offending manager, or [] if the batch about to
+   *  be submitted is clean. Used only to decide whether Submit needs the
+   *  extra override reconfirmation and to set `force` on the request --
+   *  it does not block anything by itself. */
+  function scheduleViolationsFor(managerIds) {
+    var lines = [];
+    managerIds.forEach(function (id) {
+      if (!id || id === DEFERRED) return; // Unassigned/Deferred aren't real managers
+      var dupCount = columnDuplicateTimes(id).length;
+      var minutes = columnMinutes(id);
+      var overCap = minutes > DAILY_CAP_MIN;
+      if (!dupCount && !overCap) return;
+      var parts = [];
+      if (dupCount) parts.push(dupCount + ' time clash' + (dupCount === 1 ? '' : 'es'));
+      if (overCap) parts.push(minutes + ' min (over the ' + DAILY_CAP_MIN + '-min cap)');
+      lines.push(managerName(id) + ': ' + parts.join(', '));
+    });
+    return lines;
+  }
+
   /* ---- Community count / drive-time estimate ------------------------------
      Reuses the SOTV3 reference data below (sotv3Ref, managerHome,
      coreCommunity, driveMinutes) rather than fetching or resolving anything
@@ -1281,7 +1305,7 @@
      check means overlapping writes to nearby records could race each other's
      view of "today's load" for a manager who appears in more than one staged
      change. One at a time is slower but never wrong. */
-  function submitPending() {
+  function submitPending(forceOverride) {
     var entries = Array.from(state.pending.values()).filter(function (p) {
       return !p.status || p.status === 'staged' || p.status === 'error';
     });
@@ -1297,10 +1321,16 @@
         var field = WALK_FIELD[p.walkType].manager;
         var fields = {};
         fields[field] = p.toManagerId ? [p.toManagerId] : [];
+        // force is harmless on entries that have no conflict -- the server
+        // check would return conflict:false for them anyway -- so it is set
+        // for the whole batch rather than resolved per entry. See btnSubmit's
+        // click handler for where the person actually reconfirmed this.
+        var reqBody = { recordId: p.recordId, fields: fields };
+        if (forceOverride) reqBody.force = true;
         return fetch(API + '/update-job', {
           method: 'POST',
           headers: authHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ recordId: p.recordId, fields: fields })
+          body: JSON.stringify(reqBody)
         }).then(function (res) {
           return res.json().catch(function () { return null; }).then(function (body) {
             if (!res.ok) {
@@ -1583,8 +1613,25 @@
       var entries = Array.from(state.pending.values());
       var actionable = entries.filter(function (p) { return !p.status || p.status === 'staged' || p.status === 'error'; });
       if (!actionable.length) return;
-      if (!confirm('Save ' + actionable.length + ' walk reassignment(s) to Airtable now? This cannot be undone from this screen.')) return;
-      submitPending();
+
+      // Scope the violation check to just the managers this batch actually
+      // hands a walk to -- not every column on the board -- so a person is
+      // never asked to reconfirm a pre-existing problem they aren't touching.
+      var targetManagerIds = actionable.reduce(function (acc, p) {
+        if (p.toManagerId && acc.indexOf(p.toManagerId) < 0) acc.push(p.toManagerId);
+        return acc;
+      }, []);
+      var violations = scheduleViolationsFor(targetManagerIds);
+      var forceOverride = violations.length > 0;
+
+      var msg = forceOverride
+        ? 'This will leave the schedule breaking scheduling rules:\n\n' +
+          violations.map(function (v) { return '\u2022 ' + v; }).join('\n') +
+          '\n\nSave ' + actionable.length + ' walk reassignment(s) to Airtable anyway? ' +
+          'This overrides the normal double-booking/cap check and cannot be undone from this screen.'
+        : 'Save ' + actionable.length + ' walk reassignment(s) to Airtable now? This cannot be undone from this screen.';
+      if (!confirm(msg)) return;
+      submitPending(forceOverride);
     });
   }
 
