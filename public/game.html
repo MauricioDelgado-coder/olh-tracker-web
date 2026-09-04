@@ -58,6 +58,17 @@
   .banner a{color:inherit; text-decoration:underline}
   main{padding:16px 20px 120px}
   #board{display:flex; gap:14px; align-items:flex-start; overflow-x:auto; padding-bottom:8px}
+  /* Windows machines are the case that actually needs this: no horizontal
+     scroll wheel on a plain desktop mouse (wireBoardWheelScroll below is the
+     real fix for that), and unlike macOS, no auto-hiding overlay scrollbar --
+     the fallback bar is always on screen, so make it wide enough to grab
+     easily instead of the ~6px Windows default. Firefox gets the same idea
+     via scrollbar-width; there is no thumb-color control below "auto" there. */
+  #board{scrollbar-width:auto}
+  #board::-webkit-scrollbar{height:14px}
+  #board::-webkit-scrollbar-track{background:var(--bg)}
+  #board::-webkit-scrollbar-thumb{background:var(--border); border-radius:7px; border:3px solid var(--bg)}
+  #board::-webkit-scrollbar-thumb:hover{background:var(--faint)}
   .col{
     flex:0 0 260px; background:var(--card); border:1px solid var(--border); border-radius:10px;
     display:flex; flex-direction:column; min-height:120px;
@@ -1499,6 +1510,27 @@
     });
   }
 
+  /* Lets a plain vertical mouse wheel pan the board sideways. A standard
+     Windows mouse has no horizontal scroll axis at all, so without this the
+     only way to reach a manager column off to the right is to grab the
+     scrollbar thumb by hand -- which can be scrolled off the bottom of the
+     screen entirely once a day's columns run tall. Only takes over when the
+     wheel input is dominantly vertical (deltaY > deltaX): a tilt-wheel or
+     trackpad's native horizontal scroll, and shift+wheel, both already
+     produce a deltaX and are left alone to keep working exactly as the
+     browser already handles them. Wired once on #board itself (like
+     wireCardActionButtons), since that element is never replaced across
+     re-renders -- only its innerHTML is. */
+  function wireBoardWheelScroll() {
+    var board = document.getElementById('board');
+    board.addEventListener('wheel', function (ev) {
+      if (Math.abs(ev.deltaY) <= Math.abs(ev.deltaX)) return;
+      if (board.scrollWidth <= board.clientWidth) return; // nothing to pan
+      ev.preventDefault();
+      board.scrollLeft += ev.deltaY;
+    }, { passive: false });
+  }
+
   /* Unassign/Defer/Restore buttons on each card. Delegated on #board once
      (rather than re-wired every render) since it never moves in the DOM.
      Unassign and Defer reuse handleDrop() (toManagerId=null or DEFERRED)
@@ -1548,6 +1580,7 @@
     var dateInput = document.getElementById('walkDate');
     dateInput.value = todayEastern();
     wireCardActionButtons();
+    wireBoardWheelScroll();
 
     var session = getSession();
     if (!session || !session.token) {
