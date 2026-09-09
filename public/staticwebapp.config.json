@@ -43,6 +43,8 @@
     { "route": "/monthly-1on1", "rewrite": "/monthly-1on1.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
     { "route": "/team-daily-summaries", "rewrite": "/team-daily-summaries.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
     { "route": "/team-1on1s", "rewrite": "/team-1on1s.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
+    { "route": "/team", "rewrite": "/team.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
+    { "route": "/team-associate", "rewrite": "/team-associate.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
 
     { "route": "/*.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
 

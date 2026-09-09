@@ -113,6 +113,7 @@
     <h1>Team Daily Summaries</h1>
     <div class="who" id="whoLine">Loading…</div>
   </div>
+  <a class="home" href="/team">My Team</a>
   <a class="home" href="/">All Views</a>
 </header>
 
@@ -215,7 +216,8 @@
   var state = {
     user: null, can: [], loading: true, error: '', okMsg: '',
     from: shiftISO(todayISO(), -6), to: todayISO(),
-    reports: [], roster: [], isAdmin: false, viewingAll: false, viewAll: false,
+    reports: [], roster: [], isAdmin: false, viewingAll: false, viewingManager: null,
+    managers: [], viewAs: '', // '' = my own team, 'all' = everyone flat, else a Users record id
     onlyMissing: false,
     rowState: {} // recordId -> {saving, msg, ok}
   };
@@ -372,8 +374,14 @@
         '</div>' +
         '<div class="chk"><label style="margin:0;display:flex;gap:6px;align-items:center;text-transform:none;font-weight:400;color:var(--ink)">' +
           '<input type="checkbox" id="fMissing"' + (state.onlyMissing ? ' checked' : '') + '> Only days with a gap</label></div>' +
-        (state.isAdmin ? '<div class="chk"><label style="margin:0;display:flex;gap:6px;align-items:center;text-transform:none;font-weight:400;color:var(--ink)">' +
-          '<input type="checkbox" id="fAll"' + (state.viewAll ? ' checked' : '') + '> View all associates (Admin)</label></div>' : '') +
+        (state.isAdmin ? '<div><label for="fViewAs">View as (Admin)</label><select id="fViewAs">' +
+          '<option value=""' + (state.viewAs === '' ? ' selected' : '') + '>My own team</option>' +
+          state.managers.map(function (m) {
+            return '<option value="' + esc(m.userId) + '"' + (state.viewAs === m.userId ? ' selected' : '') + '>' +
+              esc(m.name || m.userId) + '</option>';
+          }).join('') +
+          '<option value="all"' + (state.viewAs === 'all' ? ' selected' : '') + '>Everyone (flat)</option>' +
+        '</select></div>' : '') +
       '</div>' +
       (expectedTotal && !state.viewingAll
         ? '<div class="coverage"><span class="cov-num">' + pct + '%</span>' +
@@ -409,8 +417,9 @@
     var body = toolbarHtml();
 
     if (!state.roster.length && !state.viewingAll) {
-      body += '<div class="card"><div class="empty">No direct reports are linked to you yet. ' +
-        'Ask an admin to set the Manager field for your team on the Users table — that link is what scopes this page.</div></div>';
+      var whose = state.viewingManager ? esc(state.viewingManager.name) : 'you';
+      body += '<div class="card"><div class="empty">No direct reports are linked to ' + whose + ' yet. ' +
+        'The Manager field on the Users table is what scopes this page.</div></div>';
     }
 
     var days = daysInRange().map(dayHtml).join('');
@@ -441,8 +450,8 @@
     var miss = document.getElementById('fMissing');
     if (miss) miss.addEventListener('change', function () { state.onlyMissing = miss.checked; render(); });
 
-    var all = document.getElementById('fAll');
-    if (all) all.addEventListener('change', function () { state.viewAll = all.checked; reload(); });
+    var viewAs = document.getElementById('fViewAs');
+    if (viewAs) viewAs.addEventListener('change', function () { state.viewAs = viewAs.value; reload(); });
 
     Array.prototype.forEach.call(document.querySelectorAll('[data-review]'), function (b) {
       b.addEventListener('click', function (ev) {
@@ -474,12 +483,14 @@
   }
   function load() {
     var qs = '?from=' + encodeURIComponent(state.from) + '&to=' + encodeURIComponent(state.to) +
-      (state.viewAll ? '&all=1' : '');
+      (state.viewAs === 'all' ? '&all=1' : state.viewAs ? '&managerId=' + encodeURIComponent(state.viewAs) : '');
     return apiGet('/team-daily-summary' + qs).then(function (data) {
       state.reports = Array.isArray(data.reports) ? data.reports : [];
       state.roster = Array.isArray(data.roster) ? data.roster : [];
       state.isAdmin = !!data.isAdmin;
       state.viewingAll = !!data.viewingAll;
+      state.viewingManager = data.viewingManager || null;
+      state.managers = Array.isArray(data.managers) ? data.managers : [];
       if (data.from) state.from = data.from;
       if (data.to) state.to = data.to;
     });

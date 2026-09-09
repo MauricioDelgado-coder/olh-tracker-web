@@ -2,13 +2,17 @@
  * Area Manager rollup of their associates' Daily Summary submissions.
  *
  *   GET  /api/team-daily-summary?from=YYYY-MM-DD&to=YYYY-MM-DD&all=1
- *         -> {reports, roster, isAdmin, viewingAll, from, to}
+ *   GET  /api/team-daily-summary?from=...&to=...&managerId=<Users record id>
+ *         -> {reports, roster, isAdmin, viewingAll, viewingManager, managers, from, to}
  *
  *         Scoped to the caller's direct reports by default, identically to
  *         bonus-approvals.js and case-aging-approvals.js: a manager sees only
  *         submissions from associates whose Users row has {Manager} pointing
- *         back at the caller's own Users row. Admins additionally get
- *         everyone's via ?all=1.
+ *         back at the caller's own Users row. Admins additionally get:
+ *           - ?all=1            everyone's, flat
+ *           - ?managerId=<id>   "view as manager" -- exactly the board that
+ *                               manager would see, from A.managersFrom's list
+ *         managerId wins if both are given; both are ignored for non-admins.
  *
  *         `roster` is the caller's direct-report roster (name/email/division)
  *         so the page can show who has NOT submitted for a given day -- the
@@ -101,6 +105,7 @@ async function list(event) {
   const q = event.queryStringParameters || {};
   const isAdmin = session.can.indexOf('roster.manage') >= 0;
   const wantAll = str(q.all) === '1' && isAdmin;
+  const managerId = isAdmin ? str(q.managerId).trim() : '';
 
   // A single ?date= is the common case (today's board); from/to widens it.
   const single = str(q.date).trim();
@@ -110,10 +115,28 @@ async function list(event) {
   if (!DATE_RE.test(to)) to = isoShift(0);
   if (from > to) { const t = from; from = to; to = t; }
 
+  // Admins get one full Users read that covers the manager picker, a
+  // manager-scoped board and the flat "everyone" board -- whichever this
+  // request turns out to be -- rather than a second query per case.
+  const allUsers = isAdmin ? await A.listRecords(A.TABLES.users) : null;
+  const managers = allUsers ? A.managersFrom(allUsers) : [];
+
   let roster = [];
   let allowedEmails = null;
-  if (!wantAll) {
-    roster = (await directReports(session.record.id)).map(rosterOf);
+  let viewingManager = null;
+  if (managerId) {
+    const mgrRec = allUsers.find((r) => r.id === managerId);
+    if (!mgrRec) return A.reply(404, { error: 'No such manager.' });
+    roster = allUsers
+      .filter((r) => Array.isArray(r.fields && r.fields.Manager) && r.fields.Manager.indexOf(managerId) >= 0)
+      .map(rosterOf);
+    allowedEmails = new Set(roster.map((r) => r.email).filter(Boolean));
+    viewingManager = { userId: mgrRec.id, name: (mgrRec.fields && mgrRec.fields.Name) || '' };
+  } else if (!wantAll) {
+    const reportRecs = allUsers
+      ? allUsers.filter((r) => Array.isArray(r.fields && r.fields.Manager) && r.fields.Manager.indexOf(session.record.id) >= 0)
+      : await directReports(session.record.id);
+    roster = reportRecs.map(rosterOf);
     allowedEmails = new Set(roster.map((r) => r.email).filter(Boolean));
   }
 
@@ -131,10 +154,12 @@ async function list(event) {
   if (allowedEmails) rows = rows.filter((r) => allowedEmails.has(String(r.associateEmail || '').toLowerCase()));
 
   if (wantAll) {
-    roster = (await A.listRecords(A.TABLES.users)).map(rosterOf);
+    roster = allUsers.map(rosterOf);
   }
 
-  return A.reply(200, { reports: rows, roster, isAdmin, viewingAll: wantAll, from, to });
+  return A.reply(200, {
+    reports: rows, roster, isAdmin, viewingAll: wantAll && !managerId, viewingManager, managers, from, to
+  });
 }
 
 async function review(event) {

@@ -155,7 +155,14 @@ const ROUTES = [
 
   // ---- Area Manager rollup of their team's one-on-ones
   // -> team-1on1.js (page.team1on1, NOT page.monthly1on1)
-  ['team1on1', 'team-1on1', 'team-1on1']
+  ['team1on1', 'team-1on1', 'team-1on1'],
+
+  // ---- Team suite landing roster -> team-roster.js (page.teamdaily OR page.team1on1)
+  ['teamRoster', 'team-roster', 'team-roster'],
+
+  // ---- Team suite per-associate performance -> team-performance.js
+  // (page.teamdaily OR page.team1on1, same either/or as team-roster.js)
+  ['teamPerformance', 'team-performance', 'team-performance']
 ];
 
 for (const [name, route, netlifyFunction] of ROUTES) {

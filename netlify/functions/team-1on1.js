@@ -2,11 +2,20 @@
  * Area Manager rollup of their associates' Monthly One-on-One check-ins.
  *
  *   GET  /api/team-1on1?month=YYYY-MM&all=1
- *         -> {checkins, roster, isAdmin, viewingAll, month}
+ *   GET  /api/team-1on1?month=YYYY-MM&managerId=<Users record id>
+ *   GET  /api/team-1on1?associate=<email>
+ *         -> {checkins, roster, isAdmin, viewingAll, viewingManager, managers, month}
  *
  *         Scoped to the caller's direct reports by default (Users.Manager
- *         linkage, same resolution as case-aging-approvals.js). Admins get
- *         every row for the month via ?all=1.
+ *         linkage, same resolution as case-aging-approvals.js). Admins get:
+ *           - ?all=1            every row for the month, flat
+ *           - ?managerId=<id>   "view as manager" -- exactly that manager's
+ *                               board, from A.managersFrom's list
+ *           - ?associate=       one associate's full history (see
+ *                               listForAssociate below) -- this one bypasses
+ *                               month/all/managerId entirely.
+ *         managerId wins over all= if both are given; both are ignored for
+ *         non-admins.
  *
  *         `roster` is the direct-report roster so the page can show the
  *         associates with no check-in row yet -- on a one-on-one page the
@@ -89,21 +98,69 @@ function thisMonth() {
   return new Date().toISOString().slice(0, 7);
 }
 
+/**
+ * Every check-in row for one associate, any month -- team-associate.html's
+ * One-on-Ones list, which is a history rather than a single month's board.
+ * Scoped the same way review()/list() are: the caller's own direct report,
+ * or an admin. Returned newest-month-first; the caller does not also get
+ * `roster` back since a single-associate history has nothing to show it
+ * against.
+ */
+async function listForAssociate(session, email) {
+  const isAdmin = session.can.indexOf('roster.manage') >= 0;
+  if (!isAdmin) {
+    const reportRecs = await directReports(session.record.id);
+    const allowed = new Set(reportRecs.map((r) => String((r.fields && r.fields.Email) || '').toLowerCase()));
+    if (!allowed.has(email)) {
+      return A.reply(403, { error: 'That associate is not one of your direct reports.' });
+    }
+  }
+  const recs = await A.listRecords(A.TABLES.monthly1on1, {
+    filterByFormula: 'LOWER({Associate Email}) = "' + A.esc(email) + '"',
+    maxRecords: '200'
+  });
+  const checkins = recs.map(checkinOf).sort((a, b) => String(b.checkinMonth).localeCompare(String(a.checkinMonth)));
+  return A.reply(200, { checkins });
+}
+
 async function list(event) {
   const session = await A.requireSession(event);
   A.requirePerm(session, 'page.team1on1');
 
   const q = event.queryStringParameters || {};
+
+  const associateEmail = A.normEmail(q.associate);
+  if (associateEmail) return listForAssociate(session, associateEmail);
+
   let month = str(q.month).trim();
   if (!MONTH_RE.test(month)) month = thisMonth();
 
   const isAdmin = session.can.indexOf('roster.manage') >= 0;
   const wantAll = str(q.all) === '1' && isAdmin;
+  const managerId = isAdmin ? str(q.managerId).trim() : '';
+
+  // Admins get one full Users read that covers the manager picker, a
+  // manager-scoped board and the flat "everyone" board -- whichever this
+  // request turns out to be -- rather than a second query per case.
+  const allUsers = isAdmin ? await A.listRecords(A.TABLES.users) : null;
+  const managers = allUsers ? A.managersFrom(allUsers) : [];
 
   let roster = [];
   let allowedEmails = null;
-  if (!wantAll) {
-    roster = (await directReports(session.record.id)).map(rosterOf);
+  let viewingManager = null;
+  if (managerId) {
+    const mgrRec = allUsers.find((r) => r.id === managerId);
+    if (!mgrRec) return A.reply(404, { error: 'No such manager.' });
+    roster = allUsers
+      .filter((r) => Array.isArray(r.fields && r.fields.Manager) && r.fields.Manager.indexOf(managerId) >= 0)
+      .map(rosterOf);
+    allowedEmails = new Set(roster.map((r) => r.email).filter(Boolean));
+    viewingManager = { userId: mgrRec.id, name: (mgrRec.fields && mgrRec.fields.Name) || '' };
+  } else if (!wantAll) {
+    const reportRecs = allUsers
+      ? allUsers.filter((r) => Array.isArray(r.fields && r.fields.Manager) && r.fields.Manager.indexOf(session.record.id) >= 0)
+      : await directReports(session.record.id);
+    roster = reportRecs.map(rosterOf);
     allowedEmails = new Set(roster.map((r) => r.email).filter(Boolean));
   }
 
@@ -115,10 +172,12 @@ async function list(event) {
   if (allowedEmails) rows = rows.filter((r) => allowedEmails.has(String(r.associateEmail || '').toLowerCase()));
 
   if (wantAll) {
-    roster = (await A.listRecords(A.TABLES.users)).map(rosterOf);
+    roster = allUsers.map(rosterOf);
   }
 
-  return A.reply(200, { checkins: rows, roster, isAdmin, viewingAll: wantAll, month });
+  return A.reply(200, {
+    checkins: rows, roster, isAdmin, viewingAll: wantAll && !managerId, viewingManager, managers, month
+  });
 }
 
 async function complete(event) {

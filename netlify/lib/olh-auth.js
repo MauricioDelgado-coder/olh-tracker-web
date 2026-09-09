@@ -36,7 +36,12 @@ const TABLES = {
   dailySummary: 'tbllmzusPJehWJDxj',
   monthly1on1: 'tbl2GraVFEzPi7Myx',
   qaBonusSource: 'tblQokbgOBiRZ8bDM',
-  qaBonusSubmissions: 'tblnV7tfJAULckLiV'
+  qaBonusSubmissions: 'tblnV7tfJAULckLiV',
+  // Raw closed-case rows synced by dev/sync_ccr_bonus_case_log.py. Read
+  // directly by team-performance.js -- see that file for why this table
+  // (case-level, accumulating) is the right source for a rolling 7/30-day
+  // window rather than CCR Bonus SF Source (monthly aggregates only).
+  ccrBonusCaseLog: 'tblMPsfjjermgPJOe'
 };
 
 /* ---- HTTP plumbing (shape matches the existing jobs.js) ------------------- */
@@ -854,6 +859,28 @@ function requirePerm(session, perm) {
   }
 }
 
+/**
+ * {userId, name} for every Users record that appears in at least one other
+ * record's Manager link -- i.e. everyone who actually manages someone right
+ * now. Shared by team-roster.js, team-daily-summary.js and team-1on1.js so
+ * an admin's "view as manager" picker is the same list wherever it appears,
+ * built from an already-fetched pass over the Users table rather than a
+ * second query each caller would otherwise have to make.
+ */
+function managersFrom(allUsersRecs) {
+  const ids = new Set();
+  allUsersRecs.forEach((r) => {
+    const mgr = r.fields && r.fields.Manager;
+    if (Array.isArray(mgr)) mgr.forEach((id) => ids.add(id));
+  });
+  const byId = new Map(allUsersRecs.map((r) => [r.id, r]));
+  return Array.from(ids)
+    .map((id) => byId.get(id))
+    .filter(Boolean)
+    .map((r) => ({ userId: r.id, name: (r.fields && r.fields.Name) || '' }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /** Turn a thrown error into a reply without leaking a stack or a token. */
 function fail(err) {
   const status = (err && err.statusCode) || 500;
@@ -867,7 +894,7 @@ module.exports = {
   crypto, BASE_ID, AIRTABLE_API, TABLES, PERMS, DEFAULT_ROLES, DENY,
   JSON_HEADERS, reply, readJson, route, fail, sleep, esc,
   airtable, listRecords, findOne, createRecord, updateRecord, deleteRecord,
-  caseAgingExceptionsApprovedCount,
+  caseAgingExceptionsApprovedCount, managersFrom,
   hashPassword, verifyPassword, checkPolicy,
   sha256, randomToken, mintSession, readSession, SESSION_TTL_MS,
   roleSlug, roleLabel, knownRoleSlugs, normalizeMatrix, applyOverrides, loadMatrix, saveMatrix, createRole,
