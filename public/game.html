@@ -56,6 +56,10 @@
   .banner.error{background:var(--red-bg); color:var(--red-ink); border-color:var(--red-border)}
   .banner.info{background:#EEF1FA; color:var(--navy); border-color:#D9DFF3}
   .banner a{color:inherit; text-decoration:underline}
+  #publishNote{
+    padding:8px 20px; font-size:12.5px; font-weight:600;
+    background:var(--amber-bg); color:var(--lock); border-bottom:1px solid var(--amber-border);
+  }
   main{padding:16px 20px 120px}
   #board{display:flex; gap:14px; align-items:flex-start; overflow-x:auto; padding-bottom:8px}
   /* Windows machines are the case that actually needs this: no horizontal
@@ -218,6 +222,8 @@
   <button id="btnLoad">Load</button>
   <button id="btnRefresh" title="Re-fetch from Airtable">Refresh</button>
   <button id="btnOptimize" title="Run the SOTV3 optimizer on the loaded schedule" disabled>Run SOTV3</button>
+  <button id="btnExportExcel" title="Export the currently loaded schedule to Excel" disabled>Export to Excel</button>
+  <button id="btnPublish" title="Freeze this day and publish it to the public schedule" disabled>Lock &amp; Publish</button>
   <div id="searchWrap">
     <label for="searchBox">Search</label>
     <input type="search" id="searchBox" placeholder="time, walk type, date, job #, community…">
@@ -227,6 +233,7 @@
     <select id="addColSelect"><option value="">Choose…</option></select>
   </div>
 </div>
+<div id="publishNote" style="display:none"></div>
 <div id="banners"></div>
 <main>
   <div id="timeSlotCards"></div>
@@ -239,6 +246,7 @@
   <button id="btnSaveDraft" title="Save these changes on this device only -- nothing is sent to Airtable">Save draft</button>
   <button id="btnSubmit" class="primary">Submit changes</button>
 </div>
+<script src="vendor/exceljs.min.js"></script>
 <script>
 (function () {
   'use strict';
@@ -258,6 +266,15 @@
     ACC: { date: 'ACC Date',  manager: 'ACC Manager', lock: 'ACC Manager Lock', datetime: true,  minutes: 60  }
   };
   var WALK_TYPES = ['QAI', 'QAA', 'CEL', 'ACC'];
+  // Full display names for the Excel export and the published-schedule
+  // snapshot -- mirrors the WALKS array in walk-calendar.html so a
+  // published day reads the same regardless of which page published it.
+  var WALK_NAME = {
+    QAI: 'Quality Assurance Inspection',
+    QAA: 'Quality Assurance Acceptance',
+    CEL: 'Celebration Walk',
+    ACC: 'Acceptance Walk'
+  };
   var DAILY_CAP_MIN = 480;
   var INITIAL_LEG_CAP_MIN = 45; // SOTV3: first walk of a manager's day must be <= this from home
   // Sentinel "column id" for the Deferred bucket -- never a real Airtable
@@ -308,7 +325,11 @@
   var state = {
     jobs: [], managers: [], walks: [], can: [], user: null,
     pending: new Map(), extraCols: [], dateKey: '', loading: false,
-    unassignedSort: 'time', deferredSort: 'time', deferred: {}, deferredMinimized: false
+    unassignedSort: 'time', deferredSort: 'time', deferred: {}, deferredMinimized: false,
+    // publish: null (never published) or { locked, publishedBy, publishedAt,
+    // rowCount } from GET /api/publish-schedule -- see checkPublishStatus.
+    // publishBusy: true while a publish/unlock POST is in flight.
+    publish: null, publishBusy: false
   };
 
   /* ---- Small helpers ------------------------------------------------------ */
@@ -334,6 +355,21 @@
     if (!id) return 'Unassigned';
     var m = state.managers.find(function (x) { return x.id === id; });
     return m ? m.name : '(unknown manager)';
+  }
+  // 'YYYY-MM-DD' -> 'M/D/YYYY', matching walk-calendar.html's shortDate so a
+  // published/exported day reads the same regardless of which page built it.
+  function shortDateSlash(dateKey) {
+    var p = String(dateKey || '').split('-');
+    if (p.length !== 3) return String(dateKey || '');
+    return (+p[1]) + '/' + (+p[2]) + '/' + p[0];
+  }
+  // Display string for a walk's date/time cell in the Excel export and the
+  // published snapshot: date alone for untimed QAI/QAA, date + lowercase
+  // am/pm clock time for timed CEL/ACC (w.timeLabel is already Eastern).
+  function whenLabel(w) {
+    var d = shortDateSlash(state.dateKey);
+    if (!w.timeLabel) return d;
+    return d + ' ' + w.timeLabel.replace('AM', 'am').replace('PM', 'pm');
   }
   function pendKey(recordId, walkType) { return recordId + ':' + walkType; }
 
@@ -449,6 +485,19 @@
     var p = state.pending.get(key);
     if (p) return p.toManagerId || null;
     return w.managerId || null;
+  }
+
+  /** Display label for a walk's effective (board) manager -- unlike
+   *  managerName(), distinguishes the Deferred bucket (a local triage
+   *  marker, never sent to Airtable) from a genuinely unassigned walk, and
+   *  is blank rather than "Unassigned" for the latter to match the blank
+   *  cell walk-calendar.html's own Excel export produces for an unassigned
+   *  walk. Used by exportToExcel() only -- publish rows use the walk's real
+   *  saved manager (w.managerId), never a staged/deferred display value. */
+  function effectiveManagerLabel(w) {
+    var eff = effectiveManagerId(w);
+    if (eff === DEFERRED) return '(Deferred)';
+    return eff ? managerName(eff) : '';
   }
 
   function columnWalks(managerId) {
@@ -873,6 +922,10 @@
     renderPendingBar();
     var optBtn = document.getElementById('btnOptimize');
     if (optBtn) optBtn.disabled = !state.walks.length || state.can.indexOf('walk.schedule') < 0;
+    var exportBtn = document.getElementById('btnExportExcel');
+    if (exportBtn) exportBtn.disabled = !state.walks.length;
+    updatePublishButton();
+    updatePublishNote();
   }
 
   /* ---- Drag & drop ---------------------------------------------------------
@@ -1310,6 +1363,223 @@
       });
   }
 
+  /* ---- Lock & Publish --------------------------------------------------
+     Talks to the same /api/publish-schedule endpoint walk-calendar.html
+     used, with the same request/response contract, so no backend change
+     was needed to move this feature here. GET checks whether `dateKey` is
+     currently locked/published (called after every load, mirroring
+     walk-calendar's checkLock); POST { date, rows } freezes the day into
+     the Published Schedules table and locks it; POST { date, action:
+     "unlock" } unfreezes it (the Snapshot itself is kept, not deleted, so
+     nothing is lost by unlocking to make one more change and republishing).
+     Requires walk.schedule, same tier as reassigning a walk.
+
+     Unlike walk-calendar (which saves each reassignment immediately),
+     this page batches changes into state.pending until Submit -- so
+     Publish is only offered once nothing is left pending, guaranteeing the
+     snapshot always reflects what is actually saved in Airtable rather
+     than an unsaved drag on screen. */
+  function publishActionable() {
+    return Array.from(state.pending.values()).filter(function (p) {
+      return !p.status || p.status === 'staged' || p.status === 'error';
+    });
+  }
+
+  function checkPublishStatus(dateKey) {
+    return apiGet('/publish-schedule?date=' + encodeURIComponent(dateKey)).then(function (data) {
+      if (state.dateKey === dateKey) state.publish = (data && data.published) || null;
+    }).catch(function () { /* advisory only -- a failed check just leaves the prior state */ });
+  }
+
+  // Job #, community, walk type, time, and manager only -- never the street
+  // address -- mirrors exactly what walk-calendar.html sent, since
+  // /api/public-schedule (the read side) only ever displays what got stored
+  // here. Uses each walk's real saved manager (w.managerId), not the staged
+  // board position, since Publish is only enabled with nothing pending.
+  function buildPublishRows() {
+    return state.walks.map(function (w) {
+      return {
+        job: String(w.jobNumber || ''),
+        community: coreCommunity(w.community) || w.community || '',
+        code: w.walkType,
+        walk: WALK_NAME[w.walkType] || w.walkType,
+        when: whenLabel(w),
+        manager: w.managerId ? managerName(w.managerId) : ''
+      };
+    });
+  }
+
+  function publishSchedule() {
+    if (state.can.indexOf('walk.schedule') < 0 || !state.walks.length || state.publishBusy) return;
+    if (publishActionable().length) {
+      showBanner('warn', 'Submit your pending changes before publishing -- the published schedule can only reflect what is actually saved.');
+      return;
+    }
+    state.publishBusy = true;
+    updatePublishButton();
+    var rows = buildPublishRows();
+    var dateKey = state.dateKey;
+    fetch(API + '/publish-schedule', {
+      method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ date: dateKey, rows: rows })
+    }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (body) {
+        if (!res.ok) throw new Error((body && body.error) || ('Save failed (' + res.status + ')'));
+        if (state.dateKey === dateKey) state.publish = (body && body.published) || null;
+        showBanner('info', rows.length + (rows.length === 1 ? ' walk' : ' walks') + ' locked and published for ' + dateKey + '.');
+      });
+    }).catch(function (err) {
+      showBanner('error', 'Could not publish: ' + esc(err && err.message ? err.message : String(err)));
+    }).then(function () {
+      state.publishBusy = false;
+      updatePublishButton();
+      updatePublishNote();
+    });
+  }
+
+  function unlockSchedule() {
+    if (state.can.indexOf('walk.schedule') < 0 || state.publishBusy) return;
+    state.publishBusy = true;
+    updatePublishButton();
+    var dateKey = state.dateKey;
+    fetch(API + '/publish-schedule', {
+      method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ date: dateKey, action: 'unlock' })
+    }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (body) {
+        if (!res.ok) throw new Error((body && body.error) || ('Save failed (' + res.status + ')'));
+        if (state.dateKey === dateKey) state.publish = (body && body.published) || null;
+        showBanner('info', 'Unlocked \u2014 this day can be edited and re-published.');
+      });
+    }).catch(function (err) {
+      showBanner('error', 'Could not unlock: ' + esc(err && err.message ? err.message : String(err)));
+    }).then(function () {
+      state.publishBusy = false;
+      updatePublishButton();
+      updatePublishNote();
+    });
+  }
+
+  function updatePublishButton() {
+    var btn = document.getElementById('btnPublish');
+    if (!btn) return;
+    var locked = !!(state.publish && state.publish.locked);
+    var hasPerm = state.can.indexOf('walk.schedule') >= 0;
+    if (state.publishBusy) {
+      btn.textContent = locked ? 'Unlocking\u2026' : 'Publishing\u2026';
+      btn.disabled = true;
+      return;
+    }
+    if (locked) {
+      btn.textContent = 'Unlock Schedule';
+      btn.disabled = !hasPerm;
+      btn.title = 'Unlock this day so it can be edited and re-published.';
+    } else {
+      var hasPending = publishActionable().length > 0;
+      btn.textContent = 'Lock & Publish';
+      btn.disabled = !hasPerm || !state.walks.length || hasPending;
+      btn.title = hasPending
+        ? 'Submit your pending changes before publishing.'
+        : 'Freeze this day and publish it to the public schedule.';
+    }
+  }
+
+  function updatePublishNote() {
+    var note = document.getElementById('publishNote');
+    if (!note) return;
+    if (state.publish && state.publish.locked) {
+      note.style.display = 'block';
+      note.textContent = '\uD83D\uDD12 Locked \u2014 visible on the public schedule' +
+        (state.publish.publishedBy ? ' \u00b7 published by ' + state.publish.publishedBy : '');
+    } else {
+      note.style.display = 'none';
+      note.textContent = '';
+    }
+  }
+
+  /* ---- Excel export ------------------------------------------------------
+     Same workbook shape walk-calendar.html's exportXlsx() produced (built
+     with window.buildXlsx, a bundler-only helper this plain page doesn't
+     have) -- same columns, same sort by manager -- but built directly on
+     ExcelJS (vendor/exceljs.min.js) the way keys.html and walks-to-
+     schedule.html already do it on this site. Reflects the board exactly as
+     it sits on screen right now, including any staged-but-not-yet-submitted
+     drags, so a QA Manager can see "what this would look like" without
+     having to Submit first. */
+  function exportToExcel() {
+    if (!window.ExcelJS) {
+      showBanner('error', 'The Excel library did not load. Reload the page and try again.');
+      return;
+    }
+    if (!state.walks.length) {
+      showBanner('warn', 'Nothing to export \u2014 load a date with walks on it first.');
+      return;
+    }
+    var btn = document.getElementById('btnExportExcel');
+    var prevText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Exporting\u2026';
+    var jobById = {};
+    state.jobs.forEach(function (j) { jobById[j.id] = j.fields || {}; });
+    var sortedWalks = state.walks.slice().sort(function (a, b) {
+      return effectiveManagerLabel(a).localeCompare(effectiveManagerLabel(b));
+    });
+    (async function () {
+      try {
+        var wb = new window.ExcelJS.Workbook();
+        wb.creator = 'OLH Tracker';
+        wb.created = new Date();
+        var ws = wb.addWorksheet('Walk Schedule');
+        ws.columns = [
+          { header: 'Walk Manager', width: 24 },
+          { header: 'Walk Type', width: 30 },
+          { header: 'Walk Date/Time', width: 20 },
+          { header: 'Job #', width: 16 },
+          { header: 'Community', width: 26 },
+          { header: 'Address', width: 30 },
+          { header: 'Insp. Approved', width: 14 },
+          { header: 'Construction Manager', width: 22 },
+          { header: 'Concierge', width: 22 }
+        ];
+        sortedWalks.forEach(function (w) {
+          var f = jobById[w.recordId] || {};
+          ws.addRow([
+            effectiveManagerLabel(w),
+            w.walkType + ' \u2014 ' + (WALK_NAME[w.walkType] || w.walkType),
+            whenLabel(w),
+            w.jobNumber || '',
+            coreCommunity(w.community) || w.community || '',
+            w.address || '',
+            f['Home Inspection Approved'] ? 'Yes' : 'No',
+            f['Construction Manager'] || '',
+            f['Assigned Concierge'] || ''
+          ]);
+        });
+        var headerRow = ws.getRow(1);
+        headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1B2A58' } };
+        headerRow.alignment = { vertical: 'middle' };
+        ws.views = [{ state: 'frozen', ySplit: 1 }];
+        ws.autoFilter = { from: 'A1', to: String.fromCharCode(64 + ws.columns.length) + '1' };
+
+        var buf = await wb.xlsx.writeBuffer();
+        var blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'Walk Schedule ' + state.dateKey + '.xlsx';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+      } catch (err) {
+        showBanner('error', 'Could not export: ' + esc(err && err.message ? err.message : String(err)));
+      } finally {
+        btn.disabled = !state.walks.length;
+        btn.textContent = prevText;
+      }
+    })();
+  }
+
   /* ---- Submit --------------------------------------------------------------
      Sequential, not parallel: Airtable's own 5 req/s cap plus the fact that
      /api/update-job re-reads the record's current fields for its conflict
@@ -1486,6 +1756,7 @@
       state.deferred = {};
     }
     state.dateKey = dateKey;
+    state.publish = null;
     setLoading(true);
     clearBanner();
     return loadJobs().then(function () {
@@ -1500,6 +1771,13 @@
           (restored.skipped ? ' (' + restored.skipped + ' skipped -- no longer matches today\u2019s schedule)' : '') +
           '. Nothing has been sent to Airtable.');
       }
+      // Advisory, fire-and-forget like loadSOTV3Reference -- the board is
+      // fully usable before this resolves, it just updates the Publish
+      // button/note once it knows whether this day is already locked.
+      checkPublishStatus(dateKey).then(function () {
+        updatePublishButton();
+        updatePublishNote();
+      });
     }).catch(function (err) {
       setLoading(false);
       if (err && err.status === 401) {
@@ -1620,6 +1898,12 @@
     });
     document.getElementById('btnOptimize').addEventListener('click', function () {
       runSOTV3();
+    });
+    document.getElementById('btnExportExcel').addEventListener('click', function () {
+      exportToExcel();
+    });
+    document.getElementById('btnPublish').addEventListener('click', function () {
+      if (state.publish && state.publish.locked) unlockSchedule(); else publishSchedule();
     });
     document.getElementById('searchBox').addEventListener('input', applySearchHighlight);
     document.getElementById('addColSelect').addEventListener('change', function () {
