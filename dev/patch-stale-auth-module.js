@@ -45,7 +45,7 @@ const START_MARKER = '/* OLH shared authentication + change tracking.';
 const TARGET_PAGES = [
   'admin.html', 'completion.html', 'homesite.html', 'index.html',
   'qa-management.html', 'scheduler.html', 'tracker-san-mpr.html', 'tracker.html',
-  'walk-calendar.html', 'workload-visualizer.html', 'workload.html'
+  'workload-visualizer.html', 'workload.html'
 ];
 
 function extractGoodModule() {
