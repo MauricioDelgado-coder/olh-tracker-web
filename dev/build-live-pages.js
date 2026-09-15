@@ -2174,7 +2174,103 @@ const PAGES = {
        '<sc-raw-select value="{{ comm }}" sc-camel-on-change="{{ onComm }}" style="height:38px;min-width:{{ selW }};padding:0 28px 0 11px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;font-size:15px;color:#303030;cursor:pointer">\n' +
        '          <sc-for list="{{ commOptions }}" as="o"><option value="{{ o.v }}" label="{{ o.v }}"></option></sc-for>\n' +
        '        </sc-raw-select>',
-       '<olh-multiselect ref="{{ refComm }}" sc-camel-on-change="{{ onComm }}" placeholder="All communities" style="height:38px;min-width:{{ selW }};padding:0 28px 0 11px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;font-size:15px;color:#303030;cursor:pointer"></olh-multiselect>']
+       '<olh-multiselect ref="{{ refComm }}" sc-camel-on-change="{{ onComm }}" placeholder="All communities" style="height:38px;min-width:{{ selW }};padding:0 28px 0 11px;border:1px solid #BFB8AB;border-radius:4px;background:#fff;font-size:15px;color:#303030;cursor:pointer"></olh-multiselect>'],
+
+      /* Projected QAI/QAA walks (2026-09-15). The day view only ever listed a
+       * walk that already had a date in Airtable, so every homesite whose QA
+       * dates were still calculated was invisible here -- the same blind spot
+       * game.html's reassignment board had. tracker.html (calcDate),
+       * scheduler.html and workload.html all already derive these.
+       *
+       * These five MUST stay last in this array: the two write patches below
+       * anchor on `patch:{[w.spec.done]:true}` and on the `miss` object, both
+       * of which are produced by earlier patches in this same list. Moving
+       * them earlier makes their anchors miss.
+       *
+       * Mirrored by dev/patch-qamgmt-projected-walks.py, which applies the
+       * identical five substitutions to the already-built public page. */
+      ['add the projected-date helper',
+       "const ORDER = {QAI:0, QAA:1, CEL:2, ACC:3};",
+       "const ORDER = {QAI:0, QAA:1, CEL:2, ACC:3};\n" +
+       "/* A QAI/QAA date CALCULATED from Projected Completion, used only when the\n" +
+       "   Airtable cell is blank -- the identical rule tracker.html's calcDate()\n" +
+       "   renders in blue and game.html's reassignment board schedules against:\n" +
+       "   QAI = PCD - 7, QAA = PCD. Not weekend-adjusted, deliberately: the\n" +
+       "   tracker's blue date isn't either, and shifting it here would make the\n" +
+       "   two pages disagree about the same walk.\n" +
+       "\n" +
+       "   CEL/ACC are never projected -- they come from the scheduler with a real\n" +
+       "   manager and clock time attached.\n" +
+       "\n" +
+       "   Returns null once the home has an Actual COE or the walk is already\n" +
+       "   marked complete: a projection describes work still to come, never a\n" +
+       "   backfill of history. */\n" +
+       "const PROJ_DONE = {QAI:'QAI Complete', QAA:'QAA Accepted'};\n" +
+       "function projectedWalkDate(f, code){\n" +
+       "  if(code !== 'QAI' && code !== 'QAA') return null;\n" +
+       "  if(f['Actual COE Date']) return null;\n" +
+       "  if(f[PROJ_DONE[code]]) return null;\n" +
+       "  const pcd = f['Projected Completion Date'];\n" +
+       "  if(!pcd) return null;\n" +
+       "  const p = String(pcd).slice(0,10).split('-');\n" +
+       "  if(p.length !== 3) return null;\n" +
+       "  const d = new Date(+p[0], +p[1]-1, +p[2]);\n" +
+       "  if(isNaN(d.getTime())) return null;\n" +
+       "  if(code === 'QAI') d.setDate(d.getDate()-7);\n" +
+       "  return key(d);\n" +
+       "}"],
+
+      ['dayWalks(): fall back to the projected date when the cell is blank',
+       "        const raw = f[w.date];\n" +
+       "        if(!raw || isoDay(raw) !== day) return;",
+       "        let raw = f[w.date];\n" +
+       "        let projected = false;\n" +
+       "        if(!raw){\n" +
+       "          raw = projectedWalkDate(f, w.code);\n" +
+       "          if(!raw) return;\n" +
+       "          projected = true;\n" +
+       "        }\n" +
+       "        if(isoDay(raw) !== day) return;"],
+
+      ['carry the projected flag onto the row',
+       "          raw: raw, sortTime: rawD ? rawD.getTime() : 0,",
+       "          raw: raw, projected: projected, sortTime: rawD ? rawD.getTime() : 0,"],
+
+      ['completing a projected walk writes its calculated date too',
+       "        rec.fields[w.spec.done] = true;\n" +
+       "        done++;\n" +
+       "        writes.push({recordId:w.recordId, job:rec.fields['Job #'] || w.recordId, field:w.spec.done,\n" +
+       "          label:w.spec.label + ' completed', from:'No', to:'Yes', action:'edit',\n" +
+       "          patch:{[w.spec.done]:true}});",
+       "        rec.fields[w.spec.done] = true;\n" +
+       "        done++;\n" +
+       "        /* A projected walk has no date in Airtable. Setting the done flag\n" +
+       "           against a blank date cell would be silent data loss: projectedWalkDate()\n" +
+       "           suppresses a completed walk, so it would vanish from every page with\n" +
+       "           no date ever recorded. Write the calculated date alongside. */\n" +
+       "        const donePatch = {[w.spec.done]:true};\n" +
+       "        if(w.projected){ donePatch[w.spec.date] = w.raw; rec.fields[w.spec.date] = w.raw; }\n" +
+       "        writes.push({recordId:w.recordId, job:rec.fields['Job #'] || w.recordId, field:w.spec.done,\n" +
+       "          label:w.spec.label + ' completed', from:'No', to:'Yes', action:'edit',\n" +
+       "          patch:donePatch});"],
+
+      ['missing a projected walk writes its calculated date too',
+       "        if(note) miss[w.spec.code + ' Miss Note'] = note;\n" +
+       "        rec.fields[w.spec.code + ' Missed'] = true;",
+       "        if(note) miss[w.spec.code + ' Miss Note'] = note;\n" +
+       "        /* Same reason as the completion path above -- and the Walk Miss Log\n" +
+       "           entry stamps missedDate from w.raw, so the record has to actually\n" +
+       "           carry that date or the log points at a date the job never had. */\n" +
+       "        if(w.projected){ miss[w.spec.date] = w.raw; rec.fields[w.spec.date] = w.raw; }\n" +
+       "        rec.fields[w.spec.code + ' Missed'] = true;"],
+
+      /* The Walk Manager cell already reads "Unassigned" in red for a projected
+       * walk (there is no manager link), and this makes the time column say so
+       * too rather than showing the usual untimed "All day" -- so nobody marks a
+       * calculated date "missed" as though it had been a real commitment. */
+      ['label a projected walk in the time column',
+       "        time: clockOf(w.raw),",
+       "        time: w.projected ? 'Projected' : clockOf(w.raw),"]
     ]
   },
 
