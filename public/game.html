@@ -140,6 +140,16 @@
     font-size:10px; font-weight:700; padding:1px 6px; border-radius:999px; letter-spacing:.02em;
     background:var(--amber-bg); color:var(--amber-ink); border:1px solid var(--amber-border);
   }
+  /* A walk whose QAI/QAA date is CALCULATED from Projected Completion rather
+     than stored in Airtable. Blue to match the same calculated-date treatment
+     tracker.html uses, and a dashed outline so the card reads as provisional
+     at a glance without having to find the badge. */
+  .pill-projected{
+    font-size:10px; font-weight:700; padding:1px 6px; border-radius:999px; letter-spacing:.02em;
+    background:#E7EEFB; color:#005DAA; border:1px solid #BBD2EE;
+  }
+  .card.projected{border-top:1px dashed #BBD2EE; border-right:1px dashed #BBD2EE; border-bottom:1px dashed #BBD2EE}
+  .card .projline{color:#005DAA; font-size:11.5px; font-style:italic; margin-top:2px}
   /* Left-edge accent on the card itself. Deliberately separate from
      .type-QAI etc above -- those are also used on the small pill badge
      inside the card, and giving the outer card the same class name would
@@ -418,6 +428,44 @@
   }
 
   /**
+   * A QAI/QAA date CALCULATED from Projected Completion, used only when the
+   * Airtable cell is blank. This is the identical rule tracker.html's
+   * calcDate() renders in blue and scheduler.html / workload.html already
+   * schedule against: QAI = PCD - 7, QAA = PCD.
+   *
+   * Deliberately NOT weekend-adjusted. The tracker's blue date isn't either,
+   * and a board that quietly pulled a Sunday walk back to Friday would show a
+   * different date than the tracker does for the very same walk. A projected
+   * weekend walk is flagged on the card instead (see cardHtml) so it is
+   * visible rather than silently moved.
+   *
+   * CEL/ACC are never projected -- those come out of the scheduler with a
+   * real manager and clock time attached, and inventing one here would
+   * conflict with suggestedCelAcc()'s closing-date-anchored rule.
+   *
+   * Returns null (walk is simply absent from the board) when the home has
+   * already closed or the walk is already marked complete -- a projection is
+   * a statement about work still to come, not a backfill of history.
+   */
+  var PROJECTED_DONE_FIELD = { QAI: 'QAI Complete', QAA: 'QAA Accepted' };
+
+  function projectedWalkDate(f, type) {
+    if (type !== 'QAI' && type !== 'QAA') return null;
+    if (f['Actual COE Date']) return null;
+    if (f[PROJECTED_DONE_FIELD[type]]) return null;
+    var pcd = f['Projected Completion Date'];
+    if (!pcd) return null;
+    var p = String(pcd).slice(0, 10).split('-');
+    if (p.length !== 3) return null;
+    var d = new Date(+p[0], +p[1] - 1, +p[2]);
+    if (isNaN(d.getTime())) return null;
+    if (type === 'QAI') d.setDate(d.getDate() - 7);
+    return d.getFullYear() + '-' +
+      String(d.getMonth() + 1).padStart(2, '0') + '-' +
+      String(d.getDate()).padStart(2, '0');
+  }
+
+  /**
    * Rebuild state.walks for state.dateKey (a YYYY-MM-DD string, interpreted
    * in Eastern time). Mirrors the walk-review skill's Phase 1 filter:
    *   - skip archived / manually-excluded rows
@@ -437,7 +485,12 @@
       WALK_TYPES.forEach(function (type) {
         var cfg = WALK_FIELD[type];
         var raw = f[cfg.date];
-        if (!raw) return;
+        var projected = false;
+        if (!raw) {
+          raw = projectedWalkDate(f, type);
+          if (!raw) return;
+          projected = true;
+        }
         var dayKey = cfg.datetime ? easternDateKey(raw) : String(raw).slice(0, 10);
         if (dayKey !== dateKey) return;
         if ((type === 'CEL' || type === 'ACC') && !f['CEL Letter Sent']) return;
@@ -452,6 +505,10 @@
           address: [f['Street Address'], f['City']].filter(Boolean).join(', '),
           walkType: type,
           raw: raw,
+          // True when `raw` came from projectedWalkDate() rather than the
+          // Airtable cell. Drives the card's PROJECTED badge and, on Submit,
+          // causes the date to be written alongside the manager link.
+          projected: projected,
           timeLabel: cfg.datetime ? easternTimeLabel(raw) : null,
           managerId: managerId,
           locked: !!f[cfg.lock],
@@ -643,7 +700,7 @@
     var p = state.pending.get(key);
     var staged = !isDeferred && !!p;
     var classes = 'card card-accent-' + w.walkType + ' card-tile-' + w.walkType +
-      (w.locked ? ' locked' : '') + (staged ? ' staged' : '');
+      (w.locked ? ' locked' : '') + (staged ? ' staged' : '') + (w.projected ? ' projected' : '');
     var dup = false;
     if (!isDeferred && WALK_FIELD[w.walkType].datetime) {
       dup = columnDuplicateTimes(eff).indexOf(w.raw) >= 0;
@@ -652,6 +709,20 @@
     var unsoldBadge = w.unsold
       ? '<span class="pill-unsold" title="Homesite Status is Available -- this home is not yet sold">UNSOLD</span>'
       : '';
+    var projectedBadge = w.projected
+      ? '<span class="pill-projected" title="No ' + w.walkType + ' Date in Airtable -- this date is calculated from Projected Completion (' +
+        (w.walkType === 'QAI' ? 'PCD minus 7 days' : 'the PCD itself') +
+        '). Assigning a manager writes it as a real date.">PROJECTED</span>'
+      : '';
+    // A projected date is raw PCD arithmetic with no weekend handling (same as
+    // the tracker's blue date), so it can legitimately land on a Sat/Sun. Say
+    // so rather than moving it -- the two pages must agree on the date.
+    var projWeekend = false;
+    if (w.projected) {
+      var pw = String(w.raw).split('-');
+      var pwd = new Date(+pw[0], +pw[1] - 1, +pw[2]).getDay();
+      projWeekend = (pwd === 0 || pwd === 6);
+    }
     // Core community name (e.g. "Ranches") instead of the specific product
     // line Airtable stores (e.g. "Ranches 50GC") -- same resolution the
     // drive-time estimate already uses, so the two never disagree.
@@ -676,9 +747,11 @@
       '<div class="' + classes + '" draggable="' + (w.locked ? 'false' : 'true') + '" ' +
       'data-record="' + esc(w.recordId) + '" data-type="' + w.walkType + '" data-current="' + esc(eff || '') + '">' +
       '<div class="row1"><span class="job">#' + esc(w.jobNumber) + '</span>' +
-      '<span class="badges"><span class="type type-' + w.walkType + '">' + w.walkType + '</span>' + unsoldBadge + '</span></div>' +
+      '<span class="badges"><span class="type type-' + w.walkType + '">' + w.walkType + '</span>' + projectedBadge + unsoldBadge + '</span></div>' +
       '<div class="community">' + esc(displayCommunity) + '</div>' +
       (w.timeLabel ? '<div class="time">' + esc(w.timeLabel) + ' ET</div>' : '<div class="time">No set time</div>') +
+      (w.projected ? '<div class="projline">Calculated from Projected Completion &mdash; not yet a real date</div>' : '') +
+      (projWeekend ? '<div class="warnline">Projected date falls on a weekend</div>' : '') +
       (w.locked ? '<div class="lockrow">&#128274; Locked &mdash; cannot reassign</div>' : '') +
       (isDeferred ? '<div class="stagedfrom">Deferred &mdash; no change staged</div>' :
         (staged ? '<div class="stagedfrom">was: ' + esc(p.fromManagerName) + '</div>' : '')) +
@@ -1010,6 +1083,13 @@
         fromManagerName: managerName(w.managerId),
         toManagerId: toManagerId || null,
         toManagerName: managerName(toManagerId),
+        // A projected walk has no date in Airtable -- it exists only as PCD
+        // arithmetic. Assigning someone is the human decision that makes it
+        // real, so submitPending() writes this date in the SAME request as the
+        // manager link. Without it the link would point at a blank date cell
+        // and the walk would disappear from the board on the next refresh.
+        projectedDate: w.projected ? w.raw : null,
+        dateField: WALK_FIELD[w.walkType].date,
         status: 'staged',
         error: null
       });
@@ -1396,8 +1476,13 @@
   // /api/public-schedule (the read side) only ever displays what got stored
   // here. Uses each walk's real saved manager (w.managerId), not the staged
   // board position, since Publish is only enabled with nothing pending.
+  //
+  // PROJECTED walks are excluded outright. Their date is calculated from
+  // Projected Completion and exists nowhere in Airtable; publishing one would
+  // announce a walk that nobody scheduled and that will silently move the next
+  // time the sync changes PCD. Only real, saved walks get published.
   function buildPublishRows() {
-    return state.walks.map(function (w) {
+    return state.walks.filter(function (w) { return !w.projected; }).map(function (w) {
       return {
         job: String(w.jobNumber || ''),
         community: coreCommunity(w.community) || w.community || '',
@@ -1534,6 +1619,7 @@
           { header: 'Walk Manager', width: 24 },
           { header: 'Walk Type', width: 30 },
           { header: 'Walk Date/Time', width: 20 },
+          { header: 'Date Source', width: 14 },
           { header: 'Job #', width: 16 },
           { header: 'Community', width: 26 },
           { header: 'Address', width: 30 },
@@ -1547,6 +1633,11 @@
             effectiveManagerLabel(w),
             w.walkType + ' \u2014 ' + (WALK_NAME[w.walkType] || w.walkType),
             whenLabel(w),
+            // Unlike Publish, the export KEEPS projected walks -- it is an
+            // internal working document and leaving them out would hide real
+            // upcoming workload. They are labelled instead so nobody mistakes
+            // a calculated date for a booked one.
+            w.projected ? 'Projected' : 'Scheduled',
             w.jobNumber || '',
             coreCommunity(w.community) || w.community || '',
             w.address || '',
@@ -1602,6 +1693,17 @@
         var field = WALK_FIELD[p.walkType].manager;
         var fields = {};
         fields[field] = p.toManagerId ? [p.toManagerId] : [];
+        // Materialize a projected QAI/QAA date at the moment someone actually
+        // takes the walk -- never on a timer, and never when the walk is being
+        // unassigned (no manager means no decision was made, so the date stays
+        // calculated and keeps tracking Projected Completion). update-job.js
+        // whitelists 'QAI Date'/'QAA Date' as date fields, and its
+        // checkSchedulingConflict() already prefers a date arriving in the same
+        // request over the record's stored one, so the cap check sees the right
+        // day without any server change.
+        if (p.projectedDate && p.toManagerId && p.dateField) {
+          fields[p.dateField] = p.projectedDate;
+        }
         // force is harmless on entries that have no conflict -- the server
         // check would return conflict:false for them anyway -- so it is set
         // for the whole batch rather than resolved per entry. See btnSubmit's
@@ -1622,7 +1724,15 @@
               // Reflect the change locally so the board doesn't flicker back
               // to the old assignment before the post-submit refresh lands.
               var job = state.jobs.find(function (j) { return j.id === p.recordId; });
-              if (job) job.fields[field] = p.toManagerId ? [p.toManagerId] : [];
+              if (job) {
+                job.fields[field] = p.toManagerId ? [p.toManagerId] : [];
+                // Mirror the date write too, or buildWalks() would re-derive
+                // this walk as projected on the very next render and show a
+                // PROJECTED badge on a walk that was just made real.
+                if (p.projectedDate && p.toManagerId && p.dateField) {
+                  job.fields[p.dateField] = p.projectedDate;
+                }
+              }
             }
           });
         }).catch(function (err) {
@@ -1739,6 +1849,12 @@
         recordId: w.recordId, walkType: w.walkType, jobNumber: w.jobNumber,
         fromManagerId: w.managerId || null, fromManagerName: managerName(w.managerId),
         toManagerId: p.toManagerId || null, toManagerName: managerName(p.toManagerId),
+        // Re-derived from the LIVE walk, never from the saved draft: between
+        // saving and restoring, the sync may have given this walk a real date
+        // (or moved PCD), and a stale projected date out of localStorage would
+        // then be written over the current one.
+        projectedDate: w.projected ? w.raw : null,
+        dateField: WALK_FIELD[w.walkType].date,
         status: 'staged', error: null
       });
       result.restoredPending++;
