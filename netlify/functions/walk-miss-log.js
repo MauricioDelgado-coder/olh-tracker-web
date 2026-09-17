@@ -11,11 +11,13 @@
  *         {recordId, job, walkType, missedDate?, reason, note?, page?}
  *         -> {entry}
  *
- *   GET   /api/walk-miss-log?recordId=rec…[&walkType=QAI]
- *         -> {entries:[…]}   (newest first)
+ *   GET   /api/walk-miss-log[?recordId=rec…][&walkType=QAI]
+ *         -> {entries:[…]}   (newest first; whole log when recordId is omitted,
+ *                             which is how the missed-walks reconcile queue
+ *                             reads it)
  *
  *   PATCH /api/walk-miss-log
- *         {recordId, walkType}
+ *         {recordId, walkType, missId?}
  *         -> {entry|null}    marks the most recent unreconciled entry for that
  *                             job+walk type Reconciled -- mirrors the per-type
  *                             "Walk Miss Reconciled" checkbox on Jobs, which
@@ -50,10 +52,17 @@ const str = (v) => (v == null ? '' : String(v));
 
 function entryOf(rec) {
   const f = rec.fields || {};
+  // A linked-record field comes back from the REST API as an array of record
+  // IDs, so this is the Jobs record id -- NOT the Job #, despite the `job`
+  // key's name. append() overwrites `job` with the real Job # from the body;
+  // a GET has no body to take it from, so callers that need to join back to
+  // Jobs must use jobRecordId and look the Job # up there.
+  const link = (Array.isArray(f.Job) && f.Job[0]) || '';
   return {
     id: f['Miss Id'] || rec.id,
     recordId: rec.id,
-    job: (Array.isArray(f.Job) && f.Job[0]) || '',
+    jobRecordId: link,
+    job: link,
     walkType: f['Walk Type'] || '',
     missedDate: f['Missed Date'] || '',
     reason: f['Miss Reason'] || '',
@@ -134,21 +143,25 @@ async function list(event) {
   const session = await A.requireSession(event);
   const q = event.queryStringParameters || {};
   const recordId = str(q.recordId).trim();
-  if (!recordId) return A.reply(400, { error: 'Pass ?recordId=rec… (the Jobs record id).' });
 
-  const clauses = ['{Job} = "' + A.esc(recordId) + '"'];
   // {Job} on a linked-record field renders as the linked record's primary
   // field value (Job #) in a filter formula, not the record id -- Airtable's
   // formula language has no direct "does this link contain id X" operator, so
   // list-and-filter client-side instead of trusting a formula on the link.
+  //
+  // recordId is OPTIONAL: omit it and this returns the whole log, which is
+  // what the reconcile queue on missed-walks.html reads. There is no
+  // maxRecords cap here either -- listRecords pages on its own, and a cap
+  // truncates the OLDEST entries first, which are precisely the unreconciled
+  // misses a queue exists to surface.
   void session;
   const recs = await A.listRecords(A.TABLES.walkMissLog, {
     'sort[0][field]': 'Logged At',
-    'sort[0][direction]': 'desc',
-    maxRecords: '200'
+    'sort[0][direction]': 'desc'
   });
   let entries = recs
-    .filter((r) => Array.isArray(r.fields && r.fields.Job) && r.fields.Job.indexOf(recordId) >= 0)
+    .filter((r) => !recordId ||
+      (Array.isArray(r.fields && r.fields.Job) && r.fields.Job.indexOf(recordId) >= 0))
     .map(entryOf);
   if (q.walkType) {
     const wt = str(q.walkType).trim().toUpperCase();
@@ -164,6 +177,11 @@ async function reconcile(event) {
 
   const recordId = str(body.recordId).trim();
   const walkType = str(body.walkType).trim().toUpperCase();
+  // Optional, and preferred when the caller has it. A job can carry several
+  // misses of the SAME walk type on different days (missed, rescheduled,
+  // missed again), so "most recent unreconciled" is a guess. missId names the
+  // exact row the person clicked instead of guessing.
+  const missId = str(body.missId).trim();
   if (!/^rec[A-Za-z0-9]{14}$/.test(recordId)) {
     return A.reply(400, { error: 'Pass a valid Jobs recordId.' });
   }
@@ -171,15 +189,16 @@ async function reconcile(event) {
     return A.reply(400, { error: '"walkType" must be one of: ' + WALK_TYPES.join(', ') + '.' });
   }
 
+  // No maxRecords: a cap drops the oldest rows, which are the ones most likely
+  // to still be unreconciled.
   const recs = await A.listRecords(A.TABLES.walkMissLog, {
     'sort[0][field]': 'Logged At',
-    'sort[0][direction]': 'desc',
-    maxRecords: '200'
+    'sort[0][direction]': 'desc'
   });
   const hit = recs.find((r) =>
     Array.isArray(r.fields && r.fields.Job) && r.fields.Job.indexOf(recordId) >= 0 &&
     (r.fields['Walk Type'] || '') === walkType &&
-    !r.fields.Reconciled
+    (missId ? (r.fields['Miss Id'] || '') === missId : !r.fields.Reconciled)
   );
   if (!hit) return A.reply(200, { entry: null });
 
