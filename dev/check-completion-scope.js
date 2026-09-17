@@ -88,9 +88,13 @@ async function allRows() {
   const C = {
     Active:        (f) => (f['Record Status'] || '') === 'Active',
     started:       (f) => !!iso(f['Actual Start Date']),
-    notComplete:   (f) => !iso(f['Actual Completion']),
+    // Suffixed names only. dev/sync_coe_to_airtable.py writes 'Actual
+    // Completion Date' / 'Projected Completion Date'; the no-suffix fields are
+    // the ones nothing writes, so breaking the count down on them reported 0
+    // for every clause after 'started' and made a healthy scope look broken.
+    notComplete:   (f) => !iso(f['Actual Completion Date']),
     noActualCoe:   (f) => !iso(f['Actual COE Date']),
-    projFrom0701:  (f) => iso(f['Projected Completion']) >= '2026-07-01',
+    projFrom0701:  (f) => iso(f['Projected Completion Date']) >= '2026-07-01',
     lotBSWM:       (f) => ['B', 'S', 'W', 'M'].includes((f['Lot Status'] || '').trim().toUpperCase())
   };
   console.log('\n=== cumulative ===');
@@ -104,7 +108,7 @@ async function allRows() {
   const bad = [
     ['archived rows',          inScope.filter((f) => (f['Record Status'] || '') !== 'Active')],
     ['not started',            inScope.filter((f) => !iso(f['Actual Start Date']))],
-    ['already complete',       inScope.filter((f) => !!iso(f['Actual Completion']))],
+    ['already complete',       inScope.filter((f) => !!iso(f['Actual Completion Date']))],
     ['has an Actual COE',      inScope.filter((f) => !!iso(f['Actual COE Date']))],
     ['lot status outside BSWM', inScope.filter((f) => !C.lotBSWM(f))]
   ];
