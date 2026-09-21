@@ -698,6 +698,32 @@ const PAGES = {
   'completion.html': {
     data: true, inject: true, walkRef: false, multiselect: true, caches: [],
     patches: [
+      /* 09/21: THREE FIXES LIVE IN dev/fix-completion-persistence.js, NOT HERE.
+       * Re-run it after any fresh export of this page, alongside the two
+       * multiselect scripts named below. Same reasoning as those: the changes
+       * are structural enough that inline patch strings would be more fragile
+       * than a script with its own exact-match assertions. It is idempotent.
+       *
+       *   1. Power/Water/NOC/Construction Risk/Land Risk all guard on canEdit
+       *      BEFORE calling commit(), and commit() holds the only deny toast --
+       *      so for anyone without tracker.edit the control was inert with no
+       *      message at all. That is every ACM: there is no ACM role, they sit
+       *      on `cm`, which carries suite.view + page.home + page.monthly1on1
+       *      and nothing else. Reported as "checking risk doesn't save"; it
+       *      never saved because the click did nothing.
+       *   2. The olh-data listener was bound only inside the "no data yet"
+       *      branch of componentDidMount, so when live-loader.js won the race
+       *      it never bound and the page ignored every tab-focus refetch.
+       *      NOTE: the comment above claiming the design "listens for the
+       *      olh-data event and clears its own row memo" was true only for
+       *      that one branch. It is unconditional now.
+       *   3. The page wrote no audit entry -- 0 rows out of 11,196 while every
+       *      other editable page logged -- so edits made here left the homesite
+       *      Change History blank and looked lost.
+       *
+       * caches:[] stays correct: that mechanism anchors on "const tick = …",
+       * which this page does not have. Fix 2 clears _rows directly instead.
+       */
       /* 08/17: Lot Type/Stage/Community/Construction Manager/Area
        * Construction Manager converted from single-value <sc-raw-select> to
        * <olh-multiselect> (dev/multiselect.js), matching the same-day
