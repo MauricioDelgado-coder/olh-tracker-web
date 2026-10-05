@@ -277,6 +277,12 @@ def pat():
     return v
 
 
+class IteratorExpired(Exception):
+    """Airtable dropped a list-records pagination offset (422
+    LIST_RECORDS_ITERATOR_NOT_AVAILABLE). The offset cannot be retried -- the
+    only fix is to start the listing over from the first page."""
+
+
 def airtable(method, path, body=None, attempts=4):
     """One Airtable call, retried on transport failures and 429/5xx.
 
@@ -299,6 +305,8 @@ def airtable(method, path, body=None, attempts=4):
                 return json.loads(raw) if raw else None
         except urllib.error.HTTPError as e:
             detail = e.read().decode()[:400]
+            if e.code == 422 and 'LIST_RECORDS_ITERATOR_NOT_AVAILABLE' in detail:
+                raise IteratorExpired(path)
             if e.code in (429, 500, 502, 503, 504) and attempt < attempts:
                 print('    Airtable %d, retrying in %.0fs' % (e.code, delay), flush=True)
             else:
@@ -321,7 +329,26 @@ def fetch_jobs():
     not an absence. Duplicate Job # values are reported because Airtable does not
     enforce uniqueness on a primary field, so a duplicated table looks completely
     healthy until half the updates land on the copy nobody is looking at.
+
+    If Airtable expires the pagination offset mid-listing (seen when a slow page
+    retry lets it go stale), the partial result is thrown away and the listing
+    starts over from page 1 -- a half-read table would make every row on the
+    unread pages look absent.
     """
+    restarts = 3
+    for attempt in range(restarts + 1):
+        try:
+            return _fetch_jobs_once()
+        except IteratorExpired as e:
+            if attempt >= restarts:
+                die('Airtable pagination offset expired %d times in a row on %s; '
+                    'giving up. Re-run the sync.' % (restarts + 1, e))
+            print('    Airtable pagination offset expired, re-reading Jobs from '
+                  'page 1 (restart %d of %d)' % (attempt + 1, restarts), flush=True)
+            time.sleep(2)
+
+
+def _fetch_jobs_once():
     records, offset, blank, dupes = {}, None, [], {}
     while True:
         path = '/%s?pageSize=100%s' % (JOBS_TABLE, ('&offset=' + offset) if offset else '')

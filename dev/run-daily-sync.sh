@@ -126,12 +126,16 @@ cd "$REPO" || { say "FAILED: no repo at $REPO"; exit 1; }
 # OLH_SYNC_ORIGIN=launchd tags every Sync History row this run writes so the
 # tracker's sync-history page can tell an unattended run from someone running
 # the script by hand (which never sets this, and so logs as "manual").
-if AIRTABLE_PAT="$PAT" OLH_SYNC_ORIGIN=launchd python3 dev/sync_coe_to_airtable.py --out "$OUT" >> "$LOG" 2>&1; then
+# Capture the exit code directly. `status=$?` after an `if ... fi` with no else
+# branch always reads 0, which logged every failure as "exit 0" and let launchd
+# record failed runs as successes.
+AIRTABLE_PAT="$PAT" OLH_SYNC_ORIGIN=launchd python3 dev/sync_coe_to_airtable.py --out "$OUT" >> "$LOG" 2>&1
+status=$?
+if [ "$status" -eq 0 ]; then
   say "=== done ==="
   exit 0
 fi
 
-status=$?
 say "=== FAILED (exit $status) -- the tracker is still showing the previous pull ==="
 say "    Read the lines above. A verification failure usually means the upstream"
 say "    data changed shape, not that the script is broken."
