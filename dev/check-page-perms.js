@@ -28,7 +28,7 @@ const PAGES = ['page.home', 'page.mywalks', 'page.tracker', 'page.completion', '
   'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload',
   'page.walkstoschedule', 'page.admin', 'page.keys', 'page.sanmpr', 'page.synchistory', 'page.redflags',
   'page.bonus', 'page.bonusapproval', 'page.caseaging', 'page.dailysummary', 'page.monthly1on1', 'page.qabonus',
-  'page.teamdaily', 'page.team1on1'];
+  'page.teamdaily', 'page.team1on1', 'page.sanadmin'];
 
 console.log('\n=== the catalog ===');
 for (const p of PAGES) {
@@ -36,7 +36,8 @@ for (const p of PAGES) {
   else bad(p + ' is a known permission', 'missing from PERMS, so normalizeMatrix drops it');
 }
 eq('PERMS is capabilities then pages', A.PERMS, [
-  'suite.view', 'tracker.edit', 'walk.complete', 'walk.schedule', 'optimizer.apply', 'roster.manage', 'sandbox.edit'
+  'suite.view', 'tracker.edit', 'walk.complete', 'walk.schedule', 'optimizer.apply', 'roster.manage', 'sandbox.edit',
+  'sanroster.manage'
 ].concat(PAGES));
 
 console.log('\n=== every page has a refusal message ===');

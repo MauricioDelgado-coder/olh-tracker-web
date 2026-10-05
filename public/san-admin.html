@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>SAN Admin — OLH Tracker</title>
+<style>
+  :root{
+    --navy:#1B2A58; --ink:#2B2620; --muted:#6F6963; --faint:#908A82;
+    --border:#E4DED2; --bg:#FBF8F3; --card:#ffffff;
+    --amber-bg:#FFF8E1; --amber-ink:#7C4A03; --amber-border:#F0DFAE;
+    --red-bg:#FDECEA; --red-ink:#7F1D1D; --red-border:#F3C6C2;
+    --green-bg:#EAF6EE; --green-ink:#1E5B34; --green-border:#C6E6D2;
+  }
+  *{box-sizing:border-box}
+  body{ margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  a{color:var(--navy)}
+  header.top{
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    padding:14px 20px; background:var(--navy); position:sticky; top:0; z-index:50; flex-wrap:wrap;
+  }
+  header.top h1{ margin:0; font:400 22px/1.2 Georgia,"Times New Roman",serif; color:#fff; letter-spacing:-.01em; }
+  .who{ font-size:12px; color:#C7BFB2; }
+  .navlinks{ display:flex; gap:8px; flex-wrap:wrap; }
+  header.top a.home{
+    display:inline-flex; align-items:center; height:30px; padding:0 13px;
+    border:1px solid rgba(255,255,255,.28); border-radius:4px; color:#C7BFB2; font-size:13px; font-weight:500; text-decoration:none; white-space:nowrap;
+  }
+  header.top a.home:hover{ background:rgba(255,255,255,.10); color:#fff; }
+  main{ max-width:960px; margin:0 auto; padding:22px 20px 80px; }
+  .banner{ padding:12px 16px; border-radius:8px; font-size:13.5px; margin-bottom:12px; }
+  .banner.error{ background:var(--red-bg); color:var(--red-ink); border:1px solid var(--red-border); }
+  .banner.ok{ background:var(--green-bg); color:var(--green-ink); border:1px solid var(--green-border); }
+  .banner.link{ background:var(--amber-bg); color:var(--amber-ink); border:1px solid var(--amber-border); }
+  .linkrow{ display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
+  .linkrow input{ flex:1 1 360px; font:12.5px ui-monospace,Menlo,monospace; }
+  .card{ background:var(--card); border:1px solid var(--border); border-radius:10px; padding:20px 22px; margin-bottom:18px; }
+  .card h2{ margin:0 0 6px; font:400 18px/1.2 Georgia,"Times New Roman",serif; color:var(--navy); }
+  .sub{ color:var(--muted); font-size:13px; margin:0 0 14px; }
+  .grid{ display:grid; grid-template-columns:1fr 1fr auto; gap:12px; align-items:end; }
+  @media (max-width:640px){ .grid{ grid-template-columns:1fr; } }
+  label{ display:block; font-size:11.5px; font-weight:600; color:var(--muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:.03em; }
+  input{ width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:6px; font-size:14px; background:#fff; color:var(--ink); }
+  input:focus{ outline:2px solid var(--navy); outline-offset:1px; }
+  button{ cursor:pointer; border:none; border-radius:6px; padding:9px 16px; font-size:13.5px; font-weight:600; white-space:nowrap; }
+  button.primary{ background:var(--navy); color:#fff; }
+  button.ghost{ background:#fff; color:var(--navy); border:1px solid var(--border); padding:6px 11px; font-size:12.5px; }
+  button.danger{ background:#fff; color:var(--red-ink); border:1px solid var(--red-border); padding:6px 11px; font-size:12.5px; }
+  button:disabled{ opacity:.5; cursor:not-allowed; }
+  .tablewrap{ overflow-x:auto; }
+  table{ width:100%; border-collapse:collapse; font-size:13px; }
+  th, td{ text-align:left; padding:9px 8px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  th{ font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); }
+  td.actions{ display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+  .pill{ font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:10px; text-transform:uppercase; }
+  .pill.active{ background:var(--green-bg); color:var(--green-ink); }
+  .pill.pending{ background:var(--amber-bg); color:var(--amber-ink); }
+  .pill.off{ background:#F1EBE1; color:var(--muted); }
+  .empty{ color:var(--muted); font-size:13px; padding:10px 2px; }
+  .fine{ font-size:12px; color:var(--faint); margin-top:10px; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div>
+    <h1>SAN Admin</h1>
+    <div class="who" id="whoLine">Loading…</div>
+  </div>
+  <div class="navlinks">
+    <a class="home" href="/tracker-san-mpr">SAN MPR</a>
+    <a class="home" href="/">All Views</a>
+  </div>
+</header>
+
+<main>
+  <div id="banners"></div>
+  <div id="content">Loading…</div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  var API = '/api';
+  var SESSION_KEY = 'olh.session.v1';
+
+  /* ---- Auth (same shared OLHAuth session contract as case-aging.html) ---- */
+  function getSession() {
+    try { var v = localStorage.getItem(SESSION_KEY); return v ? JSON.parse(v) : null; }
+    catch (e) { return null; }
+  }
+  function authHeaders(extra) {
+    var s = getSession();
+    if (!s || !s.token) throw new Error('You are not signed in. Sign in at the OLH Tracker home page, then reload this page.');
+    var h = Object.assign({ Accept: 'application/json' }, extra || {});
+    h.Authorization = 'Bearer ' + s.token;
+    h['X-OLH-Token'] = 'Bearer ' + s.token;
+    return h;
+  }
+  function call(method, path, payload) {
+    var opts = { method: method, headers: authHeaders(payload ? { 'Content-Type': 'application/json' } : null) };
+    if (payload) opts.body = JSON.stringify(payload);
+    return fetch(API + path, opts).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (body) {
+        if (res.status === 401) { var e = new Error((body && body.error) || 'Your session has expired.'); e.status = 401; throw e; }
+        if (!res.ok || !body) throw new Error((body && body.error) || (path + ' failed (' + res.status + ')'));
+        return body;
+      });
+    });
+  }
+
+  var state = { user: null, can: [], users: [], loading: true, error: '', busy: '', notice: null, link: null };
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  function fmtTime(iso) {
+    var d = new Date(iso); if (isNaN(d.getTime())) return '';
+    return d.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  }
+
+  function statusOf(u) {
+    if (!u.active) return '<span class="pill off">Deactivated</span>';
+    if (u.pending) return '<span class="pill pending">Invite pending</span>';
+    return '<span class="pill active">Active</span>';
+  }
+
+  function rowHtml(u) {
+    var dis = state.busy ? ' disabled' : '';
+    var linkBtn = u.active
+      ? '<button class="ghost" data-act="reset" data-id="' + esc(u.id) + '"' + dis + '>' +
+          (u.pending ? 'New invite link' : 'Reset password') + '</button>'
+      : '';
+    var toggle = u.active
+      ? '<button class="danger" data-act="deactivate" data-id="' + esc(u.id) + '"' + dis + '>Deactivate</button>'
+      : '<button class="ghost" data-act="reactivate" data-id="' + esc(u.id) + '"' + dis + '>Reactivate</button>';
+    return '<tr><td>' + esc(u.name) + '</td><td>' + esc(u.email) + '</td><td>' + statusOf(u) + '</td>' +
+      '<td class="actions">' + linkBtn + toggle + '</td></tr>';
+  }
+
+  function render() {
+    document.getElementById('whoLine').textContent = state.user ? state.user.name : 'Not signed in';
+
+    var b = '';
+    if (state.notice) b += '<div class="banner ' + (state.notice.ok ? 'ok' : 'error') + '">' + esc(state.notice.text) + '</div>';
+    if (state.link) {
+      b += '<div class="banner link"><b>' + (state.link.kind === 'invite' ? 'Invite link' : 'Password reset link') +
+        ' for ' + esc(state.link.email) + '</b> \u2014 send this to them yourself (it is not emailed). ' +
+        'It works once and expires ' + esc(fmtTime(state.link.expiresAt)) + '. It will not be shown again.' +
+        '<div class="linkrow"><input id="linkBox" readonly value="' + esc(state.link.url) + '">' +
+        '<button class="primary" id="copyBtn">Copy link</button></div></div>';
+    }
+    document.getElementById('banners').innerHTML = b;
+    var copy = document.getElementById('copyBtn');
+    if (copy) copy.onclick = copyLink;
+
+    var content = document.getElementById('content');
+    if (state.loading) { content.innerHTML = ''; return; }
+    if (state.error) { content.innerHTML = '<div class="empty">' + esc(state.error) + '</div>'; return; }
+    // Same wording DENY['page.sanadmin'] produces server-side.
+    if (state.can.indexOf('page.sanadmin') < 0) {
+      content.innerHTML = '<div class="empty">Your role does not have access to the SAN Admin page.</div>';
+      return;
+    }
+
+    var dis = state.busy ? ' disabled' : '';
+    var list = state.users.length
+      ? '<div class="tablewrap"><table><thead><tr><th>Name</th><th>Email</th><th>Status</th><th></th></tr></thead><tbody>' +
+          state.users.map(rowHtml).join('') + '</tbody></table></div>'
+      : '<div class="empty">No SAN users yet.</div>';
+
+    content.innerHTML =
+      '<div class="card"><h2>Add a SAN User</h2>' +
+        '<p class="sub">New users get SAN MPR and SAN Homesite Detail access only. You will get a one-time invite link to send them.</p>' +
+        '<div class="grid">' +
+          '<div><label for="newName">Name</label><input id="newName" autocomplete="off"></div>' +
+          '<div><label for="newEmail">Email</label><input id="newEmail" type="email" autocomplete="off"></div>' +
+          '<div><button class="primary" id="createBtn"' + dis + '>' + (state.busy === 'create' ? 'Creating\u2026' : 'Create User') + '</button></div>' +
+        '</div></div>' +
+      '<div class="card"><h2>SAN Users</h2>' +
+        '<p class="sub">Only regular SAN user accounts are listed. SAN Admins and OLH accounts are managed by an OLH admin.</p>' +
+        list +
+        '<div class="fine">Resetting a password signs that person out everywhere right away. Deactivating also signs them out.</div>' +
+      '</div>';
+
+    var cb = document.getElementById('createBtn');
+    if (cb) cb.onclick = createUser;
+    Array.prototype.forEach.call(content.querySelectorAll('button[data-act]'), function (btn) {
+      btn.onclick = function () { rowAction(btn.getAttribute('data-act'), btn.getAttribute('data-id')); };
+    });
+  }
+
+  function fail(err) {
+    state.busy = '';
+    state.notice = { ok: false, text: (err && err.message) ? err.message : String(err) };
+    render();
+  }
+
+  function loadUsers() {
+    return call('GET', '/san-users').then(function (d) { state.users = Array.isArray(d.users) ? d.users : []; });
+  }
+
+  function createUser() {
+    var name = document.getElementById('newName').value.trim();
+    var email = document.getElementById('newEmail').value.trim();
+    if (!name || !email) { state.notice = { ok: false, text: 'Enter a name and an email address.' }; state.link = null; render(); return; }
+    state.busy = 'create'; state.notice = null; state.link = null; render();
+    call('POST', '/san-users', { action: 'create', name: name, email: email }).then(function (d) {
+      state.link = { kind: 'invite', email: d.user.email, url: d.inviteUrl, expiresAt: d.expiresAt };
+      state.notice = { ok: true, text: d.user.name + ' was added as a SAN user.' };
+      return loadUsers();
+    }).then(function () { state.busy = ''; render(); }).catch(fail);
+  }
+
+  function rowAction(act, id) {
+    var u = state.users.filter(function (x) { return x.id === id; })[0];
+    if (!u) return;
+    if (act === 'deactivate' && !window.confirm('Deactivate ' + u.name + '? They will be signed out and unable to sign in.')) return;
+    if (act === 'reset' && !u.pending && !window.confirm('Reset the password for ' + u.name + '? They will be signed out everywhere until they set a new one.')) return;
+    state.busy = act; state.notice = null; state.link = null; render();
+    var p = act === 'reset'
+      ? call('POST', '/san-users', { action: 'reset', userId: id }).then(function (d) {
+          state.link = { kind: d.kind, email: d.user.email, url: d.inviteUrl, expiresAt: d.expiresAt };
+          state.notice = { ok: true, text: (d.kind === 'invite' ? 'New invite link issued for ' : 'Password reset link issued for ') + d.user.name + '.' };
+        })
+      : call('PATCH', '/san-users', { userId: id, active: act === 'reactivate' }).then(function (d) {
+          state.notice = { ok: true, text: d.user.name + (d.user.active ? ' was reactivated.' : ' was deactivated.') };
+        });
+    p.then(loadUsers).then(function () { state.busy = ''; render(); }).catch(fail);
+  }
+
+  function copyLink() {
+    var box = document.getElementById('linkBox');
+    if (!box) return;
+    var done = function () { var b = document.getElementById('copyBtn'); if (b) b.textContent = 'Copied'; };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(box.value).then(done, function () { box.select(); });
+    } else { box.select(); try { document.execCommand('copy'); done(); } catch (e) {} }
+  }
+
+  /* ---- Boot ---- */
+  var s = getSession();
+  if (!s || !s.token) {
+    state.loading = false;
+    state.error = 'You are not signed in. Sign in at the OLH Tracker home page, then reload this page.';
+    render();
+  } else {
+    call('GET', '/session').then(function (d) {
+      state.user = d.user || null;
+      state.can = d.can || [];
+      return state.can.indexOf('page.sanadmin') >= 0 ? loadUsers() : null;
+    }).then(function () { state.loading = false; render(); })
+      .catch(function (err) {
+        state.loading = false;
+        state.error = (err && err.status === 401)
+          ? 'Your session has expired. Sign in again at the OLH Tracker home page, then reload this page.'
+          : 'Could not load this page: ' + (err && err.message ? err.message : String(err));
+        render();
+      });
+  }
+})();
+</script>
+</body>
+</html>

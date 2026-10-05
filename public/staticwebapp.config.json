@@ -34,6 +34,7 @@
     { "route": "/sync-conflicts", "rewrite": "/sync-conflicts.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
     { "route": "/tracker-san-mpr", "rewrite": "/tracker-san-mpr.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
     { "route": "/homesite-san", "rewrite": "/homesite-san.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
+    { "route": "/san-admin", "rewrite": "/san-admin.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
     { "route": "/red-flags", "rewrite": "/red-flags.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
     { "route": "/red-flags-cel-no-dates", "rewrite": "/red-flags-cel-no-dates.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },
     { "route": "/red-flags-no-co", "rewrite": "/red-flags-no-co.html", "headers": { "Cache-Control": "no-store, must-revalidate" } },

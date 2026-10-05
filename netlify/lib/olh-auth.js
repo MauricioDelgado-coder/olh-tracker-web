@@ -372,7 +372,7 @@ const ALL_PAGES = [
   'page.qamgmt', 'page.missedwalks', 'page.scheduler', 'page.timeoff', 'page.workload',
   'page.walkstoschedule', 'page.admin', 'page.keys', 'page.sanmpr', 'page.synchistory', 'page.redflags',
   'page.bonus', 'page.bonusapproval', 'page.caseaging', 'page.dailysummary', 'page.monthly1on1', 'page.qabonus',
-  'page.teamdaily', 'page.team1on1'
+  'page.teamdaily', 'page.team1on1', 'page.sanadmin'
 ];
 
 // Mirrors DEFAULT_ROLES in the frontend auth module. Used when the Roles table
@@ -385,7 +385,8 @@ const ALL_PAGES = [
 // it's granted (and view-only for leadership) alongside it, not alongside
 // page.qamgmt.
 const DEFAULT_ROLES = {
-  admin: ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage', 'sandbox.edit'].concat(ALL_PAGES),
+  admin: ['suite.view', 'tracker.edit', 'walk.schedule', 'optimizer.apply', 'roster.manage', 'sandbox.edit',
+    'sanroster.manage'].concat(ALL_PAGES),
   // Restricted 2026-08-25 to the My Walks self-service page only
   // (public/my-walks.html, sandboxed/unlinked like game.html). QAMs no
   // longer get the tracker, completion, scheduler, qa-management,
@@ -435,17 +436,30 @@ const DEFAULT_ROLES = {
   // and NOT tracker.edit -- see the note on sandbox.edit below for why the two
   // capabilities are kept apart even though they validate the same field
   // whitelist shape.
-  sandbox: ['suite.view', 'page.home', 'page.sanmpr', 'sandbox.edit']
+  sandbox: ['suite.view', 'page.home', 'page.sanmpr', 'sandbox.edit'],
+  // SAN Admin: everything a SAN user has, plus the SAN Admin page, where they
+  // can create, reset and deactivate SAN users (role sandbox) and nobody else.
+  // sanroster.manage is NOT roster.manage: users.js and /api/invite never
+  // accept it, and /api/san-users enforces the sandbox-only scope server-side.
+  san_admin: ['suite.view', 'page.home', 'page.sanmpr', 'sandbox.edit', 'page.sanadmin', 'sanroster.manage']
 };
-const PERMS = ['suite.view', 'tracker.edit', 'walk.complete', 'walk.schedule', 'optimizer.apply', 'roster.manage', 'sandbox.edit']
+const PERMS = ['suite.view', 'tracker.edit', 'walk.complete', 'walk.schedule', 'optimizer.apply', 'roster.manage', 'sandbox.edit',
+  'sanroster.manage']
   .concat(ALL_PAGES);
-const ROLE_LOCKS = { admin: ['suite.view', 'roster.manage', 'page.admin'] };
+// san_admin's lock keeps the role meaning what its name says: the Roles grid
+// does not draw a column for sanroster.manage, so without this a grid save
+// could not be relied on to carry it through.
+const ROLE_LOCKS = {
+  admin: ['suite.view', 'roster.manage', 'page.admin'],
+  san_admin: ['suite.view', 'sanroster.manage', 'page.sanadmin']
+};
 
 /* Only admins run the console, so page.admin is never handed to anyone else --
    enforced here and not just in the grid, because the grid is a UI and this is
    the boundary. */
 const ADMIN_ONLY_PAGES = ['page.admin'];
-const IMPLIES_VIEW = ['tracker.edit', 'walk.complete', 'walk.schedule', 'optimizer.apply', 'roster.manage', 'sandbox.edit']
+const IMPLIES_VIEW = ['tracker.edit', 'walk.complete', 'walk.schedule', 'optimizer.apply', 'roster.manage', 'sandbox.edit',
+  'sanroster.manage']
   .concat(ALL_PAGES);
 
 /* An editing capability is meaningless without the page it edits, so granting
@@ -457,7 +471,8 @@ const NEEDS_PAGE = {
   'walk.schedule': 'page.walks',
   'optimizer.apply': 'page.scheduler',
   'roster.manage': 'page.admin',
-  'sandbox.edit': 'page.sanmpr'
+  'sandbox.edit': 'page.sanmpr',
+  'sanroster.manage': 'page.sanadmin'
 };
 
 const ROLE_ALIAS = {
@@ -467,12 +482,13 @@ const ROLE_ALIAS = {
   'customer care': 'ccr', 'customer care rep': 'ccr', 'ccr': 'ccr',
   'leadership': 'leadership', 'division leadership': 'leadership',
   'concierge': 'concierge', 'homebuyer concierge': 'concierge',
-  'sandbox': 'sandbox'
+  'sandbox': 'sandbox',
+  'san admin': 'san_admin', 'san_admin': 'san_admin'
 };
 const ROLE_LABEL = {
   admin: 'Admin', qam: 'QA Manager', cm: 'Construction Manager',
   ccr: 'Customer Care', leadership: 'Division Leadership', concierge: 'Concierge',
-  sandbox: 'Sandbox'
+  sandbox: 'Sandbox', san_admin: 'SAN Admin'
 };
 
 /**
@@ -871,7 +887,8 @@ const PAGE_LABEL = {
   'page.monthly1on1': 'Monthly One-on-One',
   'page.qabonus': 'QA Manager Monthly Bonus',
   'page.teamdaily': 'Team Daily Summaries',
-  'page.team1on1': 'Team One-on-Ones'
+  'page.team1on1': 'Team One-on-Ones',
+  'page.sanadmin': 'SAN Admin'
 };
 const DENY = {
   'suite.view': 'Your account does not have access to the OLH Suite yet. Ask an admin to grant it.',
@@ -886,7 +903,8 @@ const DENY = {
   // just because it holds an editing capability. Keeping them separate means
   // the sandbox role's write access ends at the sandbox table even if someone
   // calls the API directly instead of clicking through the UI.
-  'sandbox.edit': 'Your role can view the SAN MPR sandbox but not change it.'
+  'sandbox.edit': 'Your role can view the SAN MPR sandbox but not change it.',
+  'sanroster.manage': 'Only SAN Admins and admins can manage SAN user accounts.'
 };
 // Same sentence the frontend builds, so a refusal reads identically whether it
 // came from the page or from the API behind it.

@@ -72,7 +72,8 @@ const FUNCTIONS = [
   'team-1on1.js',
   'team-roster.js',
   'team-performance.js',
-  'audit-san.js'
+  'audit-san.js',
+  'san-users.js'
 ];
 
 /** Shared helpers. Kept outside functions/ on Netlify so it is never itself an

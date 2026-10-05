@@ -116,6 +116,9 @@ const ROUTES = [
   // SAN change log -> audit-san.js (Audit Log in the SAN base). The SAN pages'
   // fetch shim rewrites /api/audit to this.
   ['auditSan', 'audit-san', 'audit-san'],
+  // SAN user administration -> san-users.js (sanroster.manage; sandbox-role
+  // accounts only, enforced in the handler).
+  ['sanUsers', 'san-users', 'san-users'],
 
   // ---- Sync History (read-only log of daily Airtable sync runs) -> sync-history.js
   ['syncHistory', 'sync-history', 'sync-history'],
