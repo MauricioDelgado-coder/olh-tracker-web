@@ -71,13 +71,14 @@ const FUNCTIONS = [
   'team-daily-summary.js',
   'team-1on1.js',
   'team-roster.js',
-  'team-performance.js'
+  'team-performance.js',
+  'audit-san.js'
 ];
 
 /** Shared helpers. Kept outside functions/ on Netlify so it is never itself an
  *  endpoint; the same separation holds here because only src/index.js registers
  *  routes and it never registers this. */
-const LIB = ['olh-auth.js'];
+const LIB = ['olh-auth.js', 'audit-core.js'];
 
 const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 
