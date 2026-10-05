@@ -63,7 +63,10 @@ const KNOWN_SAFE = {
    * (no OLHAuth on the page, so no API exists), and it now says "Saved
    * locally" rather than "Saved". The deployed-but-unreachable case no longer
    * falls here at all -- it reverts the field and raises a Not Saved toast. */
-  'homesite.html::commit': 'remaining flash is the preview-only "Saved locally"; the live path reports from persist()'
+  'homesite.html::commit': 'remaining flash is the preview-only "Saved locally"; the live path reports from persist()',
+  /* Generated from homesite.html by dev/build-san-homesite.js -- identical
+     commit()/persist() code, only the fetch targets differ. */
+  'homesite-san.html::commit': 'generated copy of homesite.html; same preview-only "Saved locally" branch, live path reports from persist()'
 };
 
 /** Anything that tells the person a WRITE worked.
