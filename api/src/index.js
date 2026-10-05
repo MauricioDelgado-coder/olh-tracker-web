@@ -113,6 +113,9 @@ const ROUTES = [
   // checks as the live jobs/update-job routes. Powers tracker-san-mpr.html only.
   ['jobsSandboxSan', 'jobs-sandbox-san', 'jobs-sandbox-san'],
   ['updateJobSandboxSan', 'update-job-sandbox-san', 'update-job-sandbox-san'],
+  // SAN change log -> audit-san.js (Audit Log in the SAN base). The SAN pages'
+  // fetch shim rewrites /api/audit to this.
+  ['auditSan', 'audit-san', 'audit-san'],
 
   // ---- Sync History (read-only log of daily Airtable sync runs) -> sync-history.js
   ['syncHistory', 'sync-history', 'sync-history'],

@@ -20,8 +20,10 @@
 
 const A = require('../lib/olh-auth');
 
-const BASE_ID = 'appYX9df4lGO6G2uz';
-const JOBS_TABLE = 'tbltB2CIKBumT6sMK';  // Jobs (Sandbox - SAN)
+// SAN base ("SAN QA & Closing Tracker"), not the OLH base. IDs live in
+// olh-auth.js so the endpoints, the audit log and the sync agree on them.
+const BASE_ID = A.SAN_BASE_ID;
+const JOBS_TABLE = A.SAN_TABLES.jobs;
 const AIRTABLE_API = 'https://api.airtable.com/v0';
 
 const MAX_BODY_BYTES = 64 * 1024;

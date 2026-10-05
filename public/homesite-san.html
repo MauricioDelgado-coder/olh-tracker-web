@@ -8,15 +8,17 @@
        homesite.html. Do not hand-edit; re-run the script instead.
        Redirects this page's data calls to the SAN endpoints, the same way
        tracker-san-mpr.html does. Runs before the bundled page's own script.
-       /api/audit and /api/walk-config are NOT rewritten yet -- they move when
-       the SAN endpoints are repointed to the SAN base. */
+       Jobs, saves and the change log all go to the SAN base. /api/walk-config
+       is not rewritten: SAN has no walk roster of its own yet. */
     (function () {
       var ORIGINAL_FETCH = window.fetch.bind(window);
       var REWRITES = [
         ['/api/update-job-sandbox-san', null],
         ['/api/jobs-sandbox-san', null],
+        ['/api/audit-san', null],
         ['/api/update-job', '/api/update-job-sandbox-san'],
-        ['/api/jobs', '/api/jobs-sandbox-san']
+        ['/api/jobs', '/api/jobs-sandbox-san'],
+        ['/api/audit', '/api/audit-san']
       ];
       function rewrite(url) {
         var origin = window.location.origin;

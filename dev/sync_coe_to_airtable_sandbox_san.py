@@ -52,8 +52,10 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timezone
 
-BASE_ID = 'appYX9df4lGO6G2uz'
-JOBS_TABLE = 'tbltB2CIKBumT6sMK'  # Jobs (Sandbox - SAN) -- NOT the live Jobs table
+# SAN base ("SAN QA & Closing Tracker"), moved off the OLH base 2026-10-05.
+# Keep in step with SAN_BASE_ID / SAN_TABLES in netlify/lib/olh-auth.js.
+BASE_ID = 'appmo8ardxfpsohWH'
+JOBS_TABLE = 'tblRtKV7IRC6Yd7ce'  # Jobs (SAN base)
 AIRTABLE_API = 'https://api.airtable.com/v0'
 
 WORK = os.path.expanduser('~/.homesite_coe_report')

@@ -44,6 +44,19 @@ const TABLES = {
   ccrBonusCaseLog: 'tblMPsfjjermgPJOe'
 };
 
+/* ---- SAN base --------------------------------------------------------------
+ * San Antonio runs on its own base ("SAN QA & Closing Tracker"). Login stays
+ * here: Users and Roles live only in BASE_ID above, so a SAN page signs in with
+ * the same session as every OLH page. Only SAN homesite data and its change
+ * log live in the SAN base. Reach it with forBase(SAN_BASE_ID) -- never by
+ * swapping BASE_ID, which would send sign-in to a base with no Users table. */
+const SAN_BASE_ID = 'appmo8ardxfpsohWH';
+const SAN_TABLES = Object.freeze({
+  jobs: 'tblRtKV7IRC6Yd7ce',
+  managers: 'tblXKnoUr6DTVyfnm',
+  audit: 'tblPFPM1OlFbGTKbF'
+});
+
 /* ---- HTTP plumbing (shape matches the existing jobs.js) ------------------- */
 
 const JSON_HEADERS = {
@@ -117,8 +130,8 @@ function pat() {
   return String(v).trim();
 }
 
-async function airtable(method, pathSuffix, body) {
-  const res = await fetch(AIRTABLE_API + '/' + BASE_ID + pathSuffix, {
+async function airtableIn(baseId, method, pathSuffix, body) {
+  const res = await fetch(AIRTABLE_API + '/' + baseId + pathSuffix, {
     method,
     headers: Object.assign(
       { Authorization: 'Bearer ' + pat() },
@@ -144,8 +157,17 @@ async function airtable(method, pathSuffix, body) {
   return res.status === 204 ? null : res.json();
 }
 
+/** The OLH base. Every existing caller uses this and is unchanged. */
+function airtable(method, pathSuffix, body) {
+  return airtableIn(BASE_ID, method, pathSuffix, body);
+}
+
 /** Page through a table, optionally filtered. */
 async function listRecords(tableId, params) {
+  return listRecordsIn(BASE_ID, tableId, params);
+}
+
+async function listRecordsIn(baseId, tableId, params) {
   const records = [];
   let offset = null;
   let pages = 0;
@@ -153,7 +175,7 @@ async function listRecords(tableId, params) {
     const qs = new URLSearchParams({ pageSize: '100' });
     if (params) for (const [k, v] of Object.entries(params)) if (v != null) qs.append(k, v);
     if (offset) qs.set('offset', offset);
-    const json = await airtable('GET', '/' + tableId + '?' + qs.toString());
+    const json = await airtableIn(baseId, 'GET', '/' + tableId + '?' + qs.toString());
     if (json && Array.isArray(json.records)) records.push(...json.records);
     offset = (json && json.offset) || null;
     pages += 1;
@@ -203,6 +225,28 @@ const updateRecord = (tableId, id, fields) =>
   airtable('PATCH', '/' + tableId + '/' + id, { fields, typecast: true });
 
 const deleteRecord = (tableId, id) => airtable('DELETE', '/' + tableId + '/' + id);
+
+/**
+ * The same record helpers, bound to another base. Used for the SAN base:
+ *   const SAN = A.forBase(A.SAN_BASE_ID);
+ *   await SAN.listRecords(A.SAN_TABLES.audit, {...});
+ * Same PAT, same error shape, same paging limits as the OLH helpers.
+ */
+function forBase(baseId) {
+  const call = (method, pathSuffix, body) => airtableIn(baseId, method, pathSuffix, body);
+  const list = (tableId, params) => listRecordsIn(baseId, tableId, params);
+  return Object.freeze({
+    baseId,
+    airtable: call,
+    listRecords: list,
+    findOne: async (tableId, formula) =>
+      (await list(tableId, { filterByFormula: formula, maxRecords: '1' }))[0] || null,
+    createRecord: (tableId, fields) => call('POST', '/' + tableId, { fields, typecast: true }),
+    updateRecord: (tableId, id, fields) =>
+      call('PATCH', '/' + tableId + '/' + id, { fields, typecast: true }),
+    deleteRecord: (tableId, id) => call('DELETE', '/' + tableId + '/' + id)
+  });
+}
 
 /* ---- Passwords ------------------------------------------------------------ */
 
@@ -891,6 +935,7 @@ function fail(err) {
 
 module.exports = {
   crypto, BASE_ID, AIRTABLE_API, TABLES, PERMS, DEFAULT_ROLES, DENY,
+  SAN_BASE_ID, SAN_TABLES, forBase,
   JSON_HEADERS, reply, readJson, route, fail, sleep, esc,
   airtable, listRecords, findOne, createRecord, updateRecord, deleteRecord,
   caseAgingExceptionsApprovedCount, managersFrom,
