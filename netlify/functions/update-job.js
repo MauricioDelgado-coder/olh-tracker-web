@@ -26,6 +26,7 @@
 'use strict';
 
 const A = require('../lib/olh-auth');
+const JobsCache = require('../lib/jobs-cache');
 
 const BASE_ID = 'appYX9df4lGO6G2uz';
 const JOBS_TABLE = 'tblqpmwtZ6i4gtogl';
@@ -680,6 +681,12 @@ exports.handler = async (event) => {
       }
       return reply(res.status === 429 ? 429 : 502, { error: friendly });
     }
+
+    // Write through to the /api/jobs cache. Airtable's PATCH response is the
+    // whole post-write record, so it replaces the cached copy outright.
+    // Without this, every read for up to 30s served the pre-edit record and
+    // the edit appeared to revert (see lib/jobs-cache.js).
+    if (json && json.id && json.fields) JobsCache.applyWrite(json.id, json.fields);
 
     return reply(200, {
       ok: true,

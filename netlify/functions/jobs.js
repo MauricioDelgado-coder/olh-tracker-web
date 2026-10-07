@@ -25,7 +25,9 @@ const AIRTABLE_API = 'https://api.airtable.com/v0';
 
 // 30s in-memory cache. Netlify may reuse a warm container across invocations,
 // so several leaders loading at once will usually share one Airtable fetch.
-const CACHE_TTL_MS = 30 * 1000;
+// Lives in lib/jobs-cache.js (2026-10) so update-job.js can write through to
+// it -- see that file for the stale-after-edit bug this closes.
+const JobsCache = require('../lib/jobs-cache');
 
 // Airtable allows 5 requests/second/base. 220ms between pages keeps us at
 // ~4.5 req/s worst case, comfortably under the limit.
@@ -33,8 +35,6 @@ const PAGE_DELAY_MS = 220;
 
 // Hard stop so a malformed offset loop can never run away.
 const MAX_PAGES = 60;
-
-let cache = { at: 0, payload: null };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -127,14 +127,18 @@ exports.handler = async (event) => {
 
   const bust = event.queryStringParameters && event.queryStringParameters.refresh === '1';
   const now = Date.now();
-  if (!bust && cache.payload && now - cache.at < CACHE_TTL_MS) {
+  const hit = bust ? null : JobsCache.get(now);
+  if (hit) {
     return reply(200, {
-      ...cache.payload,
-      meta: { ...cache.payload.meta, cached: true, cacheAgeMs: now - cache.at }
+      ...hit.payload,
+      meta: { ...hit.payload.meta, cached: true, cacheAgeMs: hit.ageMs }
     });
   }
 
   try {
+    // Marks when this read began, so JobsCache.set() can re-apply any edit
+    // that landed while the pages below were still being fetched.
+    const startedAt = Date.now();
     // Managers first (1 page) so a bad table id fails fast and cheaply.
     const managerRecords = await fetchAllRecords(MANAGERS_TABLE, pat);
     await sleep(PAGE_DELAY_MS);
@@ -183,7 +187,9 @@ exports.handler = async (event) => {
       }
     };
 
-    cache = { at: Date.now(), payload };
+    // set() re-applies in-flight edits to `payload` in place, so this
+    // response carries them too, not only later cached reads.
+    JobsCache.set(payload, startedAt);
     return reply(200, payload);
   } catch (err) {
     const status = err && err.statusCode ? err.statusCode : 500;
