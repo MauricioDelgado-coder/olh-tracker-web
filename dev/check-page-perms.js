@@ -73,7 +73,8 @@ eq('sandbox role has page.sanmpr and sandbox.edit, nothing more sensitive',
     .filter((p) => A.DEFAULT_ROLES.sandbox.includes(p)),
   ['page.sanmpr', 'sandbox.edit']);
 eq('roleSlug recognizes sandbox', A.roleSlug('Sandbox'), 'sandbox');
-eq('roleLabel for sandbox', A.roleLabel('sandbox'), 'Sandbox');
+eq('roleLabel for sandbox', A.roleLabel('sandbox'), 'SAN User');
+eq('roleSlug recognizes the SAN User label', A.roleSlug('SAN User'), 'sandbox');
 eq('sandbox.edit does not imply tracker.edit',
   A.normalizeMatrix({ sandbox: ['suite.view', 'sandbox.edit'] }).sandbox.includes('tracker.edit'), false);
 eq('sandbox.edit drags page.sanmpr',

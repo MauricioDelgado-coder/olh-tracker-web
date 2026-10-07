@@ -189,8 +189,8 @@
     'page.bonus':          { label: 'CCR Monthly Bonus', isPage: true },
     'page.bonusapproval':  { label: 'Approvals (Bonus + Case Aging)', isPage: true },
     'page.caseaging':      { label: 'Case Aging Exception Request', isPage: true },
-    'page.sanmpr':         { label: 'SAN Sandbox Tracker', isPage: true },
-    'sandbox.edit':        { label: 'Edit Sandbox Data' },
+    'page.sanmpr':         { label: 'SAN MPR', isPage: true },
+    'sandbox.edit':        { label: 'Edit SAN Data' },
     'page.synchistory':    { label: 'Sync History', isPage: true },
     'page.admin':          { label: 'User Administration', isPage: true },
     'roster.manage':       { label: 'Manage Roster' }
@@ -204,7 +204,7 @@
   // comes entirely from state.roleLabels, loaded fresh from GET /api/roles.
   var ROLE_LABEL_FALLBACK = {
     admin: 'Admin', qam: 'QA Manager', cm: 'Construction Manager', ccr: 'Customer Care',
-    leadership: 'Division Leadership', concierge: 'Concierge', sandbox: 'Sandbox'
+    leadership: 'Division Leadership', concierge: 'Concierge', sandbox: 'SAN User', san_admin: 'SAN Admin'
   };
   var ROLE_ORDER_FALLBACK = ['admin', 'qam', 'cm', 'ccr', 'leadership', 'concierge', 'sandbox'];
   function roleLabelFor(slug) { return (state.roleLabels && state.roleLabels[slug]) || ROLE_LABEL_FALLBACK[slug] || slug; }

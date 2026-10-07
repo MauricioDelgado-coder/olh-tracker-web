@@ -482,13 +482,13 @@ const ROLE_ALIAS = {
   'customer care': 'ccr', 'customer care rep': 'ccr', 'ccr': 'ccr',
   'leadership': 'leadership', 'division leadership': 'leadership',
   'concierge': 'concierge', 'homebuyer concierge': 'concierge',
-  'sandbox': 'sandbox',
+  'sandbox': 'sandbox', 'san user': 'sandbox',
   'san admin': 'san_admin', 'san_admin': 'san_admin'
 };
 const ROLE_LABEL = {
   admin: 'Admin', qam: 'QA Manager', cm: 'Construction Manager',
   ccr: 'Customer Care', leadership: 'Division Leadership', concierge: 'Concierge',
-  sandbox: 'Sandbox', san_admin: 'SAN Admin'
+  sandbox: 'SAN User', san_admin: 'SAN Admin'
 };
 
 /**
@@ -877,7 +877,7 @@ const PAGE_LABEL = {
   'page.walkstoschedule': 'Walks To Schedule',
   'page.admin': 'User Administration',
   'page.keys': 'Keys',
-  'page.sanmpr': 'SAN MPR (Sandbox)',
+  'page.sanmpr': 'SAN MPR',
   'page.synchistory': 'Sync History',
   'page.redflags': 'Red Flags',
   'page.bonus': 'CCR Monthly Bonus',
@@ -903,7 +903,7 @@ const DENY = {
   // just because it holds an editing capability. Keeping them separate means
   // the sandbox role's write access ends at the sandbox table even if someone
   // calls the API directly instead of clicking through the UI.
-  'sandbox.edit': 'Your role can view the SAN MPR sandbox but not change it.',
+  'sandbox.edit': 'Your role can view SAN MPR but not change it.',
   'sanroster.manage': 'Only SAN Admins and admins can manage SAN user accounts.'
 };
 // Same sentence the frontend builds, so a refusal reads identically whether it

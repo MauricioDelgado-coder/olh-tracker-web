@@ -188,7 +188,7 @@
     { key: "page.home", label: "All Views (home)", href: "index.html", note: "The launcher. A role without this lands on the first page it can open." },
     { key: "page.mywalks", label: "My Walks", href: "my-walks.html", note: "A QA Manager\u2019s own assigned QAI/QAA/CEL/ACC walks \u2014 mark them complete and log buyer attendance." },
     { key: "page.tracker", label: "QA & Closing Tracker", href: "tracker.html", note: "The homesite grid \u2014 walk dates, meters, keys and notes." },
-    { key: "page.sanmpr", label: "SAN MPR (Sandbox)", href: "tracker-san-mpr.html", note: "San Antonio tracker sandbox on isolated data. Does not read or write the live OLH tracker." },
+    { key: "page.sanmpr", label: "SAN MPR", href: "tracker-san-mpr.html", note: "San Antonio QA & Closing tracker on its own Airtable base. Does not read or write the OLH tracker." },
     { key: "page.completion", label: "Completion Report", href: "completion.html", note: "Homesites under construction with their projected completion and closing dates." },
     { key: "page.walks", label: "Walk Reassignment", href: "game.html", note: "Drag-and-drop board for moving QAI/QAA/CEL/ACC walks between managers on a given day, with Lock & Publish and an Excel export." },
     { key: "page.qamgmt", label: "QA Management", href: "qa-management.html", note: "Today's walks by community \u2014 mark each one completed or missed." },
@@ -258,7 +258,8 @@
   // console reachable no matter what the grid is set to.
   var DEFAULT_ROLES = {
     admin: { label: "Admin", can: ["suite.view", "tracker.edit", "walk.schedule", "optimizer.apply", "roster.manage", "sandbox.edit"].concat(ALL_PAGES) },
-    sandbox: { label: "Sandbox", can: ["suite.view", "page.home", "page.sanmpr", "sandbox.edit"] },
+    sandbox: { label: "SAN User", can: ["suite.view", "page.home", "page.sanmpr", "sandbox.edit"] },
+    san_admin: { label: "SAN Admin", can: ["suite.view", "page.home", "page.sanmpr", "sandbox.edit", "sanroster.manage", "page.sanadmin"] },
     qam: { label: "QA Manager", can: ["suite.view", "walk.complete", "page.home", "page.mywalks", "page.monthly1on1"] },
     cm: { label: "Construction Manager", can: ["suite.view", "tracker.edit", "page.home", "page.tracker", "page.completion", "page.walks", "page.redflags", "page.monthly1on1"] },
     ccr: { label: "Customer Care", can: ["suite.view", "tracker.edit", "page.home", "page.tracker", "page.walks", "page.qamgmt", "page.missedwalks", "page.walkstoschedule", "page.bonus", "page.caseaging", "page.dailysummary", "page.monthly1on1"] },
@@ -326,7 +327,8 @@
     "construction manager": "cm", "cm": "cm",
     "customer care": "ccr", "customer care rep": "ccr", "ccr": "ccr",
     "leadership": "leadership", "division leadership": "leadership",
-    "sandbox": "sandbox", "concierge": "concierge"
+    "sandbox": "sandbox", "san user": "sandbox", "concierge": "concierge",
+    "san admin": "san_admin", "san_admin": "san_admin"
   };
 
   var state = { user: null, token: null, can: null, demo: false, base: "/api", ready: false };
