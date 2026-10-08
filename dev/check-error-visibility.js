@@ -49,6 +49,18 @@ const TPL_RE = /<script[^>]*type="__bundler\/template"[^>]*>([\s\S]*?)<\/script>
 
 /* binding -> why it is allowed to be conditional. */
 const KNOWN_SAFE = {
+  /* admin.html's Community Assignments tab. Both are written only by that
+   * tab's own actions -- loadComm/saveComm/applyComm, reached from the tab
+   * button, its Save/Reload/Update Homesites buttons -- and the tab body is
+   * the only place those controls exist. <sc-if admin> is the page gate (a
+   * non-admin never reaches any writer) and <sc-if commTab> is the tab that
+   * owns every writer, so neither can be false when a message is set. Both
+   * render at the top of the tab, outside its loading/ready branches, so a
+   * failed load is still visible. renderVals also blanks them on other tabs
+   * so a stale message never leaks into Users or Roles. */
+  'admin.html::commError': 'rendered at the top of <sc-if commTab>, the tab that owns every writer; <sc-if admin> gates the whole page',
+  'admin.html::commMsg': 'rendered at the top of <sc-if commTab>, the tab that owns every writer; <sc-if admin> gates the whole page',
+
   /* mWarn's own two bindings sit inside the manual-assign panel (<sc-if step>),
    * which is the bug this checker was written for. It is now ALSO surfaced by
    * panelWarn, which renders inside <sc-if sel> -- the selected-homesite panel

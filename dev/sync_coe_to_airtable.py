@@ -39,6 +39,7 @@ import socket
 import subprocess
 import sys
 import time
+import urllib.parse
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone
@@ -183,38 +184,69 @@ EXTRA_FIELDS = {
 # Area Construction Manager: derived, not synced.
 #
 # The Completion Report filters on ACM, but Salesforce has no such field on
-# Homesite__c -- the assignment is by community, and the mapping lives in
-# dev/acm-map.json (built from the ACM.xlsx roster, 55 communities across 3
-# ACMs). So it is computed here from the Community value this same sync writes,
-# which keeps the two consistent by construction: a job that moves community
-# gets the right ACM in the same pass.
+# Homesite__c -- the assignment is by community. Since 2026-10-08 that
+# assignment lives in the Community Assignments table in this same base
+# (ACM_TABLE below), edited from the Community Assignments tab on /admin. It
+# replaced dev/acm-map.json for OLH; that file is still read by the SAN sandbox
+# sync only. So ACM is computed here from the Community value this same sync
+# writes, which keeps the two consistent by construction: a job that moves
+# community gets the right ACM in the same pass.
 #
-# A community that is not in the map yields '' rather than a guess. Those show
-# as blank on the report, which is the true state -- an unmapped community, not
-# a homesite with no manager. Add it to acm-map.json when one appears.
+# A community with no row, or a row with no manager, yields '' rather than a
+# guess. Those show as blank on the report, which is the true state -- an
+# unassigned community, not a homesite with no manager. Assign it on /admin.
+#
+# Read once, lazily, on first use: the table needs AIRTABLE_PAT, which is not
+# checked until the sync actually starts. A failed read stops the run (via
+# airtable() -> die) rather than syncing every ACM blank.
+#
+# The same derivation runs in netlify/functions/community-assignments.js when
+# an admin saves, so a reassignment shows immediately; keep the key (squashed
+# whitespace, upper-case) and the "manager id AND name present" rule identical.
 # ---------------------------------------------------------------------------
 ACM_FIELD = 'Area Construction Manager'
-ACM_MAP_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'acm-map.json')
+ACM_TABLE = 'tblRI49xlslFx3wEL'
+
+_ACM_BY_COMMUNITY = None
 
 
-def load_acm_map():
-    try:
-        with open(ACM_MAP_PATH, encoding='utf-8') as fh:
-            raw = json.load(fh)
-    except FileNotFoundError:
-        die('missing %s -- the Area Construction Manager mapping. Regenerate it '
-            'from the ACM roster workbook rather than syncing the column blank.'
-            % ACM_MAP_PATH)
-    # Compare on a squashed key so trailing spaces or case in either source do
-    # not silently drop a community.
-    return {' '.join(str(k).split()).upper(): v for k, v in raw.items()}
-
-
-ACM_BY_COMMUNITY = load_acm_map()
+def load_acm_assignments():
+    out, dupes, offset = {}, set(), None
+    while True:
+        qs = 'pageSize=100&fields%5B%5D=Community&fields%5B%5D=Manager%20Name&fields%5B%5D=Manager%20User%20Id'
+        if offset:
+            qs += '&offset=' + urllib.parse.quote(offset)
+        data = airtable('GET', '/%s?%s' % (ACM_TABLE, qs)) or {}
+        for r in data.get('records', []):
+            f = r.get('fields', {})
+            key = ' '.join(str(f.get('Community') or '').split()).upper()
+            if not key:
+                continue
+            if key in out:
+                dupes.add(key)
+                continue
+            name = ' '.join(str(f.get('Manager Name') or '').split())
+            mid = str(f.get('Manager User Id') or '').strip()
+            out[key] = name if (name and mid) else ''
+        offset = data.get('offset')
+        if not offset:
+            break
+        time.sleep(0.22)
+    if dupes:
+        die('Community Assignments has more than one row for: %s\n'
+            'Delete the extra row(s) in Airtable; the sync will not guess which '
+            'manager is right.' % ', '.join(sorted(dupes)))
+    return out
 
 
 def acm_for(community):
-    return ACM_BY_COMMUNITY.get(' '.join(str(community or '').split()).upper(), '')
+    global _ACM_BY_COMMUNITY
+    if _ACM_BY_COMMUNITY is None:
+        _ACM_BY_COMMUNITY = load_acm_assignments()
+        print('  Area Construction Manager: %d communities in Community Assignments '
+              '(%d with a manager)' % (len(_ACM_BY_COMMUNITY),
+                                       sum(1 for v in _ACM_BY_COMMUNITY.values() if v)), flush=True)
+    return _ACM_BY_COMMUNITY.get(' '.join(str(community or '').split()).upper(), '')
 
 
 # field -> 'date' | 'datetime' | 'text', for normalisation and comparison.

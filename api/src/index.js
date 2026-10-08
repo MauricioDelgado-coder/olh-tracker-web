@@ -99,6 +99,9 @@ const ROUTES = [
   // ---- Permission matrix -> roles.js
   ['roles', 'roles', 'roles'],
 
+  // ---- Community -> ACM assignments -> community-assignments.js (roster.manage)
+  ['communityAssignments', 'community-assignments', 'community-assignments'],
+
   // ---- Append-only change log -> audit.js
   ['audit', 'audit', 'audit'],
 

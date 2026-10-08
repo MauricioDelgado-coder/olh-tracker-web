@@ -65,7 +65,7 @@ if extending this pattern to another boolean field.
 |---|---|
 | Bucket | Computed in the no-COE report (sold/committed vs. unsold + construction state) |
 | Construction State | Computed from start/completion dates |
-| Area Construction Manager | Looked up from `Community` via `scripts/acm-map.json` — no Salesforce field exists for this; blank means an unmapped community, not a missing manager |
+| Area Construction Manager | Looked up from `Community` in the Airtable **Community Assignments** table (`tblRI49xlslFx3wEL`, edited on /admin -> Community Assignments) — no Salesforce field exists for this; blank means an unassigned community, not a missing manager. The sync stops if that table has two rows for one community |
 
 ## Sync-managed, not from Salesforce at all
 

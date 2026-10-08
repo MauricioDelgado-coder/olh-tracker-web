@@ -964,6 +964,25 @@ GC`, `Crosswinds 50s` is not `Crosswinds 50s Classic`. Fuzzy-matching those woul
 put a real manager's name against homesites they do not run. Add the community to
 `acm-map.json` when one appears.
 
+**Update 2026-10-08 — assignments moved to Airtable and an admin tab.** The
+mapping no longer lives in `acm-map.json` for OLH. It is the **Community
+Assignments** table (`tblRI49xlslFx3wEL`): one row per community, so a community
+can only ever have one manager, and a blank manager is the unassigned bucket.
+Edit it on `/admin` -> **Community Assignments** (roster.manage), which uses the
+same Available/Assigned dual list as Roles & Permissions. The Unassigned list
+only offers communities with no manager; to move one between managers, remove
+it from the current one first. Backed by `netlify/functions/
+community-assignments.js` (GET state, PUT `{changes:[{community,from,to}]}`,
+POST `{action:"apply"}`). `from` makes a concurrent edit a 409 instead of a
+silent overwrite. A save writes the new name onto every Active, non-archived
+homesite in the changed communities immediately (resumable, 15s per call); the
+daily sync derives the same value from the same table every run, so the two
+cannot disagree. Manager names come from the Users table, so the seeded rows
+read "Max Ceron" / "Al Kaufman" rather than the roster's "Maximo Ceron -
+Rodriguez" / "Alvey Kaufman". `acm-map.json` is now read only by the SAN sandbox
+sync (where every row is blank anyway — the map is OLH-only). The admin tab is
+added by `dev/patch-admin-community-assignments.js`.
+
 **Dropped — Homesite Plan Name, Homesite Plan Number, Elevation.** These come
 from the workbook's per-job `Export` sheet, which is a one-off upload with no
 sync behind it, and they were populated on 586 of 1,400 rows even there. Live

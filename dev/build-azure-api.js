@@ -52,6 +52,7 @@ const FUNCTIONS = [
   'password.js',
   'users.js',
   'roles.js',
+  'community-assignments.js',
   'audit.js',
   'walk-miss-log.js',
   'resolve-conflict.js',
